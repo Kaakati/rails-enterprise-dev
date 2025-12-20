@@ -1,40 +1,24 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "enterprise-rails-marketplace",
+  "version": "1.0.0",
+  "description": "Ruby and Rails related Claude Code Skills, Commands and Plugins",
   "owner": {
     "name": "Mohamad Kaakati",
     "email": "hello@kaakati.me"
-  },
-  "metadata": {
-    "description": "Ruby and Rails related Claude Code Skills, Commands and Plugins",
-    "version": "1.0.0",
-    "homepage": "https://github.com/kaakati"
   },
   "plugins": [
     {
       "name": "rails-enterprise-dev",
       "source": "./plugins/rails-enterprise-dev",
+      "description": "Enterprise-grade Rails development workflow with multi-agent orchestration, beads task tracking, and quality gates.",
       "version": "1.0.0",
-      "description": "Enterprise-grade Rails development workflow with multi-agent orchestration, beads task tracking, and quality gates. Generic and portable across any Rails project.",
       "author": {
         "name": "Mohamad Kaakati",
         "email": "hello@kaakati.me"
       },
-      "keywords": [
-        "rails",
-        "ruby",
-        "workflow",
-        "multi-agent",
-        "beads",
-        "enterprise",
-        "orchestration",
-        "quality-gates",
-        "tdd",
-        "skill-discovery"
-      ],
       "homepage": "https://github.com/kaakati/rails-enterprise-dev",
-      "license": "MIT",
-      "category": "workflow"
+      "category": "development"
     }
   ]
 }
-
