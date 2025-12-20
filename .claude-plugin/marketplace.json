@@ -12,6 +12,7 @@
   "plugins": [
     {
       "name": "rails-enterprise-dev",
+      "source": "./plugins/rails-enterprise-dev",
       "version": "1.0.0",
       "description": "Enterprise-grade Rails development workflow with multi-agent orchestration, beads task tracking, and quality gates. Generic and portable across any Rails project.",
       "author": {
