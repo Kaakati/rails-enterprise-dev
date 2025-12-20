@@ -1,0 +1,31 @@
+{
+  "description": "Rails Enterprise Development workflow hooks for skill discovery and quality validation",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/discover-skills.sh",
+            "timeout": 10,
+            "description": "Discover available skills in project"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/detect-rails-context.sh",
+            "timeout": 5,
+            "description": "Detect Rails development tasks and suggest workflow"
+          }
+        ]
+      }
+    ]
+  }
+}

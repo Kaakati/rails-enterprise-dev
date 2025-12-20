@@ -1,0 +1,35 @@
+{
+  "name": "rails-enterprise-dev",
+  "version": "1.0.0",
+  "description": "Enterprise-grade Rails development workflow with multi-agent orchestration, beads task tracking, and quality gates. Generic and portable across any Rails project.",
+  "author": {
+    "name": "Mohamad Kaakati",
+    "email": "hello@kaakati.me"
+  },
+  "keywords": [
+    "rails",
+    "ruby",
+    "workflow",
+    "multi-agent",
+    "beads",
+    "enterprise",
+    "orchestration",
+    "quality-gates",
+    "tdd",
+    "skill-discovery"
+  ],
+  "homepage": "https://github.com/kaakati/rails-enterprise-dev",
+  "license": "MIT",
+  "compatibility": {
+    "min_claude_code_version": "1.0.0"
+  },
+  "features": [
+    "Multi-agent workflow orchestration",
+    "Automatic skill discovery from project .claude/skills/",
+    "Beads issue tracking integration",
+    "Configurable quality gates",
+    "Incremental implementation with checkpoints",
+    "Auto-detection of Rails development tasks",
+    "Generic and portable across Rails projects"
+  ]
+}
