@@ -6,6 +6,12 @@
     "name": "Mohamad Kaakati",
     "email": "hello@kaakati.me"
   },
+  "capabilities": {
+    "commands": true,
+    "agents": true,
+    "hooks": true,
+    "skills": true
+  },
   "keywords": [
     "rails",
     "ruby",
