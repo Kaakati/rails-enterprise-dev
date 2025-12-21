@@ -1,6 +1,6 @@
 #!/bin/bash
 # Track progress in beads when files are modified
-set -euo pipefail
+set -e
 
 # Read hook input
 input=$(cat)

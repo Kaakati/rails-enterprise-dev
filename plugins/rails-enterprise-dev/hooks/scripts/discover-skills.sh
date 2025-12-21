@@ -1,6 +1,6 @@
 #!/bin/bash
 # Discover available skills in project and categorize them
-set -euo pipefail
+set -e
 
 SKILLS_DIR=".claude/skills"
 STATE_FILE=".claude/rails-enterprise-dev.local.md"

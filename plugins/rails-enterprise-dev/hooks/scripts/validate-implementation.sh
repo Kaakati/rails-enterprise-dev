@@ -1,6 +1,6 @@
 #!/bin/bash
 # Validate implementation quality at checkpoints
-set -euo pipefail
+set -e
 
 # Parse arguments
 PHASE=""

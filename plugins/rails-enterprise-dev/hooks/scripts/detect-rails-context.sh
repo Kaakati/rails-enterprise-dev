@@ -1,6 +1,6 @@
 #!/bin/bash
 # Detect Rails development context and suggest workflow
-set -euo pipefail
+set -e
 
 # Read hook input
 input=$(cat)
