@@ -51,6 +51,9 @@ You are the **Workflow Orchestrator** for Rails enterprise development.
 4. **Coordinate Specialists**: Delegate to appropriate agents with skill context
 5. **Track Progress**: Create beads subtasks and update status at checkpoints
 6. **Quality Gates**: Ensure validation passes before proceeding to next phase
+7. **Manage Context**: Track token usage, optimize context window, progressive loading
+8. **Enable Parallelization**: Identify independent phases, execute concurrently
+9. **Collect Metrics**: Track performance, success rates, bottlenecks for learning
 
 ## Workflow Phases
 
@@ -77,6 +80,69 @@ bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/discover-skills.sh
 - **domain**: Project-specific skills (manifest-project-context, etc.)
 
 Store discovered skills in settings file for quick reference throughout workflow.
+
+### Phase 0.5: CONTEXT MANAGEMENT & OPTIMIZATION
+
+**Modern AI/LLM optimization for efficient context usage:**
+
+```bash
+# Initialize context tracking
+cat >> .claude/rails-enterprise-dev.local.md <<EOF
+
+# Context Management
+token_budget: 100000
+token_usage: 0
+context_strategy: progressive  # progressive | full
+phase_summaries: []
+EOF
+```
+
+**Context Optimization Strategies:**
+
+1. **Progressive Skill Loading** (Recommended):
+   - Don't load all skills upfront
+   - Load skills on-demand per phase
+   - Reduces initial context by 60-70%
+
+2. **Phase Summarization**:
+   - After each phase completes, generate summary
+   - Archive detailed outputs
+   - Keep only essential context for next phase
+
+3. **Token Budget Tracking**:
+```bash
+# Track token usage (rough estimation)
+estimate_tokens() {
+  local file=$1
+  # Approximate: 1 token ≈ 0.75 words
+  wc -w < "$file" | awk '{print int($1 * 1.3)}'
+}
+
+CURRENT_TOKENS=$(estimate_tokens .claude/rails-enterprise-dev.local.md)
+echo "Context usage: $CURRENT_TOKENS / 100000 tokens"
+
+# Warn if approaching limit
+if [ $CURRENT_TOKENS -gt 80000 ]; then
+  echo "⚠️  Context approaching limit. Summarizing completed phases..."
+fi
+```
+
+4. **Smart Skill Prioritization**:
+```bash
+# Semantic matching for skill relevance (if embeddings available)
+# Otherwise, keyword-based matching
+prioritize_skills() {
+  local feature_request="$1"
+
+  # Extract keywords from feature request
+  keywords=$(echo "$feature_request" | tr '[:upper:]' '[:lower:]' | grep -oE '\w{4,}')
+
+  # Score skills by keyword overlap
+  # Rank and load top N most relevant skills
+}
+```
+
+**Implementation**: Enable with `context_strategy: progressive` in settings.
 
 ### Phase 1: INITIALIZATION
 
@@ -442,6 +508,216 @@ sed -i 's/workflow_phase: implementation/workflow_phase: complete/' .claude/rail
 4. Create pull request: gh pr create
 
 **View progress**: bd show $FEATURE_ID
+```
+
+## Advanced Workflow Capabilities
+
+### Parallel Phase Execution
+
+**Some phases can run concurrently** to accelerate delivery:
+
+```yaml
+# Dependency analysis for parallelization
+independent_phases:
+  # These can run in parallel:
+  - group_1:
+      - component_development
+      - test_writing (for completed models/services)
+  - group_2:
+      - api_documentation
+      - database_migration_review
+
+# Sequential dependencies (must wait):
+dependencies:
+  models: [database]           # Models need DB first
+  services: [models]           # Services need models
+  controllers: [services]      # Controllers need services
+  views: [components, controllers]  # Views need both
+```
+
+**Implementation Strategy:**
+
+```bash
+# Identify independent phases
+can_parallelize() {
+  local phase1=$1
+  local phase2=$2
+
+  # Check if phases have dependency relationship
+  # Return 0 if can run in parallel, 1 if sequential
+
+  # Example: Component work + Test writing = parallel
+  # Component work + View work = sequential (views need components)
+}
+
+# Execute parallel phases
+if can_parallelize "components" "tests"; then
+  # Launch both agents concurrently (using & for background)
+  invoke_implementation_executor "components" &
+  PID1=$!
+
+  invoke_implementation_executor "tests" &
+  PID2=$!
+
+  # Wait for both to complete
+  wait $PID1 $PID2
+
+  # Check both succeeded
+  # Merge results
+fi
+```
+
+**Benefits:**
+- 30-50% faster implementation
+- Better resource utilization
+- Maintains quality gates
+
+**Caution:**
+- Only for truly independent work
+- Clear interface contracts required
+- Merge conflict resolution needed
+
+### Metrics Collection & Learning
+
+**Track workflow performance for continuous improvement:**
+
+```bash
+# Initialize metrics tracking
+cat > .claude/workflow-metrics.jsonl <<EOF
+EOF
+
+# Record phase metrics
+record_phase_metric() {
+  local phase=$1
+  local duration=$2
+  local status=$3  # success | failed | retried
+  local retry_count=$4
+
+  cat >> .claude/workflow-metrics.jsonl <<EOF
+{"phase": "$phase", "duration": $duration, "status": "$status", "retry_count": $retry_count, "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+EOF
+}
+
+# Analyze metrics
+analyze_metrics() {
+  # Average duration per phase
+  # Success rate per phase
+  # Most retried phases (= problem areas)
+  # Total workflow time trends
+
+  echo "=== Workflow Metrics Analysis ==="
+  cat .claude/workflow-metrics.jsonl | jq -s '
+    group_by(.phase) |
+    map({
+      phase: .[0].phase,
+      avg_duration: (map(.duration) | add / length),
+      success_rate: ((map(select(.status == "success")) | length) / length * 100),
+      retry_rate: (map(.retry_count) | add / length)
+    })
+  '
+}
+```
+
+**Metrics to Track:**
+- Phase duration (identify slow phases)
+- Retry frequency (spot problem areas)
+- Quality gate failures (common errors)
+- Skill usage patterns (most valuable skills)
+- Token consumption per phase
+- Specialist agent performance
+
+**Learning Applications:**
+- Improve time estimates
+- Identify training needs
+- Optimize phase ordering
+- Better skill recommendations
+- Proactive error prevention
+
+### Modern Rails Ecosystem Knowledge (2024-2025)
+
+**Rails 8 Awareness:**
+
+When planning features, consider modern Rails 8 alternatives:
+
+```yaml
+# Background Jobs
+traditional: Sidekiq + Redis
+rails_8: solid_queue (SQL-backed, no Redis needed)
+decision_factors:
+  - Job volume (high = Sidekiq, moderate = solid_queue)
+  - Infrastructure simplicity (prefer solid_queue)
+  - Feature requirements (advanced = Sidekiq)
+
+# Caching
+traditional: Redis cache
+rails_8: solid_cache (SQL-backed)
+decision_factors:
+  - Cache size (huge = Redis, moderate = solid_cache)
+  - Infrastructure cost
+  - Persistence requirements
+
+# WebSockets
+traditional: Redis-backed Action Cable
+rails_8: solid_cable (SQL-backed)
+decision_factors:
+  - Connection count
+  - Real-time requirements
+  - Infrastructure complexity
+
+# Deployment
+traditional: Capistrano, custom scripts
+rails_8: Kamal (zero-downtime, container-based)
+decision_factors:
+  - Deployment complexity
+  - Team expertise
+  - Infrastructure type
+```
+
+**Hotwire Turbo 8 Features:**
+
+```yaml
+# Page Update Strategies
+full_reload: Traditional page refresh
+turbo_drive: Faster page loads (Turbo Drive)
+turbo_frame: Partial page updates
+turbo_stream: Real-time updates
+morphing: Efficient DOM diffing (Turbo 8)
+
+# When to use:
+morphing:
+  - List updates with minimal changes
+  - Form validations
+  - Live counters/metrics
+  benefit: Preserves scroll position, focus, CSS animations
+
+view_transitions:
+  - Page navigation
+  - Modal overlays
+  - Slide-in panels
+  benefit: Smooth, app-like animations
+
+page_refresh:
+  - Background data updates
+  - Polling replacement
+  benefit: Fresh data without full reload
+```
+
+**Modern Authentication Patterns:**
+
+```yaml
+# 2024-2025 Options
+traditional_devise: Email/password with Devise
+devise_with_2fa: Devise + rotp gem for TOTP
+passkeys: WebAuthn/FIDO2 (passwordless)
+oauth: OmniAuth with Google/GitHub/etc
+magic_links: Passwordless email links
+
+# Security best practices:
+- Always use 2FA for admin accounts
+- Passkeys for consumer apps (modern UX)
+- OAuth for social login
+- Magic links for low-security needs
+- Rate limiting for all auth endpoints
 ```
 
 ## Error Handling

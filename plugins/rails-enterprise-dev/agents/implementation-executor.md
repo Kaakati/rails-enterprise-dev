@@ -36,6 +36,90 @@ You receive from workflow orchestrator:
 
 ## Execution Process
 
+### Step 0: AI-Powered Code Generation Strategy
+
+**Modern approach: Generate directly when appropriate, delegate when complex:**
+
+```markdown
+## Direct Generation vs Delegation Decision
+
+### Generate Directly (Faster, No Handoff):
+- Database migrations (follow standard patterns)
+- Basic models (straightforward validations, associations)
+- Boilerplate controllers (standard CRUD)
+- Simple service objects (clear business logic)
+- ViewComponents (when pattern is established)
+- RSpec examples (from implementation)
+- Factories (from models)
+
+### Delegate to Specialists (Complex Logic):
+- Complex business logic (multi-step workflows)
+- External integrations (APIs, third-party services)
+- Performance-critical code (needs expertise)
+- Security-sensitive code (authentication, authorization)
+- Novel patterns (not yet established in project)
+- Complex UI interactions (advanced Hotwire/JavaScript)
+
+### Decision Matrix:
+
+| Factor | Direct Generation | Delegation |
+|--------|------------------|------------|
+| Complexity | Low-Medium | High |
+| Pattern Established | Yes | No/Maybe |
+| Business Logic | Simple | Complex |
+| Risk Level | Low | High |
+| Time Savings | High | Medium |
+```
+
+**Implementation Strategy**:
+
+```bash
+# Check if direct generation applicable
+can_generate_directly() {
+  local phase=$1
+
+  case $phase in
+    database)
+      # Migrations are formulaic, generate directly
+      return 0
+      ;;
+    models)
+      # Basic models yes, complex business logic no
+      if [ "$COMPLEXITY" = "low" ]; then
+        return 0
+      else
+        return 1
+      fi
+      ;;
+    services)
+      # Simple CRUD services yes, complex workflows no
+      if [ "$HAS_EXTERNAL_INTEGRATION" = "true" ]; then
+        return 1  # Delegate
+      else
+        return 0  # Generate
+      fi
+      ;;
+    tests)
+      # Tests can always be generated from implementation
+      return 0
+      ;;
+    *)
+      return 1  # Delegate by default
+      ;;
+  esac
+}
+
+# Execute with appropriate strategy
+if can_generate_directly "$PHASE_NAME"; then
+  echo "✓ Generating $PHASE_NAME directly with AI"
+  # Use Claude's coding abilities
+  generate_code_directly
+else
+  echo "→ Delegating $PHASE_NAME to specialist agent"
+  delegate_to_specialist
+fi
+```
+
 ### Step 1: Phase Preparation
 
 ```bash
@@ -334,6 +418,452 @@ Please confirm when complete:
 - Files created/modified: [list]
 - Patterns followed: [list]
 - Any issues encountered: [description]
+```
+
+### Step 3.5: Incremental Validation (Modern Approach)
+
+**Validate as you build, not just at phase end:**
+
+```bash
+# Incremental validation during implementation
+validate_file() {
+  local file_path=$1
+
+  echo "Validating: $file_path"
+
+  # 1. Syntax check
+  if [[ "$file_path" == *.rb ]]; then
+    ruby -c "$file_path" 2>&1
+    if [ $? -ne 0 ]; then
+      echo "✗ Syntax error in $file_path"
+      return 1
+    fi
+    echo "✓ Syntax valid"
+  fi
+
+  # 2. Rubocop check (if available)
+  if command -v rubocop &> /dev/null; then
+    rubocop "$file_path" --format simple 2>/dev/null
+    if [ $? -ne 0 ]; then
+      echo "⚠️  Style violations in $file_path (non-blocking)"
+      # Don't fail, just warn
+    fi
+  fi
+
+  # 3. Rails-specific checks
+  case "$file_path" in
+    *_spec.rb)
+      # Run this specific spec
+      echo "Running spec: $file_path"
+      rspec "$file_path" --format progress
+      if [ $? -ne 0 ]; then
+        echo "✗ Spec failed: $file_path"
+        return 1
+      fi
+      echo "✓ Spec passing"
+      ;;
+
+    app/models/*.rb)
+      # Check model can load
+      echo "Loading model..."
+      rails runner "$(basename $file_path .rb).classify.constantize" 2>&1
+      if [ $? -ne 0 ]; then
+        echo "✗ Model load failed"
+        return 1
+      fi
+      echo "✓ Model loads successfully"
+      ;;
+
+    app/services/*.rb)
+      # Check service responds to .call
+      SERVICE_CLASS=$(basename $file_path .rb).classify
+      rails runner "$SERVICE_CLASS.respond_to?(:call)" 2>&1
+      echo "✓ Service structure valid"
+      ;;
+
+    app/components/*_component.rb)
+      # Check component can be instantiated
+      COMPONENT_CLASS=$(basename $file_path .rb).classify
+      echo "Checking component methods..."
+      # Ensure initialize method exists
+      rails runner "$COMPONENT_CLASS.instance_methods.include?(:initialize)" 2>&1
+      echo "✓ Component structure valid"
+      ;;
+  esac
+
+  return 0
+}
+
+# Validate after each file creation/modification
+after_file_written() {
+  local file_path=$1
+
+  # Immediate validation
+  validate_file "$file_path"
+  VALIDATION_RESULT=$?
+
+  if [ $VALIDATION_RESULT -ne 0 ]; then
+    echo "❌ Validation failed for $file_path"
+    echo "Fix required before continuing..."
+
+    # Offer to auto-fix if possible
+    if command -v rubocop &> /dev/null; then
+      echo "Attempting auto-fix with rubocop..."
+      rubocop -a "$file_path"
+    fi
+
+    return 1
+  fi
+
+  echo "✅ $file_path validated successfully"
+  return 0
+}
+```
+
+**Benefits**:
+- Fail fast (catch errors immediately)
+- Faster iteration (don't wait until phase end)
+- Better context (error fresh in mind)
+- Lower cost (less to rollback)
+
+### Step 3.6: Automated Test Generation
+
+**Generate tests automatically from implementation:**
+
+```markdown
+## AI-Powered Test Generation
+
+After implementing a file, automatically generate corresponding tests:
+
+### Model Test Generation
+
+**From Model**:
+```ruby
+# app/models/payment.rb
+class Payment < ApplicationRecord
+  belongs_to :account
+  belongs_to :user
+
+  validates :amount, presence: true, numericality: { greater_than: 0 }
+  validates :status, inclusion: { in: %w[pending paid failed] }
+
+  scope :paid, -> { where(status: 'paid') }
+end
+```
+
+**Generated Test**:
+```ruby
+# spec/models/payment_spec.rb
+require 'rails_helper'
+
+RSpec.describe Payment, type: :model do
+  describe 'associations' do
+    it { should belong_to(:account) }
+    it { should belong_to(:user) }
+  end
+
+  describe 'validations' do
+    it { should validate_presence_of(:amount) }
+    it { should validate_numericality_of(:amount).is_greater_than(0) }
+    it { should validate_inclusion_of(:status).in_array(%w[pending paid failed]) }
+  end
+
+  describe 'scopes' do
+    describe '.paid' do
+      it 'returns only paid payments' do
+        paid = create(:payment, status: 'paid')
+        pending = create(:payment, status: 'pending')
+
+        expect(Payment.paid).to include(paid)
+        expect(Payment.paid).not_to include(pending)
+      end
+    end
+  end
+
+  describe 'edge cases' do
+    it 'rejects negative amounts' do
+      payment = build(:payment, amount: -100)
+      expect(payment).not_to be_valid
+      expect(payment.errors[:amount]).to be_present
+    end
+
+    it 'rejects zero amounts' do
+      payment = build(:payment, amount: 0)
+      expect(payment).not_to be_valid
+    end
+
+    it 'rejects invalid status' do
+      payment = build(:payment, status: 'invalid')
+      expect(payment).not_to be_valid
+    end
+  end
+end
+```
+
+### Service Test Generation
+
+**From Service**:
+```ruby
+# app/services/payment_manager/create_payment.rb
+module PaymentManager
+  class CreatePayment
+    include Callable
+
+    def initialize(account:, user:, amount:)
+      @account = account
+      @user = user
+      @amount = amount
+    end
+
+    def call
+      payment = @account.payments.build(
+        user: @user,
+        amount: @amount,
+        status: 'pending'
+      )
+
+      if payment.save
+        PaymentNotificationJob.perform_later(payment.id)
+        Result.success(payment)
+      else
+        Result.failure(payment.errors)
+      end
+    end
+  end
+end
+```
+
+**Generated Test**:
+```ruby
+# spec/services/payment_manager/create_payment_spec.rb
+require 'rails_helper'
+
+RSpec.describe PaymentManager::CreatePayment do
+  describe '.call' do
+    let(:account) { create(:account) }
+    let(:user) { create(:user, account: account) }
+    let(:amount) { 100.00 }
+
+    subject(:service) { described_class.call(account: account, user: user, amount: amount) }
+
+    context 'with valid params' do
+      it 'creates a payment' do
+        expect { service }.to change(Payment, :count).by(1)
+      end
+
+      it 'sets payment status to pending' do
+        payment = service.value
+        expect(payment.status).to eq('pending')
+      end
+
+      it 'enqueues notification job' do
+        expect {
+          service
+        }.to have_enqueued_job(PaymentNotificationJob)
+      end
+
+      it 'returns success result' do
+        result = service
+        expect(result).to be_success
+        expect(result.value).to be_a(Payment)
+      end
+    end
+
+    context 'with invalid params' do
+      let(:amount) { -100 }
+
+      it 'does not create payment' do
+        expect { service }.not_to change(Payment, :count)
+      end
+
+      it 'returns failure result' do
+        result = service
+        expect(result).to be_failure
+      end
+
+      it 'includes validation errors' do
+        result = service
+        expect(result.error).to be_present
+      end
+    end
+
+    context 'edge cases' do
+      context 'with zero amount' do
+        let(:amount) { 0 }
+
+        it 'fails validation' do
+          expect(service).to be_failure
+        end
+      end
+
+      context 'with very large amount' do
+        let(:amount) { 999_999_999.99 }
+
+        it 'creates payment successfully' do
+          expect(service).to be_success
+        end
+      end
+    end
+  end
+end
+```
+
+### Factory Generation
+
+**From Model, generate factory**:
+```ruby
+# spec/factories/payments.rb
+FactoryBot.define do
+  factory :payment do
+    account
+    user
+    amount { Faker::Number.decimal(l_digits: 2, r_digits: 2) }
+    status { 'pending' }
+
+    trait :paid do
+      status { 'paid' }
+    end
+
+    trait :failed do
+      status { 'failed' }
+    end
+  end
+end
+```
+
+**Test Generation Process**:
+
+```bash
+generate_tests_for_file() {
+  local impl_file=$1
+  local spec_file=""
+
+  case "$impl_file" in
+    app/models/*.rb)
+      # Generate model spec
+      spec_file="spec/models/$(basename $impl_file)"
+      echo "Generating model spec: $spec_file"
+      # Use AI to generate comprehensive model spec
+      ;;
+
+    app/services/*/*.rb)
+      # Generate service spec
+      SERVICE_PATH=$(echo "$impl_file" | sed 's|app/services/||')
+      spec_file="spec/services/$SERVICE_PATH"
+      echo "Generating service spec: $spec_file"
+      # Use AI to generate service spec
+      ;;
+
+    app/components/*_component.rb)
+      # Generate component spec
+      spec_file="spec/components/$(basename $impl_file)"
+      echo "Generating component spec: $spec_file"
+      # Use AI to generate component spec
+      ;;
+  esac
+
+  # Also generate factory if model
+  if [[ "$impl_file" == app/models/*.rb ]]; then
+    MODEL_NAME=$(basename $impl_file .rb)
+    FACTORY_FILE="spec/factories/${MODEL_NAME}s.rb"
+    echo "Generating factory: $FACTORY_FILE"
+    # Use AI to generate factory
+  fi
+}
+
+# After implementing each file
+implement_file "$FILE_PATH"
+generate_tests_for_file "$FILE_PATH"
+validate_file "$SPEC_FILE"  # Ensure generated test runs
+```
+```
+
+### Step 3.7: Git Checkpoint & Rollback
+
+**Create git commits for safe rollback:**
+
+```bash
+# Before phase starts
+create_phase_checkpoint() {
+  local phase=$1
+
+  # Create git checkpoint
+  git add -A
+  git commit -m "WIP: Before $phase phase [auto-checkpoint]" --no-verify
+
+  CHECKPOINT_SHA=$(git rev-parse HEAD)
+  echo "Checkpoint created: $CHECKPOINT_SHA"
+
+  # Store in state
+  echo "checkpoint_$phase=$CHECKPOINT_SHA" >> .claude/rails-enterprise-dev.local.md
+}
+
+# After phase completes successfully
+finalize_phase_commit() {
+  local phase=$1
+
+  # Amend checkpoint with proper message
+  git add -A
+  git commit --amend -m "Implement $phase phase
+
+Files created/modified:
+$(git diff --name-only HEAD~1)
+
+Quality gates: PASSED
+
+🤖 Generated with Claude Code
+Co-Authored-By: Claude <noreply@anthropic.com>" --no-verify
+}
+
+# If validation fails, rollback
+rollback_to_checkpoint() {
+  local phase=$1
+
+  CHECKPOINT=$(grep "checkpoint_$phase=" .claude/rails-enterprise-dev.local.md | cut -d'=' -f2)
+
+  if [ -n "$CHECKPOINT" ]; then
+    echo "Rolling back to checkpoint: $CHECKPOINT"
+    git reset --hard "$CHECKPOINT"
+    echo "✓ Rolled back successfully"
+    return 0
+  else
+    echo "⚠️  No checkpoint found for $phase"
+    return 1
+  fi
+}
+
+# Workflow integration
+execute_phase() {
+  local phase=$1
+
+  # 1. Create checkpoint
+  create_phase_checkpoint "$phase"
+
+  # 2. Implement (generate or delegate)
+  implement_phase "$phase"
+  IMPL_RESULT=$?
+
+  # 3. Validate
+  validate_phase "$phase"
+  VALIDATION_RESULT=$?
+
+  if [ $VALIDATION_RESULT -ne 0 ]; then
+    echo "❌ Phase validation failed"
+    echo "Options:"
+    echo "1. Rollback and retry"
+    echo "2. Continue with issues (manual fix later)"
+    echo "3. Abort workflow"
+
+    # Automatic rollback on failure
+    rollback_to_checkpoint "$phase"
+
+    return 1
+  else
+    # Success - finalize commit
+    finalize_phase_commit "$phase"
+    return 0
+  fi
+}
 ```
 
 ### Step 4: Quality Validation

@@ -30,6 +30,93 @@ You receive from workflow orchestrator:
 
 ## Planning Process
 
+### Step 0: Modern Rails Technology Selection
+
+**Before planning, evaluate modern Rails technology options (2024-2025):**
+
+```markdown
+## Technology Selection Framework
+
+### Background Jobs: Sidekiq vs solid_queue (Rails 8)
+
+| Factor | Sidekiq | solid_queue |
+|--------|---------|-------------|
+| Infrastructure | Requires Redis | SQL-only (simpler) |
+| Performance | 1000s jobs/sec | 100s jobs/sec |
+| Features | Advanced (batches, unique, rate limit) | Standard (enqueue, schedule) |
+| Cost | Redis hosting $$ | Included with DB |
+| Maturity | Battle-tested | New (Rails 8) |
+
+**Decision Logic**:
+- High volume (>10k/hour) → Sidekiq
+- Complex workflows → Sidekiq
+- Infrastructure simplicity → solid_queue
+- Rails 8 + moderate load → solid_queue
+
+### Caching: Redis vs solid_cache (Rails 8)
+
+| Factor | Redis | solid_cache |
+|--------|-------|-------------|
+| Speed | In-memory (fastest) | Disk-based (slower) |
+| Persistence | Optional | Always persisted |
+| Infrastructure | Separate Redis | Uses existing DB |
+| Cost | Memory $$$$ | Disk $ |
+| Use case | High traffic, sessions | Moderate traffic, persistence |
+
+**Decision Logic**:
+- High traffic (>1M hits/day) → Redis
+- Need session store → Redis
+- Rails 8 + moderate traffic → solid_cache
+- Budget-conscious → solid_cache
+
+### Real-time: WebSockets vs Turbo Streams
+
+| Factor | Action Cable + Redis | solid_cable | Turbo Streams |
+|--------|---------------------|-------------|---------------|
+| Complexity | High | Medium | Low |
+| Use case | Chat, real-time collab | Moderate real-time | Page updates |
+| Infrastructure | Redis required | SQL-backed | None extra |
+| Best for | Bidirectional | Broadcasts | Server→Client |
+
+**Decision Logic**:
+- Real-time chat/collab → Action Cable + Redis
+- Live dashboards, updates → Turbo Streams (simplest!)
+- Rails 8 + moderate WS → solid_cable
+
+### Frontend: Hotwire vs React/Vue SPA
+
+| Factor | Hotwire (Turbo + Stimulus) | React/Vue SPA |
+|--------|---------------------------|---------------|
+| Complexity | Low (server-rendered) | High (client-rendered) |
+| SEO | Excellent (HTML first) | Challenging |
+| Build time | Fast | Slow (webpack/vite) |
+| Best for | CRUD, dashboards, content | Complex UI, mobile app |
+| Turbo 8 features | Morphing, view transitions | N/A |
+
+**Decision Logic**:
+- CRUD/dashboard/admin → Hotwire (simpler, faster)
+- Complex state/mobile app → React/Vue
+- Default for Rails 8 → Hotwire
+
+### Authentication: Devise vs Rails 8 Auth vs Passkeys
+
+| Factor | Devise | Rails 8 Auth | Passkeys (WebAuthn) |
+|--------|--------|--------------|---------------------|
+| Setup | Gem install | Generator | Library integration |
+| Features | Comprehensive | Basic | Passwordless |
+| Complexity | High (magic) | Low (clear code) | Medium |
+| Security | Good (+ 2FA) | Good | Excellent |
+| Best for | Enterprise, mature apps | Simple apps, full control | Modern consumer apps |
+
+**Decision Logic**:
+- Enterprise/admin + 2FA needed → Devise + rotp
+- Simple app, full control → Rails 8 auth generator
+- Modern UX, highest security → Passkeys
+- Default → Devise (maturity)
+
+**In planning, document technology choices with justification.**
+```
+
 ### Step 1: Requirements Analysis
 
 Break down feature into specific deliverables:
@@ -342,6 +429,479 @@ test_phase:
   - Coverage > 90%
   - Edge cases covered
   - Integration tests included
+```
+
+## Advanced Planning Capabilities
+
+### AI-Powered Architecture Alternatives
+
+**Generate multiple architectural approaches for comparison:**
+
+```markdown
+## Architectural Approach Analysis
+
+For complex features, consider multiple approaches:
+
+### Approach 1: [Pattern Name] (Recommended)
+
+**Description**: [How it works]
+
+**Pros**:
+- [Advantage 1]
+- [Advantage 2]
+- [Advantage 3]
+
+**Cons**:
+- [Disadvantage 1]
+- [Disadvantage 2]
+
+**Effort**: [Low/Medium/High]
+**Complexity**: [Low/Medium/High]
+**Maintainability**: [Low/Medium/High]
+
+**Best suited for**: [When to use this approach]
+
+**Example from similar project**: [Reference if available]
+
+### Approach 2: [Alternative Pattern]
+
+**Description**: [How it works differently]
+
+**Pros**:
+- [Advantage 1]
+- [Advantage 2]
+
+**Cons**:
+- [Disadvantage 1]
+- [Disadvantage 2]
+
+**Effort**: [Low/Medium/High]
+**Complexity**: [Low/Medium/High]
+**Maintainability**: [Low/Medium/High]
+
+**Trade-offs vs Approach 1**:
+- [Key difference 1]
+- [Key difference 2]
+
+### Approach 3: [Another Alternative]
+
+[Similar analysis...]
+
+### Recommendation Matrix
+
+| Factor | Approach 1 | Approach 2 | Approach 3 |
+|--------|-----------|-----------|-----------|
+| Development Effort | Medium | High | Low |
+| Runtime Performance | High | Medium | High |
+| Maintainability | High | Medium | Low |
+| Scalability | High | Medium | Low |
+| Learning Curve | Medium | High | Low |
+| Fits Project Patterns | ✓✓✓ | ✓✓ | ✓ |
+
+**Final Recommendation**: Approach 1 - [Pattern Name]
+
+**Rationale**:
+- Balances [factor] with [factor]
+- Aligns with existing [pattern] in codebase
+- Team familiar with [technology]
+- Supports future [requirement]
+
+**Architecture Decision Record (ADR)**:
+```yaml
+decision_id: ADR-001-[feature-name]
+date: 2025-01-21
+status: proposed
+context: |
+  We need to implement [feature] which requires [architectural decision].
+  Key constraints: [list]
+
+decision: |
+  We will use [chosen approach] because [rationale].
+
+consequences: |
+  Positive:
+  - [Benefit 1]
+  - [Benefit 2]
+
+  Negative:
+  - [Trade-off 1]
+  - [Mitigation strategy]
+
+alternatives_considered:
+  - approach: [Alternative 1]
+    rejected_because: [Reason]
+  - approach: [Alternative 2]
+    rejected_because: [Reason]
+```
+```
+
+### Effort & Complexity Estimation
+
+**ML-informed estimation based on feature analysis:**
+
+```markdown
+## Effort Estimation
+
+### Complexity Analysis
+
+**Feature Complexity Score**: [Low: 1-3 | Medium: 4-6 | High: 7-10]
+
+Factors:
+- Database complexity: [Score 1-10]
+  - New tables: X
+  - Associations: Y
+  - Migrations: Z
+
+- Business logic complexity: [Score 1-10]
+  - Service objects: X
+  - External integrations: Y
+  - State machines: Z
+
+- UI complexity: [Score 1-10]
+  - New components: X
+  - Interactivity level: [Low/Medium/High]
+  - Responsive requirements: Y
+
+- Testing complexity: [Score 1-10]
+  - Test types needed: [unit, integration, system, e2e]
+  - Edge cases: [count]
+
+**Total Complexity Score**: [Sum/4] → [Low/Medium/High]
+
+### Time Estimation
+
+Based on complexity and similar past implementations:
+
+| Phase | Estimated Time | Confidence |
+|-------|---------------|-----------|
+| Database | X hours | High |
+| Models | Y hours | High |
+| Services | Z hours | Medium |
+| Components | W hours | Medium |
+| Controllers | V hours | High |
+| Views | U hours | Medium |
+| Tests | T hours | Medium |
+| Review & Refinement | S hours | Low |
+
+**Total Estimated Time**: [Sum] hours
+**With buffer (30%)**: [Sum * 1.3] hours
+**Estimated Calendar Time**: [Days based on team size]
+
+### Risk-Adjusted Estimation
+
+**Risk Factors**:
+- [ ] New technology/library (multiply by 1.3)
+- [ ] External dependency/API (multiply by 1.2)
+- [ ] Complex business logic (multiply by 1.2)
+- [ ] Performance requirements strict (multiply by 1.15)
+- [ ] High security requirements (multiply by 1.2)
+- [ ] Team unfamiliar with pattern (multiply by 1.25)
+
+**Risk Multiplier**: [Product of applicable factors]
+**Risk-Adjusted Estimate**: [Total * Risk Multiplier] hours
+
+### Story Points (if using Agile)
+
+Based on Fibonacci scale:
+- **1 point**: Trivial (CRUD endpoint, simple form)
+- **2 points**: Simple (basic feature, single model)
+- **3 points**: Moderate (multiple models, basic logic)
+- **5 points**: Complex (service objects, background jobs)
+- **8 points**: Very complex (integrations, complex state)
+- **13 points**: Epic (should be split)
+
+**Estimated Story Points**: [X] points
+
+**Similar Features for Calibration**:
+- [Similar feature 1]: Estimated [X] hours, Actual [Y] hours
+- [Similar feature 2]: Estimated [A] hours, Actual [B] hours
+→ Historical accuracy: [%]
+```
+
+### Performance Budget Definition
+
+**Define quantitative performance targets:**
+
+```markdown
+## Performance Budget
+
+### Response Time Targets
+
+**API Endpoints**:
+- List endpoints (GET /api/resources): p95 < 200ms, p99 < 500ms
+- Detail endpoints (GET /api/resources/:id): p95 < 100ms, p99 < 300ms
+- Create/Update (POST/PUT): p95 < 300ms, p99 < 1000ms
+- Search endpoints: p95 < 500ms, p99 < 2000ms
+
+**Web Pages**:
+- Dashboard/index pages: LCP < 2.5s, FID < 100ms, CLS < 0.1
+- Detail pages: LCP < 2.0s, FID < 100ms
+- Forms: FID < 50ms (instant feedback)
+
+### Database Query Limits
+
+- Maximum queries per request: 10 (watch for N+1)
+- Maximum query duration: p95 < 50ms, p99 < 200ms
+- No full table scans on tables > 10k rows
+- All queries using indexes
+
+### Caching Strategy
+
+**Cache Targets**:
+- Cache hit rate: > 80% for read-heavy endpoints
+- Cache invalidation: < 100ms
+- Fragment cache: Used for expensive partial renders
+
+**Implementation**:
+- Russian doll caching for nested resources
+- Low-level caching for expensive computations
+- HTTP caching headers for static assets
+
+### Frontend Bundle Budget
+
+- Initial JavaScript bundle: < 200KB gzipped
+- CSS bundle: < 50KB gzipped
+- Critical CSS: < 14KB (above fold)
+- Image optimization: WebP/AVIF, lazy loading
+
+### Background Job Budget
+
+- Job enqueue time: < 10ms
+- Job processing: p95 < 5 seconds (unless explicitly long-running)
+- Failed job retry: max 3 attempts with exponential backoff
+- Job queue depth: < 100 jobs (alert if exceeded)
+
+### Memory Budget
+
+- Per-request memory: < 50MB
+- Background job memory: < 100MB
+- Server memory headroom: > 30% free
+
+### Monitoring & Alerting
+
+**Alerts triggered if**:
+- Response time p95 exceeds budget by 50%
+- Error rate > 1%
+- Job queue depth > 100
+- Memory usage > 85%
+- Database connections > 80% of pool
+
+**Validation**: Performance tests must pass budget before deployment
+```
+
+### DevOps & Deployment Planning
+
+**Modern deployment strategies (2024-2025):**
+
+```markdown
+## Deployment Strategy
+
+### Deployment Option: Kamal (Rails 8 Default)
+
+**Why Kamal**:
+- Zero-downtime deployments
+- Container-based (Docker)
+- Simple configuration
+- Built-in health checks
+- Secrets management
+- Multi-server support
+
+**Requirements**:
+- Docker installed on servers
+- SSH access to servers
+- Docker registry (GitHub, Docker Hub)
+
+**Configuration** (config/deploy.yml):
+```yaml
+service: myapp
+image: myorg/myapp
+
+servers:
+  web:
+    - 192.168.1.1
+  workers:
+    - 192.168.1.2
+
+registry:
+  server: ghcr.io
+  username: myorg
+  password:
+    - GITHUB_TOKEN
+
+env:
+  clear:
+    RAILS_ENV: production
+  secret:
+    - DATABASE_URL
+    - REDIS_URL
+
+healthcheck:
+  path: /up
+  interval: 10s
+```
+
+**Deployment Process**:
+1. Build Docker image
+2. Push to registry
+3. Pull on servers
+4. Rolling deployment with health checks
+5. Automatic rollback on failure
+
+### Alternative: fly.io
+
+**Why fly.io**:
+- Global edge deployment
+- Auto-scaling
+- Built-in PostgreSQL
+- Simple CLI
+- Free tier available
+
+**Best for**:
+- Startups
+- Global distribution needed
+- Want managed infrastructure
+
+### Alternative: Traditional (Capistrano)
+
+**Why Capistrano**:
+- Mature, well-understood
+- No containers needed
+- Fine-grained control
+
+**Best for**:
+- Existing server infrastructure
+- Team familiar with Capistrano
+- Non-containerized deployment
+
+### CI/CD Pipeline
+
+**GitHub Actions Workflow**:
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: |
+          bundle install
+          rails db:test:prepare
+          rspec
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Security scan
+        run: |
+          bundle install
+          brakeman -q -z
+          bundle-audit check
+
+  deploy:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy with Kamal
+        run: |
+          gem install kamal
+          kamal deploy
+```
+
+### Database Migration Strategy
+
+**Zero-Downtime Migrations**:
+
+1. **Add Column** (safe):
+   ```ruby
+   add_column :users, :new_field, :string
+   # Deploy code that ignores new column
+   # Run migration
+   # Deploy code that uses new column
+   ```
+
+2. **Remove Column** (requires steps):
+   ```ruby
+   # Step 1: Deploy code ignoring column
+   # Step 2: Remove column in migration
+   add_column :users, :deprecated_at, :datetime
+   # Step 3: Deploy migration
+   ```
+
+3. **Rename Column** (use alias):
+   ```ruby
+   # Add new column
+   # Backfill data
+   # Dual write to both
+   # Switch reads to new
+   # Drop old column
+   ```
+
+**Migration Checklist**:
+- [ ] Migration is reversible (rollback works)
+- [ ] No data loss possible
+- [ ] Tested on production-like data volume
+- [ ] Indexes created concurrently (for PostgreSQL)
+- [ ] Migration runtime estimated (< 5 min ideal)
+
+### Monitoring & Observability
+
+**APM Integration**:
+- Scout APM (Rails-native)
+- New Relic
+- Datadog
+- AppSignal
+
+**Error Tracking**:
+- Sentry (recommended)
+- Honeybadger
+- Rollbar
+
+**Logging**:
+- Structured logging (Lograge gem)
+- Centralized (Papertrail, Loggly)
+- Log levels: DEBUG (dev), INFO (staging), WARN (production)
+
+**Metrics**:
+- Prometheus + Grafana
+- Built-in Rails metrics endpoint
+- Custom business metrics
+
+**Uptime Monitoring**:
+- UptimeRobot
+- Pingdom
+- StatusCake
+
+### Infrastructure as Code (if needed)
+
+**Terraform for AWS/GCP/Azure**:
+```hcl
+# main.tf
+resource "aws_db_instance" "postgres" {
+  allocated_storage = 100
+  engine           = "postgres"
+  engine_version   = "16"
+  instance_class   = "db.t3.medium"
+  # ...
+}
+
+resource "aws_elasticache_cluster" "redis" {
+  cluster_id      = "myapp-redis"
+  engine          = "redis"
+  node_type       = "cache.t3.micro"
+  # ...
+}
+```
+
+**Document infrastructure decisions in plan.**
 ```
 
 ## Implementation Plan Output Format
