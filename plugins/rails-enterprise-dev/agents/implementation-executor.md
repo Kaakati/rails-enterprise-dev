@@ -138,6 +138,70 @@ fi
 
 ### Step 2: Skill Invocation
 
+#### Pattern-Based Refactoring Detection (Automatic)
+
+**Before invoking skills, analyze user request for rename patterns:**
+
+```bash
+# Analyze original user request
+USER_REQUEST="[paste original user prompt here]"
+
+# Check for common rename/replace keywords
+if echo "$USER_REQUEST" | grep -qiE "(rename|replace|change .* to |instead of|update .* to |swap .* with|migrate from .* to|convert .* to)"; then
+  echo "⚠️  RENAME PATTERN DETECTED in user request"
+  echo ""
+  echo "User request contains potential rename keywords:"
+  echo "\"$USER_REQUEST\""
+  echo ""
+  echo "This may be a REFACTORING, not just a new feature."
+  echo ""
+  echo "ACTION REQUIRED:"
+  echo "1. Extract old and new names from request"
+  echo "2. Proceed to Step 2.5 to verify refactoring"
+  echo "3. Initialize refactoring log if confirmed"
+  echo ""
+fi
+```
+
+**Common rename patterns in user requests:**
+- "Rename X to Y" → Class/attribute/method rename
+- "Replace X with Y" → Replacing existing implementation
+- "Change X to Y" → Updating existing name
+- "Use Y instead of X" → Swapping implementation
+- "Update X to Y" → Changing existing name
+- "Swap X with Y" → Bidirectional change
+- "Migrate from X to Y" → Moving from old to new
+- "Convert X to Y" → Transforming existing
+
+**If pattern detected:**
+- Note old and new names for Step 2.5
+- Be prepared to initialize refactoring log
+- Even if not obvious, check in Step 2.5
+
+**Example detections:**
+
+```
+User: "Add transaction tracking to replace the payment system"
+Detection: "replace" keyword found
+→ Flag for Step 2.5: Likely replacing Payment with Transaction
+
+User: "Rename user_id to account_id everywhere"
+Detection: "rename" keyword found
+→ Flag for Step 2.5: Confirmed attribute rename
+
+User: "Change price to price_cents for better precision"
+Detection: "change X to Y" pattern found
+→ Flag for Step 2.5: Likely attribute rename
+
+User: "Use Sidekiq instead of DelayedJob for background processing"
+Detection: "instead of" keyword found
+→ Flag for Step 2.5: May involve removing old, adding new (not always rename)
+```
+
+**Note**: Pattern detection is a **hint**, not definitive. Step 2.5 will make final determination.
+
+---
+
 Based on phase type, invoke relevant skills:
 
 #### Database Phase Skills
@@ -328,6 +392,188 @@ Questions:
 This will inform the RSpec Specialist's implementation.
 ```
 
+**After each skill invocation**, track usage in beads (if enabled):
+
+```bash
+# Check if skill tracking is enabled
+TRACK_SKILLS=$(grep '^track_skill_invocations:' .claude/rails-enterprise-dev.local.md | sed 's/.*: *//')
+
+if [ "$TRACK_SKILLS" = "true" ] && [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+  # Record skill invocation in beads comment
+  bd comment $TASK_ID "📚 Skill Invoked: [SKILL_NAME]
+
+**Phase**: $PHASE_NAME
+**Purpose**: [Why this skill was invoked]
+
+**Key Guidance Received**:
+- [Pattern/convention 1 from skill]
+- [Pattern/convention 2 from skill]
+- [Best practice 3 from skill]
+
+**Applied To**:
+This guidance informed the implementation approach for [specific aspect].
+
+**Specialist**: This will guide the [SPECIALIST_NAME] agent's work."
+fi
+```
+
+**Example tracking comments:**
+
+```bash
+# After invoking activerecord-patterns skill
+bd comment $DB_TASK_ID "📚 Skill Invoked: activerecord-patterns
+
+**Phase**: Database migrations
+**Purpose**: Ensure migration best practices
+
+**Key Guidance Received**:
+- Always add indexes on foreign keys
+- Use add_index with unique: true for unique constraints
+- Include account_id for multi-tenancy
+- Write reversible migrations with change method
+
+**Applied To**:
+These patterns will be applied to create_payments migration.
+
+**Specialist**: Guiding Data Lead agent"
+
+# After invoking service-object-patterns skill
+bd comment $SERVICE_TASK_ID "📚 Skill Invoked: service-object-patterns
+
+**Phase**: Service layer
+**Purpose**: Follow established service patterns
+
+**Key Guidance Received**:
+- Use Callable pattern (call class method)
+- Namespace under Services::
+- Return Result objects (success/failure)
+- Wrap in transactions when needed
+- Inject dependencies via initializer
+
+**Applied To**:
+Payment processing service will follow these patterns.
+
+**Specialist**: Guiding Backend Lead agent"
+```
+
+### Step 2.5: Refactoring Detection (MANDATORY CHECK)
+
+**Before implementing, MUST determine if this involves refactoring:**
+
+Even if user didn't explicitly say "refactor", this implementation might involve renaming/replacing existing code. Check carefully to avoid orphaned references.
+
+#### Detection Questions
+
+Answer each question honestly:
+
+**1. Does this replace/rename an existing class or module?**
+
+Check for:
+- Similar model/service already exists (e.g., creating `Transaction` when `Payment` exists)
+- User request says "replace", "instead of", "change X to", "migrate from X"
+- Plan indicates replacing old implementation
+
+If YES → Record old class name: ___________
+
+**2. Does the migration rename columns or tables?**
+
+Check implementation plan for:
+- `rename_column :table, :old_name, :new_name`
+- `rename_table :old_table, :new_table`
+- `rename_index`
+
+If YES → List renames: old_name → new_name
+
+**3. Are you changing namespaces or modules?**
+
+Check for:
+- Moving `Services::Payment` to `Billing::Transaction`
+- Reorganizing under new namespace
+- Changing module nesting
+
+If YES → Old namespace → New namespace
+
+**4. Are you renaming methods called externally?**
+
+Check for:
+- Public API methods being renamed
+- Controller actions renamed
+- Service interface changes
+
+If YES → List method renames: old_method → new_method
+
+#### If ANY answer is YES (Refactoring Detected):
+
+**MUST initialize refactoring log BEFORE implementing:**
+
+```bash
+# Record refactoring in beads
+record_refactoring "$OLD_NAME" "$NEW_NAME" "$REFACTOR_TYPE"
+
+# Refactoring types:
+# - class_rename: Class or module name change
+# - attribute_rename: Database column or model attribute
+# - method_rename: Method signature change
+# - namespace_change: Module/namespace restructuring
+# - file_move: File relocated (may imply namespace change)
+
+# Examples:
+record_refactoring "Payment" "Transaction" "class_rename"
+record_refactoring "user_id" "account_id" "attribute_rename"
+record_refactoring "Services::Payment" "Billing::Transaction" "namespace_change"
+```
+
+**After recording, follow refactoring workflow:**
+1. Track all affected files in refactoring log
+2. Update files incrementally (one layer at a time)
+3. Validate references after each change (use `rg` to check)
+4. Run tests frequently
+5. **MUST run final validation before closing task**
+
+**Example refactoring workflow:**
+
+```bash
+# Step 1: Record refactoring
+record_refactoring "Payment" "Transaction" "class_rename"
+
+# Step 2: Update model
+mv app/models/payment.rb app/models/transaction.rb
+# Update class name in file
+update_refactoring_progress "Payment" "app/models/transaction.rb"
+
+# Step 3: Validate no orphaned references in models
+rg "\bPayment\b" app/models spec/models
+
+# Step 4: Update controller, views, specs, factories, routes...
+# (Repeat for each layer)
+
+# Step 5: Final validation (MUST pass before closing)
+validate_refactoring "Payment" "Transaction"
+# Must show: ✅ No remaining references
+
+# Step 6: Only then close task
+bd close $TASK_ID --reason "Refactoring complete, all references updated"
+```
+
+#### If ALL answers are NO (Not a Refactoring):
+
+This is a normal feature implementation. Proceed with standard workflow (no refactoring tracking needed).
+
+```bash
+# Continue to Step 3: Specialist Delegation
+# No refactoring log required
+```
+
+#### Common Mistake to Avoid
+
+❌ **Wrong**: "User said 'add transaction tracking', so I'll just create Transaction model"
+✅ **Correct**: "Check first - is there a Payment model this replaces? If yes, this is a refactoring!"
+
+❌ **Wrong**: "Migration renames column, but I'll just update the model and move on"
+✅ **Correct**: "Column rename = attribute refactoring. Track it! All `product.price` references must become `product.price_cents`"
+
+**Remember**: Orphaned references cause production bugs. Taking 2 minutes to initialize refactoring tracking prevents hours of debugging later.
+
 ### Step 3: Specialist Delegation
 
 Based on phase and plan, delegate to appropriate project agent:
@@ -419,6 +665,152 @@ Please confirm when complete:
 - Patterns followed: [list]
 - Any issues encountered: [description]
 ```
+
+### Step 3.4: File-Level Progress Tracking (Optional)
+
+**Track individual file creation** in beads comments (if enabled):
+
+```bash
+# Check if file tracking is enabled
+TRACK_FILES=$(grep '^granular_file_tracking:' .claude/rails-enterprise-dev.local.md | sed 's/.*: *//')
+
+if [ "$TRACK_FILES" = "true" ] && [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+  # Extract file list from implementation plan
+  FILES_TO_CREATE=$(grep -E '^\s*-\s*`[^`]+`' <<EOF
+[IMPLEMENTATION_PLAN_FILES_SECTION]
+EOF
+  )
+
+  # Create file tracking checklist comment
+  bd comment $TASK_ID "📝 Files for $PHASE_NAME:
+
+**Files to Create/Modify**:
+$(echo "$FILES_TO_CREATE" | sed 's/^//')
+
+**Status**: Specialist working on implementation...
+
+Progress will be updated as files are created."
+fi
+```
+
+**After each file is created**, update the tracking:
+
+```bash
+track_file_created() {
+  local file_path=$1
+  local validation_result=$2
+
+  TRACK_FILES=$(grep '^granular_file_tracking:' .claude/rails-enterprise-dev.local.md | sed 's/.*: *//')
+
+  if [ "$TRACK_FILES" = "true" ] && [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+    if [ "$validation_result" = "0" ]; then
+      bd comment $TASK_ID "✅ Created: \`$file_path\`
+
+**Validation**: Passed
+- Syntax: Valid
+- Load test: Success
+- Conventions: Followed
+
+File ready for integration."
+    else
+      bd comment $TASK_ID "⚠️ Created: \`$file_path\`
+
+**Validation**: Issues found
+- See validation output for details
+
+File may need adjustment."
+    fi
+  fi
+}
+
+# Usage after creating each file:
+# create_file "app/models/payment.rb"
+# validate_file "app/models/payment.rb"
+# track_file_created "app/models/payment.rb" $?
+```
+
+**Final file summary comment**:
+
+```bash
+finalize_file_tracking() {
+  local phase=$1
+  local files_created=("${@:2}")
+
+  TRACK_FILES=$(grep '^granular_file_tracking:' .claude/rails-enterprise-dev.local.md | sed 's/.*: *//')
+
+  if [ "$TRACK_FILES" = "true" ] && [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+    FILE_COUNT=${#files_created[@]}
+
+    bd comment $TASK_ID "📝 File Creation Complete: $phase
+
+**Summary**:
+- Total files created/modified: $FILE_COUNT
+- All files validated: ✅
+
+**Files**:
+$(printf '- [x] `%s`\n' "${files_created[@]}")
+
+Ready for quality gate validation."
+  fi
+}
+
+# Usage:
+# FILES_CREATED=(
+#   "app/models/payment.rb"
+#   "spec/models/payment_spec.rb"
+#   "spec/factories/payments.rb"
+# )
+# finalize_file_tracking "Models" "${FILES_CREATED[@]}"
+```
+
+**Example file tracking flow:**
+
+```bash
+# 1. Initial checklist
+bd comment $MODEL_TASK_ID "📝 Files for Models:
+
+**Files to Create/Modify**:
+- [ ] \`app/models/payment.rb\` - Payment model with validations
+- [ ] \`spec/models/payment_spec.rb\` - Model specs
+- [ ] \`spec/factories/payments.rb\` - Test factory
+
+**Status**: Data Lead working on implementation..."
+
+# 2. As each file is created
+bd comment $MODEL_TASK_ID "✅ Created: \`app/models/payment.rb\`
+
+**Validation**: Passed
+- Syntax: Valid
+- Associations: Defined
+- Validations: Present
+
+File ready for integration."
+
+bd comment $MODEL_TASK_ID "✅ Created: \`spec/models/payment_spec.rb\`
+
+**Validation**: Passed
+- Syntax: Valid
+- Tests: 8 examples, 0 failures
+- Coverage: 100%
+
+File ready for integration."
+
+# 3. Final summary
+bd comment $MODEL_TASK_ID "📝 File Creation Complete: Models
+
+**Summary**:
+- Total files created/modified: 3
+- All files validated: ✅
+
+**Files**:
+- [x] \`app/models/payment.rb\`
+- [x] \`spec/models/payment_spec.rb\`
+- [x] \`spec/factories/payments.rb\`
+
+Ready for quality gate validation."
+```
+
+**Note**: This granular tracking is **optional** and disabled by default. Enable it only for complex features where detailed progress visibility is needed. For most features, phase-level tracking is sufficient.
 
 ### Step 3.5: Incremental Validation (Modern Approach)
 
@@ -878,30 +1270,109 @@ GATES_ENABLED=$(sed -n '/^---$/,/^---$/{ /^quality_gates_enabled:/p }' "$STATE_F
 if [ "$GATES_ENABLED" = "true" ]; then
   echo "Running quality validation for $PHASE_NAME..."
 
+  # Check if quality gate tracking is enabled
+  TRACK_GATES=$(grep '^track_quality_gates:' .claude/rails-enterprise-dev.local.md | sed 's/.*: *//')
+
+  # Create initial quality gate comment (if tracking enabled)
+  if [ "$TRACK_GATES" = "true" ] && [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+    bd comment $TASK_ID "🔍 Quality Gate Validation: $PHASE_NAME
+
+**Status**: Running...
+
+**Checks**:
+- [ ] Syntax validation
+- [ ] Load/compile verification
+- [ ] Pattern compliance
+- [ ] Test execution
+- [ ] Convention adherence
+
+Running validation script..."
+  fi
+
   # Run validation hook
   bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-implementation.sh \
     --phase "$PHASE_NAME" \
-    --files "[created-files]"
+    --files "[created-files]" > /tmp/validation-results-$$.txt 2>&1
 
   VALIDATION_RESULT=$?
+  VALIDATION_OUTPUT=$(cat /tmp/validation-results-$$.txt)
 
   if [ $VALIDATION_RESULT -ne 0 ]; then
     # Validation failed
     echo "⚠️ Quality gate failed for $PHASE_NAME"
 
-    if [ -n "$TASK_ID" ]; then
+    # Update beads with detailed failure information
+    if [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
       bd update $TASK_ID --status blocked
-      bd comment $TASK_ID "Quality validation failed: [details from validation]"
+
+      if [ "$TRACK_GATES" = "true" ]; then
+        bd comment $TASK_ID "❌ Quality Gate: FAILED
+
+**Phase**: $PHASE_NAME
+**Status**: Blocked - Issues require resolution
+
+**Validation Failures**:
+\`\`\`
+$VALIDATION_OUTPUT
+\`\`\`
+
+**Next Steps**:
+1. Review failures above
+2. Fix identified issues
+3. Re-run validation
+4. Update task when resolved
+
+Phase cannot proceed until quality gates pass."
+      else
+        bd comment $TASK_ID "Quality validation failed: see logs for details"
+      fi
     fi
 
     echo "Issues found:"
-    echo "[List specific failures]"
+    echo "$VALIDATION_OUTPUT"
     echo ""
     echo "Please fix issues and I'll re-validate."
+
+    # Cleanup temp file
+    rm -f /tmp/validation-results-$$.txt
+
     exit 1
   else
     echo "✓ Quality gates passed for $PHASE_NAME"
+
+    # Update beads with success details (if tracking enabled)
+    if [ "$TRACK_GATES" = "true" ] && [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+      # Parse validation output for metrics
+      TEST_COUNT=$(echo "$VALIDATION_OUTPUT" | grep -oE '[0-9]+ examples?' | head -1 || echo "N/A")
+      COVERAGE=$(echo "$VALIDATION_OUTPUT" | grep -oE '[0-9]+\.[0-9]+%' | tail -1 || echo "N/A")
+
+      bd comment $TASK_ID "✅ Quality Gate: PASSED
+
+**Phase**: $PHASE_NAME
+**Status**: Validated - Ready to proceed
+
+**Validation Results**:
+- [x] Syntax validation (no errors)
+- [x] Load/compile verification (success)
+- [x] Pattern compliance (verified)
+- [x] Test execution ($TEST_COUNT, all passing)
+- [x] Convention adherence (rubocop clean)
+
+**Metrics**:
+- Test coverage: $COVERAGE
+- Files validated: [list]
+
+**Validation Output**:
+\`\`\`
+$VALIDATION_OUTPUT
+\`\`\`
+
+Phase approved for completion."
+    fi
   fi
+
+  # Cleanup temp file
+  rm -f /tmp/validation-results-$$.txt
 fi
 ```
 
@@ -946,6 +1417,242 @@ fi
 - [ ] All specs pass: `rspec`
 - [ ] Coverage > threshold: Check SimpleCov report
 - [ ] Edge cases covered
+
+### Step 4.5: Refactoring Tracking
+
+**Track class/attribute/method refactorings** to ensure all references are updated:
+
+#### When to Track Refactorings
+
+Track any of these changes:
+- **Class renames**: `Payment` → `Transaction`
+- **Attribute renames**: `user_id` → `account_id`
+- **Method renames**: `process` → `execute`
+- **Namespace changes**: `Services::Payment` → `Billing::Transaction`
+- **Table renames**: `payments` → `transactions`
+- **File moves**: `app/models/payment.rb` → `app/models/billing/transaction.rb`
+
+#### Refactoring Log Format
+
+Create refactoring log in beads comment:
+
+```bash
+record_refactoring() {
+  local old_name=$1
+  local new_name=$2
+  local refactor_type=$3  # class_rename, attribute_rename, method_rename, etc.
+
+  if [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+    bd comment $TASK_ID "🔄 Refactoring Log: $old_name → $new_name
+
+**Type**: $refactor_type
+**Started**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+**Status**: ⏳ In Progress
+
+### Changes Planned
+
+1. **$(echo $refactor_type | sed 's/_/ /g')**: \`$old_name\` → \`$new_name\`
+
+### Affected Files (Auto-detected)
+
+\`\`\`bash
+# Ruby files referencing old name
+$(rg --files-with-matches \"\\b$old_name\\b\" --type ruby 2>/dev/null | head -20 || echo "None detected")
+\`\`\`
+
+### Validation Checklist
+
+- [ ] No references to \`$old_name\` in Ruby files
+- [ ] No references in view templates
+- [ ] No references in routes
+- [ ] No references in specs
+- [ ] No references in factories
+- [ ] Migration files checked (if applicable)
+
+### Track Progress
+
+Run validation: \`bash hooks/scripts/validate-refactoring.sh --old-name $old_name --new-name $new_name\`"
+  fi
+}
+
+# Usage example:
+# record_refactoring "Payment" "Transaction" "class_rename"
+# record_refactoring "user_id" "account_id" "attribute_rename"
+```
+
+#### Update Refactoring Progress
+
+As files are updated:
+
+```bash
+update_refactoring_progress() {
+  local old_name=$1
+  local file_updated=$2
+
+  if [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+    bd comment $TASK_ID "✅ Refactoring Progress: Updated \`$file_updated\`
+
+Old references to \`$old_name\` in this file have been updated.
+
+Remaining files: $(rg --files-with-matches \"\\b$old_name\\b\" --type ruby 2>/dev/null | wc -l || echo "?")"
+  fi
+}
+```
+
+#### Validate Refactoring Completeness
+
+Before marking phase complete, validate all references updated:
+
+```bash
+validate_refactoring() {
+  local old_name=$1
+  local new_name=$2
+
+  echo "🔍 Validating refactoring: $old_name → $new_name"
+
+  # Run refactoring validator
+  if [ -f "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-refactoring.sh" ]; then
+    bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-refactoring.sh" \
+      --old-name "$old_name" \
+      --new-name "$new_name" \
+      --issue-id "$TASK_ID"
+
+    REFACTOR_VALIDATION_RESULT=$?
+
+    if [ $REFACTOR_VALIDATION_RESULT -ne 0 ]; then
+      echo "❌ Refactoring validation failed"
+      echo "Remaining references to '$old_name' found."
+      echo "Review validation output above and update remaining files."
+
+      if [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
+        bd update $TASK_ID --status blocked
+      fi
+
+      return 1
+    else
+      echo "✅ Refactoring validation passed"
+      echo "All references to '$old_name' successfully updated."
+
+      return 0
+    fi
+  else
+    echo "⚠️ Refactoring validator not found, skipping validation"
+    return 0
+  fi
+}
+
+# Usage:
+# validate_refactoring "Payment" "Transaction"
+```
+
+#### Intentional Legacy References
+
+Create `.refactorignore` for intentional legacy references:
+
+```gitignore
+# .refactorignore - Files to exclude from refactoring validation
+
+# Legacy compatibility layer
+lib/legacy_api_adapter.rb
+
+# Historical documentation
+CHANGELOG.md
+docs/migration_guide.md
+
+# Rename migrations (reference old names by design)
+db/migrate/*_rename_*.rb
+
+# External API contracts (can't change)
+app/serializers/api/v1/*_serializer.rb
+```
+
+#### Complete Refactoring Workflow
+
+1. **Start**: Record refactoring with `record_refactoring()`
+2. **Update**: Update files incrementally, track with `update_refactoring_progress()`
+3. **Validate**: Before phase completion, run `validate_refactoring()`
+4. **Fix**: If validation fails, update remaining references
+5. **Re-validate**: Run validation again until it passes
+6. **Complete**: Only close task after validation passes
+
+#### Example: Class Rename Workflow
+
+```bash
+# Phase starts: Renaming Payment to Transaction
+
+# Step 1: Record refactoring
+record_refactoring "Payment" "Transaction" "class_rename"
+
+# Step 2: Update model file
+mv app/models/payment.rb app/models/transaction.rb
+# Update class name in file
+sed -i 's/class Payment/class Transaction/g' app/models/transaction.rb
+update_refactoring_progress "Payment" "app/models/transaction.rb"
+
+# Step 3: Update associations in other models
+# ... update files ...
+update_refactoring_progress "Payment" "app/models/account.rb"
+
+# Step 4: Update controller
+mv app/controllers/payments_controller.rb app/controllers/transactions_controller.rb
+# ... update class name and references ...
+update_refactoring_progress "Payment" "app/controllers/transactions_controller.rb"
+
+# Step 5: Update views, specs, factories, routes
+# ... update all remaining files ...
+
+# Step 6: Validate completeness
+validate_refactoring "Payment" "Transaction"
+
+if [ $? -eq 0 ]; then
+  echo "✅ Refactoring complete, all references updated"
+  # Can proceed to close task
+else
+  echo "❌ Refactoring incomplete, fix remaining references"
+  # Task remains blocked until fixed
+fi
+```
+
+#### Cross-Layer Impact Checklist
+
+When refactoring, check these layers:
+
+**Class Rename** (`Payment` → `Transaction`):
+- [ ] Model class definition
+- [ ] Associations in other models (`has_many :payments`)
+- [ ] Controller class name
+- [ ] Controller instance variables (`@payment`)
+- [ ] View template paths (`app/views/payments/`)
+- [ ] View helpers and form objects
+- [ ] Route resources (`resources :payments`)
+- [ ] Spec describe blocks
+- [ ] Factory definitions (`:payment`, `:payments`)
+- [ ] Service class references
+- [ ] Job class references
+- [ ] Serializer references
+- [ ] Migration table names (if applicable)
+- [ ] String references (e.g., `"Payment"` in polymorphic associations)
+
+**Attribute Rename** (`user_id` → `account_id`):
+- [ ] Database migration (column rename)
+- [ ] Model attribute references
+- [ ] Validations
+- [ ] Associations (`:foreign_key` option)
+- [ ] Scopes and queries
+- [ ] Controller strong params
+- [ ] View form fields
+- [ ] Spec let statements
+- [ ] Factory attributes
+- [ ] Serializer attributes
+- [ ] API documentation
+
+**Table Rename** (`payments` → `transactions`):
+- [ ] Database migration (table rename)
+- [ ] Model `table_name` declaration
+- [ ] Foreign key constraints
+- [ ] Indexes
+- [ ] Raw SQL queries
+- [ ] Database views (if any)
 
 ### Step 5: Phase Completion
 

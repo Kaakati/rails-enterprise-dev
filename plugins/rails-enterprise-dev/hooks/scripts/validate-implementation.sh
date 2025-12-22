@@ -101,6 +101,32 @@ case "$PHASE" in
     fi
     ;;
 
+  refactoring|Refactoring)
+    # Validate refactoring completeness
+    # Check if refactoring validator exists
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    REFACTOR_VALIDATOR="${SCRIPT_DIR}/validate-refactoring.sh"
+
+    if [ -f "$REFACTOR_VALIDATOR" ]; then
+      echo "Running refactoring validation..."
+
+      # Look for refactoring logs in beads (if beads available)
+      if command -v bd >/dev/null 2>&1 && [ -n "$BEADS_ISSUE_ID" ]; then
+        bash "$REFACTOR_VALIDATOR" --issue-id "$BEADS_ISSUE_ID"
+        REFACTOR_RESULT=$?
+
+        if [ $REFACTOR_RESULT -ne 0 ]; then
+          echo "⚠️ Quality Gate Failed: Incomplete refactoring"
+          exit 2
+        fi
+      else
+        echo "ℹ️ No beads issue ID provided, skipping refactoring validation"
+      fi
+    else
+      echo "ℹ️ Refactoring validator not found, skipping refactoring validation"
+    fi
+    ;;
+
   *)
     # Generic validation
     if [ -n "$FILES" ]; then

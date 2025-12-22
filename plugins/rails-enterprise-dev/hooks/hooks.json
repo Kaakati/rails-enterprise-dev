@@ -26,6 +26,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "tool:Edit|tool:Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/detect-refactoring.sh",
+            "timeout": 10,
+            "description": "Auto-detect refactorings from file changes"
+          }
+        ]
+      }
     ]
   }
 }

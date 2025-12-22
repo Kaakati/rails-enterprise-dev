@@ -177,6 +177,12 @@ feature_id: ${FEATURE_ID:-none}
 workflow_phase: inspection
 quality_gates_enabled: true
 
+# Granularity controls for beads task tracking
+conditional_phase_creation: true      # Only create tasks for needed implementation layers
+granular_file_tracking: false         # Create detailed file-level progress comments (not tasks)
+track_skill_invocations: true         # Add comments when skills are invoked
+track_quality_gates: true             # Add detailed quality validation comments
+
 # Skill inventory (populated by discover-skills.sh)
 available_skills:
   core: []
@@ -327,20 +333,127 @@ sed -i 's/workflow_phase: planning/workflow_phase: implementation/' .claude/rail
 
 ### Phase 4: IMPLEMENTATION (Delegate to implementation-executor)
 
-Break implementation into beads subtasks by layer (based on planner's recommendations):
+**Parse implementation plan metadata** to determine which phases are needed:
+
+```bash
+# After planning completes, extract metadata from plan
+# Plan metadata should be in the rails-planner output in YAML format
+
+# Helper function to check if phase is needed
+phase_needed() {
+  local phase_name=$1
+  local plan_output="$2"
+
+  # Extract phases_needed section and check for phase
+  echo "$plan_output" | sed -n '/^phases_needed:/,/^[a-z_]*:/p' | grep "^  $phase_name:" | grep -q "true"
+  return $?
+}
+
+# Parse plan from above planner output
+PLAN_METADATA=$(cat <<'EOF'
+[PASTE_PLAN_METADATA_HERE_FROM_PLANNER_OUTPUT]
+EOF
+)
+
+echo "📋 Analyzing implementation plan to determine required phases..."
+```
+
+**Create beads subtasks conditionally** (only for needed layers):
 
 ```bash
 if [ -n "$FEATURE_ID" ]; then
-  # Create subtasks for each layer (adjust based on actual plan)
-  DB_ID=$(bd create --type task --title "Implement: Database migrations" --deps $PLAN_ID)
-  MODEL_ID=$(bd create --type task --title "Implement: Models & validations" --deps $DB_ID)
-  SERVICE_ID=$(bd create --type task --title "Implement: Service objects" --deps $MODEL_ID)
-  COMPONENT_ID=$(bd create --type task --title "Implement: ViewComponents" --deps $SERVICE_ID)
-  CONTROLLER_ID=$(bd create --type task --title "Implement: Controllers" --deps $COMPONENT_ID)
-  VIEW_ID=$(bd create --type task --title "Implement: Views" --deps $CONTROLLER_ID)
-  TEST_ID=$(bd create --type task --title "Implement: Tests" --deps $VIEW_ID)
+  # Track previous task ID for dependency chain
+  PREV_TASK_ID=$PLAN_ID
+
+  # Conditionally create database layer task
+  if phase_needed "database" "$PLAN_METADATA"; then
+    DB_ID=$(bd create --type task --title "Implement: Database migrations" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$DB_ID
+    echo "✓ Created task: Database migrations (ID: $DB_ID)"
+  else
+    echo "⊘ Skipping: Database migrations (not needed)"
+    DB_ID=""
+  fi
+
+  # Conditionally create models layer task
+  if phase_needed "models" "$PLAN_METADATA"; then
+    MODEL_ID=$(bd create --type task --title "Implement: Models & validations" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$MODEL_ID
+    echo "✓ Created task: Models & validations (ID: $MODEL_ID)"
+  else
+    echo "⊘ Skipping: Models (not needed)"
+    MODEL_ID=""
+  fi
+
+  # Conditionally create services layer task
+  if phase_needed "services" "$PLAN_METADATA"; then
+    SERVICE_ID=$(bd create --type task --title "Implement: Service objects" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$SERVICE_ID
+    echo "✓ Created task: Service objects (ID: $SERVICE_ID)"
+  else
+    echo "⊘ Skipping: Services (not needed)"
+    SERVICE_ID=""
+  fi
+
+  # Conditionally create jobs layer task
+  if phase_needed "jobs" "$PLAN_METADATA"; then
+    JOB_ID=$(bd create --type task --title "Implement: Background jobs" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$JOB_ID
+    echo "✓ Created task: Background jobs (ID: $JOB_ID)"
+  else
+    echo "⊘ Skipping: Background jobs (not needed)"
+    JOB_ID=""
+  fi
+
+  # Conditionally create components layer task
+  if phase_needed "components" "$PLAN_METADATA"; then
+    COMPONENT_ID=$(bd create --type task --title "Implement: ViewComponents" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$COMPONENT_ID
+    echo "✓ Created task: ViewComponents (ID: $COMPONENT_ID)"
+  else
+    echo "⊘ Skipping: ViewComponents (not needed)"
+    COMPONENT_ID=""
+  fi
+
+  # Conditionally create controllers layer task
+  if phase_needed "controllers" "$PLAN_METADATA"; then
+    CONTROLLER_ID=$(bd create --type task --title "Implement: Controllers" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$CONTROLLER_ID
+    echo "✓ Created task: Controllers (ID: $CONTROLLER_ID)"
+  else
+    echo "⊘ Skipping: Controllers (not needed)"
+    CONTROLLER_ID=""
+  fi
+
+  # Conditionally create views layer task
+  if phase_needed "views" "$PLAN_METADATA"; then
+    VIEW_ID=$(bd create --type task --title "Implement: Views" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$VIEW_ID
+    echo "✓ Created task: Views (ID: $VIEW_ID)"
+  else
+    echo "⊘ Skipping: Views (not needed)"
+    VIEW_ID=""
+  fi
+
+  # Tests always created (if any implementation phases exist)
+  if phase_needed "tests" "$PLAN_METADATA" || [ "$PREV_TASK_ID" != "$PLAN_ID" ]; then
+    TEST_ID=$(bd create --type task --title "Implement: Tests" --deps $PREV_TASK_ID)
+    PREV_TASK_ID=$TEST_ID
+    echo "✓ Created task: Tests (ID: $TEST_ID)"
+  else
+    echo "⊘ Skipping: Tests (no implementation phases)"
+    TEST_ID=""
+  fi
+
+  echo ""
+  echo "📊 Implementation task summary:"
+  echo "   Total phases needed: $(echo "$PLAN_METADATA" | grep -c ': true')"
+  echo "   Tasks created: $([ -n "$DB_ID" ] && echo -n "DB "; [ -n "$MODEL_ID" ] && echo -n "Models "; [ -n "$SERVICE_ID" ] && echo -n "Services "; [ -n "$JOB_ID" ] && echo -n "Jobs "; [ -n "$COMPONENT_ID" ] && echo -n "Components "; [ -n "$CONTROLLER_ID" ] && echo -n "Controllers "; [ -n "$VIEW_ID" ] && echo -n "Views "; [ -n "$TEST_ID" ] && echo -n "Tests")"
+  echo ""
 fi
 ```
+
+**Note**: Replace `[PASTE_PLAN_METADATA_HERE_FROM_PLANNER_OUTPUT]` with the actual metadata from the planner's output.
 
 **For each implementation layer**, invoke implementation-executor:
 
@@ -397,6 +510,105 @@ fi
 ```
 
 **Continue through all implementation layers** until complete.
+
+### Phase 4.5: REFACTORING VALIDATION
+
+**Before final review**, validate any refactorings that occurred during implementation:
+
+```bash
+echo "🔍 Checking for refactorings..."
+
+# Search for refactoring logs in feature and subtasks
+if [ -n "$FEATURE_ID" ] && command -v bd &> /dev/null; then
+  # Get all comments from feature and its dependencies
+  REFACTORING_LOGS=$(bd show $FEATURE_ID | grep -c "🔄 Refactoring Log" || echo "0")
+
+  if [ $REFACTORING_LOGS -gt 0 ]; then
+    echo "Found $REFACTORING_LOGS refactoring(s) in this feature."
+    echo "Running comprehensive refactoring validation..."
+
+    # Extract refactoring details and validate each
+    REFACTORING_VALIDATION_FAILED=false
+
+    # Get all task IDs for this feature
+    TASK_IDS=$(bd list --status all | grep "$FEATURE_ID" | awk '{print $1}')
+
+    for TASK_ID in $TASK_IDS; do
+      # Check if this task has refactoring logs
+      if bd show $TASK_ID 2>/dev/null | grep -q "🔄 Refactoring Log"; then
+        echo ""
+        echo "Validating refactorings in task: $TASK_ID"
+
+        # Run refactoring validator
+        bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-refactoring.sh \
+          --issue-id $TASK_ID
+
+        if [ $? -ne 0 ]; then
+          REFACTORING_VALIDATION_FAILED=true
+          echo "❌ Refactoring validation failed for task $TASK_ID"
+
+          # Block the task
+          bd update $TASK_ID --status blocked 2>/dev/null || true
+        else
+          echo "✅ Refactoring validation passed for task $TASK_ID"
+        fi
+      fi
+    done
+
+    # If any refactoring validation failed, block workflow
+    if [ "$REFACTORING_VALIDATION_FAILED" = "true" ]; then
+      echo ""
+      echo "❌ WORKFLOW BLOCKED: Incomplete refactorings detected"
+      echo ""
+      echo "Some refactorings have remaining references that need to be updated."
+      echo "Review the validation output above and:"
+      echo "1. Update remaining references to new names"
+      echo "2. Add intentional legacy references to .refactorignore"
+      echo "3. Re-run refactoring validation"
+      echo ""
+      echo "Cannot proceed to review until all refactorings are complete."
+
+      # Add comment to feature
+      if [ -n "$FEATURE_ID" ]; then
+        bd comment $FEATURE_ID "❌ Refactoring Validation Failed
+
+**Status**: Workflow blocked before review
+
+**Issue**: Incomplete refactorings detected. Some references to old names remain.
+
+**Action Required**:
+1. Review validation output for each blocked refactoring task
+2. Update remaining references
+3. Add intentional legacy references to .refactorignore if needed
+4. Re-run validation until all refactorings pass
+
+**Blocked Tasks**: See tasks marked as 'blocked' above
+
+Cannot proceed to final review until refactorings are complete."
+      fi
+
+      exit 1
+    else
+      echo ""
+      echo "✅ All refactorings validated successfully"
+
+      # Add success comment to feature
+      if [ -n "$FEATURE_ID" ]; then
+        bd comment $FEATURE_ID "✅ Refactoring Validation: PASSED
+
+**Refactorings Found**: $REFACTORING_LOGS
+**Status**: All validated successfully
+
+All references to old names have been updated. No orphaned references detected.
+
+Ready to proceed to final review."
+      fi
+    fi
+  else
+    echo "No refactorings detected in this feature. Skipping refactoring validation."
+  fi
+fi
+```
 
 ### Phase 5: REVIEW (Delegate to Chief Reviewer)
 

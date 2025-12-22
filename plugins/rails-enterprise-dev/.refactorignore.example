@@ -1,0 +1,131 @@
+# .refactorignore - Exclude files from refactoring validation
+#
+# This file tells the refactoring validator to ignore certain files
+# when checking for remaining references to old names after a refactoring.
+#
+# Use this for:
+# - Legacy compatibility layers that intentionally use old names
+# - Historical documentation that references old implementations
+# - Rename migrations that reference old names by design
+# - External API contracts that cannot be changed
+#
+# Format: Same as .gitignore
+# - One pattern per line
+# - # for comments
+# - Supports glob patterns (*, **, ?)
+# - Blank lines ignored
+#
+# Location: Place this file at the root of your Rails project
+# Copy: cp plugins/rails-enterprise-dev/.refactorignore.example .refactorignore
+
+# ============================================================================
+# LEGACY COMPATIBILITY
+# ============================================================================
+
+# Legacy API adapters (intentionally use old class names)
+lib/legacy_api_adapter.rb
+lib/adapters/v1/*
+
+# External API compatibility (can't change external contracts)
+app/serializers/api/v1/*_serializer.rb
+app/controllers/api/v1/*_controller.rb
+
+# Deprecated code (will be removed later, but not now)
+app/models/deprecated/*
+lib/deprecated/*
+
+# ============================================================================
+# HISTORICAL DOCUMENTATION
+# ============================================================================
+
+# Changelog and migration guides reference old implementations
+CHANGELOG.md
+CHANGES.md
+docs/migration_guides/*.md
+docs/history/*.md
+docs/archives/*
+
+# Release notes may reference old names
+docs/releases/*
+
+# ============================================================================
+# MIGRATIONS
+# ============================================================================
+
+# Rename migrations reference old names by design
+db/migrate/*_rename_*.rb
+db/migrate/*_change_*_to_*.rb
+
+# Migration rollback documentation
+db/migrate/README.md
+
+# ============================================================================
+# TESTS & FIXTURES
+# ============================================================================
+
+# Test fixtures for legacy data formats
+spec/fixtures/legacy/*
+test/fixtures/legacy/*
+
+# Integration tests for backward compatibility
+spec/integration/legacy_*_spec.rb
+test/integration/legacy_*_test.rb
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# Old configuration file examples (for reference)
+config/examples/*_old.yml
+config/legacy/*
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+# Generated documentation (regenerate after refactoring)
+doc/app/*
+public/docs/*
+
+# README files may have examples with old names
+**/README_OLD.md
+
+# ============================================================================
+# COMMENTS
+# ============================================================================
+
+# Note: The validator searches file CONTENTS, not file names
+# So this excludes the ENTIRE FILE if its path matches
+#
+# If you want to allow the old name in comments but not in code,
+# you cannot use .refactorignore. Instead, update the comments.
+#
+# ============================================================================
+
+# ============================================================================
+# PROJECT-SPECIFIC EXAMPLES
+# ============================================================================
+
+# Uncomment and customize for your project:
+
+# # Feature flag for gradual rollout (uses old and new names)
+# lib/feature_flags/migration_flags.rb
+
+# # Adapter pattern for transitioning between implementations
+# app/adapters/payment_to_transaction_adapter.rb
+
+# # Facade that wraps old implementation
+# app/facades/legacy_payment_facade.rb
+
+# # Polymorphic associations that reference old class name as string
+# # (These need manual review, not automatic exclusion)
+# # app/models/activity.rb  # has polymorphic: :subject with "Payment"
+
+# ============================================================================
+# END OF EXAMPLE .refactorignore
+# ============================================================================
+
+# After creating this file, test it with:
+# bash hooks/scripts/validate-refactoring.sh --old-name OldName --new-name NewName
+#
+# Files matching patterns above will be excluded from validation.

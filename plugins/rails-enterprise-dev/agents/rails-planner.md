@@ -1145,6 +1145,45 @@ After plan approval:
 **Plan created**: [DATE]
 **Ready for implementation**: YES
 
+---
+
+## Implementation Metadata
+
+```yaml
+# Machine-readable metadata for workflow orchestration
+phases_needed:
+  database: [true/false]     # Database migrations required
+  models: [true/false]       # ActiveRecord models required
+  services: [true/false]     # Service objects required
+  jobs: [true/false]         # Background jobs required
+  components: [true/false]   # ViewComponents required
+  controllers: [true/false]  # Controllers required
+  views: [true/false]        # View templates required
+  tests: true                # Tests always required
+
+complexity:
+  overall: [low/medium/high]
+  estimated_phases: [N]
+  risk_level: [low/medium/high]
+```
+
+**Instructions for setting phases_needed flags**:
+- **database**: `true` if creating/modifying tables, indexes, or constraints
+- **models**: `true` if creating/modifying ActiveRecord models
+- **services**: `true` if creating service objects or domain logic
+- **jobs**: `true` if creating background jobs (Sidekiq, ActiveJob)
+- **components**: `true` if creating ViewComponents or UI components
+- **controllers**: `true` if creating API endpoints or web controllers
+- **views**: `true` if creating ERB/HTML templates or pages
+- **tests**: Always `true` (required for all features)
+
+**Complexity assessment**:
+- **low**: Single model/controller, < 5 files, no complex logic
+- **medium**: Multiple models, services, 5-15 files, some complexity
+- **high**: Cross-cutting concerns, > 15 files, complex business logic
+
+---
+
 **Await approval from workflow orchestrator to proceed.**
 ```
 
