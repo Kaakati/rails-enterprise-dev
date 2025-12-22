@@ -142,6 +142,73 @@ case "$PHASE" in
     ;;
 esac
 
+#==============================================================================
+# STATIC ANALYSIS & SECURITY (ALL PHASES)
+#==============================================================================
+
+# RuboCop validation (if available)
+if command -v rubocop &> /dev/null; then
+  echo ""
+  echo "Running RuboCop validation..."
+
+  # Get Ruby files to check
+  if [ -n "$FILES" ]; then
+    RUBY_FILES=$(echo "$FILES" | tr ' ' '\n' | grep '\.rb$' || true)
+  else
+    # Check all app/ files for the phase
+    case "$PHASE" in
+      models|Models)
+        RUBY_FILES="app/models"
+        ;;
+      services|Services)
+        RUBY_FILES="app/services"
+        ;;
+      controllers|Controllers)
+        RUBY_FILES="app/controllers"
+        ;;
+      components|Components)
+        RUBY_FILES="app/components"
+        ;;
+      *)
+        RUBY_FILES=""
+        ;;
+    esac
+  fi
+
+  if [ -n "$RUBY_FILES" ]; then
+    # Run RuboCop with error-level failures only
+    if ! rubocop --fail-level error --format simple $RUBY_FILES 2>&1; then
+      echo ""
+      echo "⚠️ Quality Gate Failed: RuboCop errors detected"
+      echo ""
+      echo "Fix with: rubocop -a $RUBY_FILES  (auto-correct)"
+      echo ""
+      exit 2
+    fi
+    echo "✅ RuboCop validation passed"
+  fi
+fi
+
+# Brakeman security scan (for controllers and API phases)
+if [ "$PHASE" = "controllers" ] || [ "$PHASE" = "Controllers" ] || [ "$PHASE" = "api" ] || [ "$PHASE" = "API" ]; then
+  if command -v brakeman &> /dev/null; then
+    echo ""
+    echo "Running security scan..."
+
+    # Run Brakeman with medium confidence warnings
+    if ! brakeman --quiet --exit-on-warn --confidence-level 2 --no-pager 2>&1; then
+      echo ""
+      echo "⚠️ Quality Gate Failed: Security vulnerabilities detected"
+      echo ""
+      echo "Review the security warnings above and fix before proceeding."
+      echo ""
+      exit 2
+    fi
+    echo "✅ Security scan passed"
+  fi
+fi
+
 # All validations passed
+echo ""
 echo "✓ Quality gates passed"
 exit 0

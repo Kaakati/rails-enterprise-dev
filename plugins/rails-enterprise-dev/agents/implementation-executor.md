@@ -634,6 +634,19 @@ Based on [SKILL_NAMES] skills:
 - [Pattern 2 from skill]
 - [Convention 3 from skill]
 
+**Code Safety Requirements**:
+Follow safe coding patterns from rails-error-prevention skill:
+- Use safe navigation (`&.`) for all potentially nil attributes (e.g., `user&.email&.downcase`)
+- Add presence validations for required fields (`validates :field, presence: true`)
+- Use strong parameters in controllers (never use `params[:model]` directly)
+- Handle validation failures explicitly (use `save` not `create!` in controllers)
+- Use `includes`/`joins` to prevent N+1 queries (e.g., `Post.includes(:author)`)
+- Rescue specific exceptions, not StandardError (e.g., `rescue ActiveRecord::RecordInvalid`)
+- Check for nil before calling methods: `key&.to_sym` instead of `key.to_sym`
+- Use parameterized queries (no string interpolation in SQL)
+
+Refer to rails-error-prevention skill for detailed patterns and examples.
+
 **Requirements from Plan**:
 1. [Requirement 1]
 2. [Requirement 2]
@@ -1257,6 +1270,80 @@ execute_phase() {
   fi
 }
 ```
+
+### Step 3.8: Common Mistakes Prevention Checklist
+
+Before marking file complete, verify code follows safe patterns from **rails-error-prevention skill**:
+
+**Nil Safety:**
+- [ ] Use safe navigation (`&.`) for potentially nil objects (e.g., `user&.email&.downcase`)
+- [ ] Add presence validations for required attributes (`validates :field, presence: true`)
+- [ ] Handle nil cases in conditionals explicitly (no implicit falsy reliance)
+- [ ] Use `find_by!` or handle `find_by` returning nil (`find_by(...)&.method || default`)
+- [ ] Check for nil before calling methods: `key&.to_sym` instead of `key.to_sym`
+- [ ] Filter nil values from collections: `hash.compact.each` or `next if value.nil?`
+
+**ActiveRecord Safety:**
+- [ ] Use `includes`/`joins` to prevent N+1 queries (e.g., `Post.includes(:author)`)
+- [ ] Add validations for all user inputs (`validates :email, format: { with: ... }`)
+- [ ] Handle validation failures explicitly (use `save` not `create!` in controllers)
+- [ ] Add indexes on foreign keys (`t.references :user, foreign_key: true, index: true`)
+- [ ] Use scopes instead of class methods for queries
+- [ ] Add counter caches for frequently accessed counts
+
+**Security:**
+- [ ] Strong parameters for all user inputs (define `model_params` method)
+- [ ] No string interpolation in SQL (use `?` placeholders: `where("email = ?", email)`)
+- [ ] Sanitize HTML output or use helpers (`sanitize` or `strip_tags`)
+- [ ] No mass assignment without whitelisting (`params.require(:model).permit(...)`)
+- [ ] Use `has_secure_password` for authentication
+- [ ] No sensitive data in logs or error messages
+
+**Error Handling:**
+- [ ] Rescue specific exceptions, not StandardError (`rescue ActiveRecord::RecordInvalid`)
+- [ ] Log errors appropriately with context (`Rails.logger.error("Context: #{e.message}")`)
+- [ ] Return meaningful error messages (not raw exceptions to users)
+- [ ] Handle edge cases (empty arrays, nil values, zero amounts)
+- [ ] Use Result pattern for service objects (return `Result.success` or `Result.failure`)
+
+**Performance:**
+- [ ] Use `pluck`/`select` for specific columns (not `map` on all records)
+- [ ] Use `exists?` instead of `any?` or `count > 0`
+- [ ] Use `find_each` for large collections (not `each` on `all`)
+- [ ] Add database indexes for frequently queried columns
+- [ ] Use counter caches instead of repeated `count` queries
+
+**For Specific Error Types:**
+
+**NoMethodError Prevention (like `undefined method 'to_sym' for nil`):**
+- [ ] Check for nil before calling methods: `object&.method`
+- [ ] Filter nil from collections before iteration: `hash.compact.each`
+- [ ] Add presence validations at model level
+- [ ] Use explicit nil checks in complex logic
+
+**N+1 Query Prevention:**
+- [ ] Preload associations in controller: `@posts = Post.includes(:author, :comments)`
+- [ ] Use counter caches for counts
+- [ ] Test with Bullet gem in development
+- [ ] Review queries in Rails console before finalizing
+
+**Security Vulnerability Prevention:**
+- [ ] Define strong parameters method for each controller action
+- [ ] Never use `params[:model]` directly in `create` or `update`
+- [ ] Use parameterized queries or hash conditions (no string interpolation)
+- [ ] Escape/sanitize all user-generated content in views
+
+**Migration Safety:**
+- [ ] Add indexes on all foreign keys
+- [ ] Include `null: false` for required columns
+- [ ] Add unique indexes for uniqueness constraints
+- [ ] Make migrations reversible (provide `down` method)
+
+**Validation:**
+
+After completing each file/method, run through this checklist. If any item is unchecked, revisit the code.
+
+**Use rails-error-prevention skill** for detailed patterns and examples of each category.
 
 ### Step 4: Quality Validation
 

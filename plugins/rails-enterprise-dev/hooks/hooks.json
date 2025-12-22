@@ -27,6 +27,19 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "tool:Bash && args.command:git commit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-commit-validation.sh",
+            "timeout": 30,
+            "description": "Run linters and validation before commit"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "tool:Edit|tool:Write",
