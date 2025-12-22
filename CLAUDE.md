@@ -280,3 +280,5 @@ The plugin's `skill-discovery` skill documents how discovery works, but the disc
 This repository uses git for version control. The `.gitignore` only ignores `.DS_Store` files.
 
 **Note**: User projects using this plugin should add `.claude/*.local.md` to their gitignore, but this repository doesn't need that since it's the plugin source, not a project using the plugin.
+- bump the plugin version everytime you want to push to git
+- bump the plugin version everytime you want to push to git
