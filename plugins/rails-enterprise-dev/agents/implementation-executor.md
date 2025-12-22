@@ -574,6 +574,301 @@ This is a normal feature implementation. Proceed with standard workflow (no refa
 
 **Remember**: Orphaned references cause production bugs. Taking 2 minutes to initialize refactoring tracking prevents hours of debugging later.
 
+### Step 2.6: Context Verification (MANDATORY)
+
+**Before delegating to specialist, VERIFY codebase context to prevent assumption bugs.**
+
+Never assume helper methods, authentication patterns, or namespace conventions exist. Always verify first using the **rails-context-verification skill**.
+
+#### The Assumption Bug Problem
+
+**Common Mistakes Agents Make:**
+- Assume `current_admin` exists (might be `current_administrator`)
+- Copy patterns from client → admin without verification
+- Use undefined helpers in views
+- Assume route helpers without checking `rails routes`
+- Use instance variables that controllers don't set
+
+**Result:** Production errors like `undefined method 'current_admin'`
+
+#### Verification Process
+
+**Step 1: Identify Context**
+
+```bash
+# What namespace am I working in?
+NAMESPACE="admin"  # or client, api, public
+
+# Check file paths:
+# - app/controllers/admins/ → admin namespace
+# - app/controllers/clients/ → client namespace
+# - app/views/admins/ → admin namespace
+```
+
+**Step 2: Verify Authentication Helpers**
+
+```bash
+# Search for current_* helpers
+rg "def current_" app/controllers/ app/helpers/
+
+# Example output:
+# app/controllers/application_controller.rb:42:
+#   def current_administrator
+
+# Verified helper: current_administrator (not current_admin!)
+
+# Also verify signed_in? helper:
+rg "signed_in\?" app/views/$NAMESPACE/
+
+# Example output:
+# app/views/admins/dashboard/_header.html.erb:
+#   <% if administrator_signed_in? %>
+
+# Verified: administrator_signed_in? (not admin_signed_in?!)
+```
+
+**Step 3: Verify Route Helpers**
+
+```bash
+# Check route prefix for this namespace
+rails routes | grep $NAMESPACE | head -5
+
+# Example output:
+# admins_dashboard    GET  /admins/dashboard
+# destroy_admins_session DELETE /admins/sign_out
+
+# Verified prefix: admins_ (note the 's' - plural!)
+# Correct: admins_dashboard_path
+# Wrong: admin_dashboard_path
+```
+
+**Step 4: Verify Authorization Methods**
+
+```bash
+# Check before_actions in base controller
+rg "before_action" app/controllers/${NAMESPACE}s/base_controller.rb
+
+# Example output:
+# before_action :require_super_admin
+# before_action :authenticate_administrator!
+
+# Verified methods: require_super_admin, authenticate_administrator!
+# Don't use: authorize_admin! (doesn't exist!)
+```
+
+**Step 5: Verify Instance Variables**
+
+```bash
+# If view needs @current_account, verify controller sets it
+rg "@current_account\s*=" app/controllers/${NAMESPACE}s/
+
+# If found → safe to use in views
+# If not found → DON'T use (will be nil!)
+```
+
+#### Verification Checklist
+
+Before delegating to specialist, complete this checklist:
+
+- [ ] **Namespace identified**: admin / client / api / public
+- [ ] **Authentication helper verified**: `rg "def current_" app/controllers/`
+- [ ] **Signed-in helper verified**: `rg "signed_in\?" app/views/namespace/`
+- [ ] **Route prefix verified**: `rails routes | grep namespace`
+- [ ] **Authorization methods verified**: `rg "before_action" base_controller.rb`
+- [ ] **Required instance variables verified**: `rg "@variable=" controllers/`
+
+#### Delegation Message Format (Updated)
+
+After verification, include verified context in delegation message:
+
+```markdown
+I need you to implement the [PHASE_NAME] layer for [FEATURE_NAME].
+
+**Context**:
+- Feature: [FEATURE_DESCRIPTION]
+- Phase: [PHASE_NAME] (step X of Y)
+- Implementation plan section: [RELEVANT_PLAN_EXCERPT]
+- Beads task: [TASK_ID if available]
+
+**Context Verification** (MANDATORY - USE THESE EXACT NAMES):
+- Namespace: [admin/client/api/public]
+- Authentication helper: `current_administrator` (verified: app/controllers/application_controller.rb:42)
+- Signed-in helper: `administrator_signed_in?` (verified: app/views/admins/dashboard/_header.html.erb:12)
+- Route prefix: `admins_` (verified: rails routes | grep admins)
+- Authorization: `require_super_admin` (verified: app/controllers/admins/base_controller.rb:8)
+- Available instance variables: `@current_administrator` (set in before_action)
+
+**CRITICAL SAFETY RULES:**
+- DO NOT assume helper names - use ONLY the verified helpers above
+- DO NOT copy patterns from other namespaces (client ≠ admin)
+- DO NOT use helpers that aren't listed above (they don't exist!)
+- DO NOT use undefined instance variables
+- If you need a helper not listed, STOP and ask for it to be added first
+
+**Skill Guidance**:
+Based on [SKILL_NAMES] skills:
+- [Pattern 1 from skill]
+- [Pattern 2 from skill]
+- [Convention 3 from skill]
+
+**Code Safety Requirements**:
+Follow safe coding patterns from rails-error-prevention skill:
+- Use safe navigation (`&.`) for all potentially nil attributes
+- Add presence validations for required fields
+- Use strong parameters in controllers
+- Handle validation failures explicitly
+- Use `includes`/`joins` to prevent N+1 queries
+- Rescue specific exceptions, not StandardError
+
+Refer to rails-error-prevention skill for detailed patterns and examples.
+
+**Requirements from Plan**:
+1. [Requirement 1]
+2. [Requirement 2]
+3. [Requirement 3]
+
+[Rest of delegation message...]
+```
+
+#### Example: Admin Header Implementation
+
+**Wrong Approach (Assumption Bug):**
+
+```markdown
+Specialist, create admin header with user dropdown.
+
+# Specialist assumes:
+- current_admin exists → WRONG (causes NoMethodError)
+- admin_signed_in? exists → WRONG (causes NoMethodError)
+- destroy_admin_session_path exists → WRONG (causes route error)
+
+Result: Production errors
+```
+
+**Correct Approach (Verified Context):**
+
+```markdown
+Specialist, create admin header with user dropdown.
+
+**Context Verification:**
+- Namespace: admin
+- Authentication helper: `current_administrator` (verified from codebase)
+- Signed-in helper: `administrator_signed_in?` (verified from existing views)
+- Logout route: `destroy_admins_session_path` (verified from rails routes)
+
+**CRITICAL:**
+Use ONLY the verified helpers above. Do NOT use:
+- ❌ current_admin (doesn't exist)
+- ❌ admin_signed_in? (doesn't exist)
+- ❌ destroy_admin_session_path (doesn't exist)
+
+Use:
+- ✅ current_administrator
+- ✅ administrator_signed_in?
+- ✅ destroy_admins_session_path
+
+Result: Code works correctly, no production errors
+```
+
+#### Integration with rails-context-verification Skill
+
+**Before verification**, invoke the skill for guidance:
+
+```bash
+# Invoke skill for verification patterns
+Invoke SKILL: rails-context-verification
+
+I need to verify the authentication and routing context for the admin namespace
+before implementing admin header.
+
+Questions:
+- What helpers should I search for?
+- How do I verify route prefixes?
+- What are common namespace-specific patterns?
+- How do I avoid assumption bugs?
+
+This will inform the context verification process.
+```
+
+#### If Verification Finds Issues
+
+**Problem: Helper doesn't exist**
+
+```bash
+# Search: rg "def current_admin" app/controllers/
+# Result: No matches found
+
+# DON'T ASSUME - STOP and check alternatives:
+# 1. Search for other current_* helpers:
+rg "def current_" app/controllers/
+
+# 2. Find what actually exists, use that
+# 3. If nothing exists, create helper FIRST before using it
+```
+
+**Problem: Instance variable not set**
+
+```bash
+# Search: rg "@current_account\s*=" app/controllers/admins/
+# Result: No matches found
+
+# DON'T USE @current_account in admin views!
+# Option 1: Add to controller first
+# Option 2: Use different pattern
+# Option 3: Check if admin namespace even needs accounts
+```
+
+#### Common Verification Examples
+
+**Authentication Verification:**
+```bash
+# Devise for :users → current_user, user_signed_in?
+# Devise for :admins → current_admin, admin_signed_in?
+# Devise for :administrators → current_administrator, administrator_signed_in?
+
+# Check routes.rb:
+rg "devise_for" config/routes.rb
+
+# Use helpers that match the Devise scope name!
+```
+
+**Route Prefix Verification:**
+```bash
+# Admin routes might use:
+# - admin_ prefix (singular)
+# - admins_ prefix (plural)
+# - administrator_ prefix
+
+# Check actual routes:
+rails routes | grep -E "admin|dash" | head -10
+
+# Use the prefix that actually exists!
+```
+
+**Before_Action Verification:**
+```bash
+# Admin controllers might use:
+# - authenticate_admin!
+# - authenticate_administrator!
+# - require_admin_login
+# - require_super_admin
+
+# Check base controller:
+rg "before_action.*auth\|admin\|require" app/controllers/admins/base_controller.rb
+
+# Use the methods that actually exist!
+```
+
+#### Remember
+
+**The 2-Minute Rule:**
+- Spend 2 minutes verifying → Save hours debugging
+- Search first, code second
+- Never assume - always verify
+- Context verification is not optional - it's mandatory
+
+**Assumption bugs cause production errors.** This step prevents them at the source.
+
 ### Step 3: Specialist Delegation
 
 Based on phase and plan, delegate to appropriate project agent:

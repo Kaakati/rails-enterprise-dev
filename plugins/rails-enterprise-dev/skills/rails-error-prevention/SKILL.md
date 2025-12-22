@@ -870,3 +870,179 @@ Before writing any code, ensure you understand:
 
 **Junior Developer Motto:**
 > "If it can be nil, it will be nil. If it can fail, it will fail. Plan accordingly."
+
+---
+
+## 11. CONTEXT AWARENESS - PREVENT ASSUMPTION BUGS
+
+**Never assume helper methods, authentication patterns, or namespace conventions exist. Always verify first.**
+
+### The Assumption Bug Pattern
+
+**Example: The `current_admin` Bug**
+
+```erb
+<%# Agent assumes current_admin exists %>
+<%= current_admin.email %>
+
+# ERROR: undefined method 'current_admin' for #<ActionView::Base>
+# Actual helper name: current_administrator
+```
+
+**Root Cause:** Agent copied pattern from client namespace to admin namespace without verification.
+
+### Critical Rule: Search First, Code Second
+
+**BEFORE using ANY helper method in code:**
+
+```bash
+# 1. Search for authentication helpers
+rg "def current_" app/controllers/ app/helpers/
+
+# Example output:
+# app/controllers/application_controller.rb:
+#   def current_administrator
+
+# 2. Use the VERIFIED helper name
+<%= current_administrator.email %>  # ✅ WORKS
+```
+
+### Common Assumption Bugs to Prevent
+
+#### Bug 1: Authentication Helper Assumptions
+
+**Unsafe (Assumption):**
+```ruby
+# Agent assumes current_admin exists
+current_admin.email
+admin_signed_in?
+```
+
+**Safe (Verified):**
+```bash
+# Verify first:
+$ rg "def current_" app/controllers/
+
+# Found: current_administrator
+# Use verified helper:
+current_administrator.email
+administrator_signed_in?
+```
+
+#### Bug 2: Route Helper Assumptions
+
+**Unsafe (Assumption):**
+```ruby
+# Agent assumes route prefix
+admin_users_path  # May not exist!
+```
+
+**Safe (Verified):**
+```bash
+# Verify first:
+$ rails routes | grep admin | head -5
+
+# Output: admins_users_path (note plural)
+# Use verified prefix:
+admins_users_path  # ✅
+```
+
+#### Bug 3: Namespace Pattern Copying
+
+**Unsafe (Assumption):**
+```ruby
+# Agent copies client pattern to admin
+# Client has:
+before_action :set_account
+
+# Agent assumes admin also has set_account
+before_action :set_account  # May not exist in admin!
+```
+
+**Safe (Verified):**
+```bash
+# Check what exists in admin namespace:
+$ rg "before_action" app/controllers/admins/base_controller.rb
+
+# Use only verified callbacks
+```
+
+#### Bug 4: Instance Variable Assumptions
+
+**Unsafe (Assumption):**
+```erb
+<%# Agent assumes @current_account is set %>
+<%= @current_account.name %>
+```
+
+**Safe (Verified):**
+```bash
+# Check if controller sets this variable:
+$ rg "@current_account\s*=" app/controllers/namespace/
+
+# If not found → DON'T use in view
+# Add to controller first or use different pattern
+```
+
+### Verification Checklist Before Code Generation
+
+**For Views:**
+- [ ] Verify authentication helper: `rg "def current_" app/controllers/`
+- [ ] Verify signed_in? helper: `rg "signed_in\?" app/views/namespace/`
+- [ ] Verify instance variables: `rg "@variable=" controller_file`
+- [ ] Verify route helpers: `rails routes | grep namespace`
+
+**For Controllers:**
+- [ ] Verify authentication method: `rg "authenticate_" app/controllers/base_controller.rb`
+- [ ] Verify before_actions: `rg "before_action" base_controller.rb`
+- [ ] Verify authorization: `rg "authorize\|policy" base_controller.rb`
+
+**For Services:**
+- [ ] Verify model methods: `rg "def method_name" app/models/model.rb`
+- [ ] Verify associations: `rg "has_many\|belongs_to" app/models/model.rb`
+
+### Integration with Context Verification Skill
+
+**Before implementing, invoke rails-context-verification skill:**
+
+```bash
+Invoke SKILL: rails-context-verification
+
+I need to verify authentication helpers and routing patterns for the admin namespace.
+
+This will provide verification procedures to prevent assumption bugs.
+```
+
+### Remember: Context Matters
+
+**Different namespaces = Different patterns:**
+
+| Namespace | Auth Helper | Route Prefix | Example |
+|-----------|-------------|--------------|---------|
+| Client | `current_user` | `clients_` | `clients_dashboard_path` |
+| Admin | `current_administrator` | `admins_` | `admins_users_path` |
+| API | `current_api_user` | `api_v1_` | `api_v1_posts_path` |
+
+**NEVER copy patterns across namespaces without verification!**
+
+### Quick Reference: Verification Commands
+
+| What to Verify | Command |
+|----------------|---------|
+| Authentication helper | `rg "def current_" app/controllers/` |
+| Signed-in helper | `rg "signed_in\?" app/views/namespace/` |
+| Route prefix | `rails routes \| grep namespace` |
+| Before actions | `rg "before_action" base_controller.rb` |
+| Instance variables | `rg "@variable\s*=" controller.rb` |
+| View helpers | `rg "def helper_name" app/helpers/` |
+
+### The 2-Minute Rule
+
+**Spend 2 minutes verifying → Save hours debugging**
+
+1. Identify namespace (admin/client/api)
+2. Search for existing patterns
+3. Extract verified helper names
+4. Use ONLY verified names in code
+
+**Assumption bugs cause production errors. Context verification prevents them at the source.**
