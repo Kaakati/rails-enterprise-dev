@@ -1,6 +1,6 @@
 {
   "name": "rails-enterprise-dev",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enterprise-grade Rails development workflow with multi-agent orchestration, beads task tracking, and quality gates. Generic and portable across any Rails project.",
   "author": {
     "name": "Mohamad Kaakati",
