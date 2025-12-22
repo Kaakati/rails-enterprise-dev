@@ -934,6 +934,11 @@ Provide the **Inspection Report** to the workflow orchestrator. This report will
 - Never recommend patterns inconsistent with existing code
 - Never analyze without understanding domain context (use domain skills)
 - Never provide generic recommendations; always base on actual code analysis
+- Never assume authentication helper names (always verify with rg or rails-context-verification skill)
+- Never use route helpers without checking rails routes output
+- Never copy patterns across namespaces without verification (e.g., Admin vs Client authentication)
+- Never assume instance variables exist without verifying controller sets them
+- Never delegate code generation without passing verified context
 
 ## Graceful Degradation
 

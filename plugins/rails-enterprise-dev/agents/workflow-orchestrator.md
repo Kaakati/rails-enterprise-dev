@@ -1071,6 +1071,11 @@ Provide user updates at each phase:
 - Never assume specialist completed work without verification
 - Never hardcode domain knowledge (rely on domain skills)
 - Never assume skills exist (always check skill inventory first)
+- Never assume authentication helper names (always verify with rg or rails-context-verification skill)
+- Never use route helpers without checking rails routes output
+- Never copy patterns across namespaces without verification (e.g., Admin vs Client authentication)
+- Never assume instance variables exist without verifying controller sets them
+- Never delegate code generation without passing verified context
 
 ## Graceful Degradation
 

@@ -38,6 +38,22 @@
             "description": "Run linters and validation before commit"
           }
         ]
+      },
+      {
+        "matcher": "tool:Edit|tool:Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/verify-assumptions.sh",
+            "timeout": 10,
+            "description": "Verify context before code generation to prevent assumption bugs",
+            "env": {
+              "TOOL_NAME": "${tool}",
+              "FILE_PATH": "${args.file_path}",
+              "NEW_STRING": "${args.new_string}"
+            }
+          }
+        ]
       }
     ],
     "PostToolUse": [

@@ -1,7 +1,7 @@
 ---
 name: Rails Context Verification
 description: Systematic verification of codebase context before code generation to prevent assumption bugs
-version: 1.0.0
+version: 1.1.0
 category: implementation
 ---
 
@@ -542,6 +542,137 @@ Available instance variables: `@current_administrator` (set in before_action)
 - If you need a helper not listed, ask for it to be added first
 ```
 
+## Per-Feature Context Tracking
+
+**New in v1.1.0:** Context verification results are now persisted per-feature in beads comments.
+
+After completing verification for a feature, the implementation-executor records the verified context in the beads feature issue comment:
+
+```yaml
+verified_context:
+  namespace: admin
+  auth_helper: current_administrator
+  signed_in_helper: administrator_signed_in?
+  route_prefix: admins_
+  authorization_methods:
+    - require_super_admin
+    - authenticate_administrator!
+  instance_variables:
+    - @current_administrator
+  verified_at: 2025-01-15T10:30:00Z
+```
+
+**Benefits:**
+1. **Single verification** for entire feature (not per-phase)
+2. **All specialists** reference same verified context
+3. **Audit trail** of what was verified and when
+4. **Quality assurance** - reviewers can verify correct usage
+
+**Usage:**
+When implementing any phase, check the feature beads comment for verified context and use only those exact helper/route names.
+
+## Common Violation Patterns to Avoid
+
+### Violation 1: Generic Name Assumption
+
+```ruby
+# ❌ WRONG - Assuming generic "current_user"
+if current_user.admin?
+  # code
+end
+
+# ✅ CORRECT - Use verified helper
+# Verified: current_administrator (from rg search)
+if current_administrator.super_admin?
+  # code
+end
+```
+
+### Violation 2: Cross-Namespace Pattern Copying
+
+```ruby
+# ❌ WRONG - Copying client pattern to admin
+# In app/controllers/clients/dashboard_controller.rb:
+before_action :set_account
+
+# In app/controllers/admins/dashboard_controller.rb:
+before_action :set_account  # FAILS - admins don't have accounts!
+
+# ✅ CORRECT - Verify admin patterns separately
+# Search: rg "before_action" app/controllers/admins/base_controller.rb
+# Found: before_action :authenticate_administrator!
+before_action :authenticate_administrator!
+```
+
+### Violation 3: Route Helper Plurality Mismatch
+
+```ruby
+# ❌ WRONG - Assuming singular prefix
+link_to "Dashboard", admin_dashboard_path
+
+# ✅ CORRECT - Verify actual route prefix
+# Verified: rails routes | grep admin → shows "admins_" (plural)
+link_to "Dashboard", admins_dashboard_path
+```
+
+### Violation 4: Devise Scope Name Mismatch
+
+```ruby
+# ❌ WRONG - Assuming scope matches model name
+# Model: Administrator
+# Assumption: admin_signed_in?
+
+before_action :authenticate_admin!  # FAILS!
+
+# ✅ CORRECT - Check devise_for scope in routes.rb
+# Found: devise_for :administrators
+# Correct helpers: current_administrator, administrator_signed_in?
+
+before_action :authenticate_administrator!  # WORKS!
+```
+
+### Violation 5: Undefined Instance Variable Usage
+
+```erb
+<%# ❌ WRONG - Using @current_account without verification %>
+<%= @current_account.name %>  # NIL ERROR if not set!
+
+<%# ✅ CORRECT - Verify controller sets it first %>
+<%# Search: rg "@current_account\s*=" app/controllers/admins/ %>
+<%# Result: Not found in admin namespace %>
+<%# Action: Use different pattern or add to controller first %>
+
+<%= current_administrator.account&.name %>
+```
+
+## Enforcement Mechanisms
+
+### PreToolUse Hook (verify-assumptions.sh)
+
+The `verify-assumptions.sh` hook runs **before any code generation** to enforce verification:
+
+**Checks:**
+1. Context verification exists in beads feature comment
+2. Generated code uses only verified helpers
+3. No cross-namespace assumptions
+4. All route helpers match verified prefix
+
+**Blocks if:**
+- Context not verified (Step 2.6 not complete)
+- Code uses unverified helpers (e.g., `current_admin` when `current_administrator` verified)
+- Cross-namespace copying detected
+
+**Logs:**
+Violations are logged to `.claude/assumption-violations.log` for review and learning.
+
+### Quality Gate Integration
+
+The Chief Reviewer validates:
+- All helpers used match verified context
+- No assumption patterns in generated code
+- Beads comment has verified context section
+- Context verification timestamp exists
+
 ## Remember
 
 1. **Never assume - always verify** helper names, routes, methods
@@ -549,6 +680,8 @@ Available instance variables: `@current_administrator` (set in before_action)
 3. **Namespace matters** - admin ≠ client ≠ api (different patterns)
 4. **Inheritance matters** - check base controller for available methods
 5. **Devise scope matters** - :users ≠ :admins ≠ :administrators (different helpers)
+6. **Verification is enforced** - hooks will block unverified code generation
+7. **Context is tracked** - verified context persists in beads for entire feature
 
 ## Quick Reference
 

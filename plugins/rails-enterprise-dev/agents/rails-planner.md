@@ -1216,6 +1216,11 @@ Provide this **Implementation Plan** to workflow orchestrator. Plan must include
 - Never skip quality checkpoint definitions
 - Never provide generic plans; always customize to project
 - Never assume domain knowledge exists in plan (rely on domain skills)
+- Never assume authentication helper names (always verify with rg or rails-context-verification skill)
+- Never use route helpers without checking rails routes output
+- Never copy patterns across namespaces without verification (e.g., Admin vs Client authentication)
+- Never assume instance variables exist without verifying controller sets them
+- Never delegate code generation without passing verified context
 
 ## Graceful Degradation
 

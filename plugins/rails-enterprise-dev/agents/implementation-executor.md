@@ -869,6 +869,85 @@ rg "before_action.*auth\|admin\|require" app/controllers/admins/base_controller.
 
 **Assumption bugs cause production errors.** This step prevents them at the source.
 
+#### Per-Feature State Tracking (MANDATORY)
+
+After completing context verification, **record the verified context** in the beads feature comment for reference by all specialists:
+
+```bash
+# After verification completes, add context to feature (not subtask)
+if [ -n "$FEATURE_ID" ] && command -v bd &> /dev/null; then
+  bd comment $FEATURE_ID "✅ Context Verification Complete
+
+**Verified Context** (USE THESE EXACT NAMES):
+
+\`\`\`yaml
+namespace: admin
+auth_helper: current_administrator
+signed_in_helper: administrator_signed_in?
+route_prefix: admins_
+authorization_methods:
+  - require_super_admin
+  - authenticate_administrator!
+instance_variables:
+  - @current_administrator
+verified_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+\`\`\`
+
+**Verification Sources:**
+- Auth helper: app/controllers/application_controller.rb:42
+- Signed-in helper: app/views/admins/dashboard/_header.html.erb:12
+- Routes: \`rails routes | grep admins\` (confirmed plural prefix)
+- Authorization: app/controllers/admins/base_controller.rb:8
+- Instance vars: Set in before_action in base_controller.rb:15
+
+**CRITICAL FOR ALL SPECIALISTS:**
+Use ONLY the helpers/routes listed above. Do NOT:
+- ❌ Assume current_admin (doesn't exist - use current_administrator)
+- ❌ Use admin_signed_in? (doesn't exist - use administrator_signed_in?)
+- ❌ Use admin_ prefix (routes use admins_ - note plural)
+- ❌ Copy patterns from other namespaces without re-verification
+
+This context applies to ALL implementation phases for this feature."
+
+  echo "✅ Verified context recorded in $FEATURE_ID"
+else
+  echo "⚠️  Beads not available. Context verified but not persisted."
+  echo "   Record context manually or install beads for state tracking."
+fi
+```
+
+**Why This Matters:**
+
+1. **Single Source of Truth**: All specialists reference the same verified context
+2. **Prevents Re-verification**: Context verified once, used by all phases
+3. **Audit Trail**: Shows exactly what was verified and when
+4. **Quality Assurance**: Chief Reviewer can verify correct helpers were used
+5. **Future Reference**: If feature needs updates, context is already documented
+
+**Usage by Specialists:**
+
+When delegating to specialists in Step 3, include this context in the delegation message:
+
+```markdown
+**Context Verification** (from beads comment $FEATURE_ID):
+- Namespace: admin
+- Authentication helper: `current_administrator`
+- Signed-in helper: `administrator_signed_in?`
+- Route prefix: `admins_`
+- Authorization: `require_super_admin`, `authenticate_administrator!`
+- Available instance variables: `@current_administrator`
+
+**CRITICAL:** Use ONLY the verified helpers above. Refer to beads comment in $FEATURE_ID for sources.
+```
+
+**Verification Enforcement:**
+
+The verify-assumptions.sh PreToolUse hook will:
+- Check for context verification in beads before code generation
+- Block code generation if context not verified
+- Validate generated code uses only verified helpers
+- Log violations for quality review
+
 ### Step 3: Specialist Delegation
 
 Based on phase and plan, delegate to appropriate project agent:
@@ -2281,6 +2360,11 @@ Provide structured updates:
 - Never delegate without providing skill context
 - Never assume specialist knows skill patterns (always pass explicitly)
 - Never create code without specialist delegation
+- Never assume authentication helper names (always verify with rg or rails-context-verification skill)
+- Never use route helpers without checking rails routes output
+- Never copy patterns across namespaces without verification (e.g., Admin vs Client authentication)
+- Never assume instance variables exist without verifying controller sets them
+- Never delegate code generation without passing verified context
 
 ## Graceful Degradation
 
