@@ -1,1048 +1,479 @@
 ---
-name: Rails Error Prevention
-description: Common junior developer mistakes and how to prevent them
-version: 1.0.0
-category: core
+name: "Rails Error Prevention"
+description: "Comprehensive checklist and prevention strategies for common Ruby on Rails errors. Use this skill BEFORE writing any Rails code to prevent ViewComponent template errors, ActiveRecord query mistakes, method exposure issues, N+1 queries, and other common Rails pitfalls."
 ---
 
-# Rails Error Prevention Patterns
+# Rails Error Prevention Skill
 
-Comprehensive guide to preventing common junior developer mistakes in Rails applications.
+This skill provides preventative checklists and error patterns for common Rails mistakes. **Review relevant sections BEFORE writing code.**
 
-## Overview
+## When to Use This Skill
 
-This skill covers the most frequent error patterns that cause production bugs:
-- **Nil handling errors** (`NoMethodError: undefined method for nil`)
-- **N+1 query problems** (performance issues)
-- **Security vulnerabilities** (mass assignment, SQL injection, XSS)
-- **Validation failures** (unhandled errors)
-- **Performance mistakes** (inefficient queries, memory issues)
+- Before creating ViewComponents
+- Before writing ActiveRecord queries with GROUP BY or joins
+- Before writing view code that calls component methods
+- Before creating controller actions
+- When debugging undefined method errors
+- When debugging template not found errors
+- When debugging ActiveRecord grouping errors
 
----
+## Critical Rule: Method Exposure Verification
 
-## 1. NIL HANDLING BEST PRACTICES
+**This is the #1 cause of runtime errors in Rails applications.**
 
-### Pattern 1: Safe Navigation Operator
-
-**Problem:**
-```ruby
-# Crashes if user is nil
-user.email.downcase
-
-# Crashes if email is nil
-user.email.downcase
+```
+WRONG ASSUMPTION: Service has method → View can call it through component
+CORRECT RULE:     Service has method + Component exposes it = View can call it
 ```
 
-**Solution:**
-```ruby
-# Returns nil if user is nil
-user&.email&.downcase
+### Verification Process
 
-# With default value
-user&.email&.downcase || 'no-email@example.com'
+```bash
+# Step 1: List all methods view will call on component
+grep -oE '@[a-z_]+\.[a-z_]+' app/views/{path}/*.erb | sort -u
 
-# For hash access
-credentials.dig(:api, :key) || 'default_key'
+# Step 2: List all public methods in component
+grep -E '^\s+def [a-z_]+' app/components/{component}_component.rb
+
+# Step 3: Compare - any view call without component method = BUG
+# Missing methods MUST be added to component BEFORE writing view code
 ```
 
-**When to use:**
-- Chain of method calls on potentially nil objects
-- Accessing attributes from associations that might not exist
-- Optional parameters or attributes
-- Data from external sources (APIs, user input)
-
-**When NOT to use:**
-- When nil should be an error (use validations instead)
-- When chaining more than 2-3 calls (refactor to explicit nil check)
-- In performance-critical code (safe navigation has small overhead)
-
-### Pattern 2: Presence Validations
-
-**Always validate required fields at the model level:**
+### Patterns to Fix Missing Methods
 
 ```ruby
-class Payment < ApplicationRecord
-  # Required fields
-  validates :amount, presence: true, numericality: { greater_than: 0 }
-  validates :status, inclusion: { in: %w[pending paid failed refunded] }
-  validates :account_id, presence: true
-  validates :currency, presence: true
-
-  # Format validations
-  validates :email, format: { with: URI::MailTo::EMAIL_REGEXP }, if: :email?
-  validates :phone, format: { with: /\A\+?[0-9\s\-\(\)]+\z/ }, if: :phone?
-
-  # Uniqueness with index (prevents race conditions)
-  validates :transaction_id, uniqueness: true
+# Pattern 1: Delegation
+class Metrics::DashboardComponent < ViewComponent::Base
+  delegate :calculate_lifetime_tasks,
+           :calculate_lifetime_success_rate,
+           to: :@service
+  
+  def initialize(service:)
+    @service = service
+  end
 end
-```
 
-**Why this prevents nil errors:**
-- Database won't allow nil values for validated fields
-- Code can safely assume these fields exist
-- Validation failures caught early (before `create!` crashes)
-
-### Pattern 3: Handle find_by Returning Nil
-
-**Problem:**
-```ruby
-# Crashes if not found
-user = User.find_by(email: email)
-user.name  # NoMethodError if user is nil
-```
-
-**Solutions:**
-
-**Option 1: Use find! to raise exception**
-```ruby
-user = User.find_by!(email: email)  # Raises ActiveRecord::RecordNotFound
-user.name  # Safe, exception already raised if not found
-```
-
-**Option 2: Handle nil explicitly**
-```ruby
-user = User.find_by(email: email)
-if user
-  user.name
-else
-  'User not found'
+# Pattern 2: Wrapper methods (preferred for transformation)
+class Metrics::DashboardComponent < ViewComponent::Base
+  def initialize(service:)
+    @service = service
+  end
+  
+  def lifetime_tasks
+    @service.calculate_lifetime_tasks
+  end
+  
+  def lifetime_success_rate
+    @service.calculate_lifetime_success_rate
+  end
 end
-```
 
-**Option 3: Safe navigation**
-```ruby
-User.find_by(email: email)&.name || 'Unknown'
-```
-
-**Option 4: Use find_or_initialize_by**
-```ruby
-# Always returns a user (either found or new)
-user = User.find_or_initialize_by(email: email)
-user.new_record?  # true if not found
-```
-
-### Pattern 4: Handling Nil in Collections
-
-**Problem:**
-```ruby
-# Crashes if hash has nil keys or values
-credentials.each do |key, value|
-  key.to_sym  # NoMethodError if key is nil
-  value.upcase  # NoMethodError if value is nil
+# Pattern 3: Expose service directly (use sparingly)
+class Metrics::DashboardComponent < ViewComponent::Base
+  attr_reader :service
+  
+  def initialize(service:)
+    @service = service
+  end
 end
-```
-
-**Solutions:**
-
-**Compact before iteration:**
-```ruby
-# Remove nil keys/values
-credentials.compact.each do |key, value|
-  key.to_sym  # Safe, no nil keys after compact
-end
-```
-
-**Check presence in iteration:**
-```ruby
-credentials.each do |key, value|
-  next if key.nil? || value.nil?
-
-  key.to_sym  # Safe after nil check
-end
-```
-
-**Use safe navigation:**
-```ruby
-credentials.each do |key, value|
-  key&.to_sym
-  value&.upcase
-end
-```
-
-### Pattern 5: Explicit Nil Checks for Complex Logic
-
-**For complex conditionals, be explicit:**
-
-```ruby
-# Good: Clear what happens when nil
-def process_payment(amount)
-  return Result.failure('Amount required') if amount.nil?
-  return Result.failure('Amount must be positive') if amount <= 0
-
-  # Safe to proceed, amount is validated
-  Payment.create(amount: amount)
-end
-```
-
-**Bad: Relying on falsy behavior**
-```ruby
-def process_payment(amount)
-  return unless amount  # What about amount = 0?
-  Payment.create(amount: amount)
-end
+# View then calls: dashboard.service.calculate_lifetime_tasks
 ```
 
 ---
 
-## 2. N+1 QUERY PREVENTION
+## ViewComponent Errors
 
-### Pattern 1: Always Use Includes for Associations
+### Template Not Found
 
-**Problem:**
-```ruby
-# Controller
-@posts = Post.all
-
-# View: app/views/posts/index.html.erb
-<% @posts.each do |post| %>
-  <%= post.author.name %>  # N+1! Queries author for each post
-  <%= post.comments.count %>  # Another N+1!
-<% end %>
+**Error Pattern:**
+```
+Couldn't find a template file or inline render method for {Component}
 ```
 
-**Solution:**
-```ruby
-# Controller
-@posts = Post.includes(:author)
-             .left_joins(:comments)
-             .select('posts.*, COUNT(comments.id) as comments_count')
-             .group('posts.id')
+**Root Causes:**
+- Missing template file (component.html.erb)
+- Template in wrong location
+- Class name doesn't match file path
+- Using render without inline template defined
 
-# View - Now only 2 queries total
-<% @posts.each do |post| %>
-  <%= post.author.name %>  # Already loaded
-  <%= post.comments_count %>  # Pre-counted
-<% end %>
+**Prevention Checklist:**
+```bash
+# Before creating component:
+ls app/components/                              # Check structure
+head -50 app/components/*_component.rb | head -1 # Review existing pattern
+# Verify naming: ComponentName -> component_name/
 ```
 
-### Pattern 2: Use Bullet Gem in Development
-
-**Add to Gemfile:**
-```ruby
-group :development do
-  gem 'bullet'
-end
+**Required Files:**
+```
+app/components/{namespace}/{component_name}_component.rb
+app/components/{namespace}/{component_name}_component.html.erb
 ```
 
-**Configure in config/environments/development.rb:**
-```ruby
-config.after_initialize do
-  Bullet.enable = true
-  Bullet.alert = false  # Don't show browser alerts
-  Bullet.console = true  # Show in console
-  Bullet.rails_logger = true  # Log to Rails logger
-  Bullet.add_footer = true  # Add footer to pages
-end
-```
-
-**Bullet will warn you about:**
-- N+1 queries (use `includes`)
-- Unused eager loading (remove unnecessary `includes`)
-- Missing counter caches
-
-### Pattern 3: Preload Nested Associations
-
-**For nested associations:**
+**Correct Patterns:**
 
 ```ruby
-# Bad: N+1 for both comments and comment authors
-@posts = Post.includes(:comments)
-
-# Good: Preload nested associations
-@posts = Post.includes(comments: :author)
-
-# For multiple levels
-@posts = Post.includes(
-  :author,
-  comments: [:author, :reactions],
-  tags: :category
-)
-```
-
-### Pattern 4: Use Counter Caches
-
-**For frequently accessed counts:**
-
-```ruby
-# Migration
-class AddCommentsCountToPosts < ActiveRecord::Migration[7.0]
-  def change
-    add_column :posts, :comments_count, :integer, default: 0, null: false
-
-    # Backfill existing data
-    Post.find_each do |post|
-      Post.reset_counters(post.id, :comments)
-    end
+# Option A: Separate template file
+# app/components/metrics/kpi_card_component.rb
+class Metrics::KpiCardComponent < ViewComponent::Base
+  def initialize(title:, value:)
+    @title = title
+    @value = value
   end
 end
 
-# Model
-class Comment < ApplicationRecord
-  belongs_to :post, counter_cache: true
-end
+# app/components/metrics/kpi_card_component.html.erb
+# <div class="kpi-card">
+#   <h3><%= @title %></h3>
+#   <span><%= @value %></span>
+# </div>
 
-# Usage (no query!)
-post.comments_count  # Uses cached column, not COUNT query
-```
-
----
-
-## 3. SECURITY PATTERNS
-
-### Pattern 1: Always Use Strong Parameters
-
-**Never:**
-```ruby
-User.create(params[:user])  # Mass assignment vulnerability!
-```
-
-**Always:**
-```ruby
-def create
-  @user = User.new(user_params)
-
-  if @user.save
-    redirect_to @user, notice: 'User created'
-  else
-    render :new, alert: 'Failed to create user'
-  end
-end
-
-private
-
-def user_params
-  params.require(:user).permit(:name, :email, :password)
-end
-```
-
-**For nested attributes:**
-```ruby
-def post_params
-  params.require(:post).permit(
-    :title,
-    :body,
-    :published,
-    comments_attributes: [:id, :body, :author_name, :_destroy]
-  )
-end
-```
-
-### Pattern 2: SQL Injection Prevention
-
-**Never:**
-```ruby
-User.where("email = '#{email}'")  # SQL injection vulnerability!
-User.where("age > #{age}")  # Also vulnerable!
-```
-
-**Always:**
-```ruby
-# Option 1: Placeholders (safest)
-User.where("email = ?", email)
-User.where("age > ? AND active = ?", age, true)
-
-# Option 2: Hash conditions (preferred)
-User.where(email: email)
-User.where(age: 18..65, active: true)
-
-# Option 3: Named placeholders (readable)
-User.where("email = :email AND active = :active", email: email, active: true)
-```
-
-### Pattern 3: XSS Prevention
-
-**In views, Rails auto-escapes by default:**
-
-```erb
-<!-- Safe: Automatically escaped -->
-<%= user.bio %>
-
-<!-- Dangerous: Marks as HTML safe (only use if you trust the content) -->
-<%= user.bio.html_safe %>
-
-<!-- Safe: Sanitize user-generated HTML -->
-<%= sanitize user.bio, tags: %w[p br strong em], attributes: %w[href] %>
-
-<!-- Safe: Strip all HTML -->
-<%= strip_tags user.bio %>
-```
-
-### Pattern 4: Secure Password Handling
-
-**Always use has_secure_password:**
-
-```ruby
-# Model
-class User < ApplicationRecord
-  has_secure_password
-
-  validates :password, length: { minimum: 8 }, if: :password_digest_changed?
-end
-
-# Controller
-def create
-  @user = User.new(user_params)
-
-  if @user.save
-    session[:user_id] = @user.id
-    redirect_to root_path
-  else
-    render :new
-  end
-end
-
-private
-
-def user_params
-  params.require(:user).permit(:email, :password, :password_confirmation)
-end
-```
-
-**Never:**
-- Store passwords in plain text
-- Use reversible encryption (use bcrypt via `has_secure_password`)
-- Log passwords
-- Display passwords in error messages
-
----
-
-## 4. ERROR HANDLING PATTERNS
-
-### Pattern 1: Rescue Specific Exceptions
-
-**Bad:**
-```ruby
-begin
-  payment = process_payment(amount)
-rescue StandardError => e
-  # Too broad! Catches everything including typos
-  Rails.logger.error(e.message)
-end
-```
-
-**Good:**
-```ruby
-begin
-  payment = process_payment(amount)
-rescue ActiveRecord::RecordInvalid => e
-  Rails.logger.error("Payment validation failed: #{e.message}")
-  Result.failure(e.record.errors)
-rescue Stripe::CardError => e
-  Rails.logger.error("Card error: #{e.message}")
-  Result.failure("Card declined")
-rescue Stripe::RateLimitError => e
-  Rails.logger.error("Stripe rate limit: #{e.message}")
-  Result.failure("Service temporarily unavailable")
-rescue StandardError => e
-  # Catch-all for unexpected errors
-  Rails.logger.error("Unexpected payment error: #{e.class} - #{e.message}")
-  Sentry.capture_exception(e)
-  Result.failure("Payment processing failed")
-end
-```
-
-### Pattern 2: Handle Validation Failures
-
-**Bad:**
-```ruby
-def create
-  @payment = Payment.create!(payment_params)  # Raises on failure
-  redirect_to @payment
-end
-```
-
-**Good:**
-```ruby
-def create
-  @payment = Payment.new(payment_params)
-
-  if @payment.save
-    redirect_to @payment, notice: 'Payment created successfully'
-  else
-    flash.now[:alert] = 'Payment could not be created'
-    render :new, status: :unprocessable_entity
-  end
-end
-```
-
-### Pattern 3: Use Result Pattern for Services
-
-**For service objects, return structured results:**
-
-```ruby
-class ProcessPayment
-  def self.call(amount:, user:)
-    new(amount, user).call
-  end
-
-  def initialize(amount, user)
-    @amount = amount
-    @user = user
+# Option B: Inline template (call method)
+class Metrics::KpiCardComponent < ViewComponent::Base
+  def initialize(title:, value:)
+    @title = title
+    @value = value
   end
 
   def call
-    return Result.failure('Amount required') if @amount.nil?
-    return Result.failure('Amount must be positive') if @amount <= 0
-    return Result.failure('User required') if @user.nil?
-
-    payment = Payment.new(amount: @amount, user: @user)
-
-    unless payment.save
-      return Result.failure(payment.errors.full_messages)
+    content_tag :div, class: "kpi-card" do
+      safe_join([
+        content_tag(:h3, @title),
+        content_tag(:span, @value)
+      ])
     end
-
-    charge_result = charge_stripe(payment)
-
-    unless charge_result.success?
-      payment.update(status: 'failed')
-      return Result.failure(charge_result.error)
-    end
-
-    payment.update(status: 'paid')
-    Result.success(payment)
-
-  rescue Stripe::CardError => e
-    payment&.update(status: 'failed')
-    Result.failure("Card declined: #{e.message}")
-  rescue StandardError => e
-    Rails.logger.error("Payment processing error: #{e.class} - #{e.message}")
-    Sentry.capture_exception(e)
-    Result.failure("Payment processing failed")
-  end
-end
-
-# Result object (simple implementation)
-class Result
-  attr_reader :value, :error
-
-  def self.success(value)
-    new(success: true, value: value)
-  end
-
-  def self.failure(error)
-    new(success: false, error: error)
-  end
-
-  def initialize(success:, value: nil, error: nil)
-    @success = success
-    @value = value
-    @error = error
-  end
-
-  def success?
-    @success
-  end
-
-  def failure?
-    !@success
   end
 end
 ```
 
----
+### Helper Method Errors
 
-## 5. PERFORMANCE PATTERNS
-
-### Pattern 1: Select Only Needed Columns
-
-**Inefficient:**
-```ruby
-# Loads all columns (including large text fields)
-Post.all.map(&:title)
-
-# Loads entire records just to get IDs
-user.posts.map(&:id)
+**Error Pattern:**
+```
+undefined local variable or method '{method}' for an instance of {Component}
+Did you mean `helpers.{method}`?
 ```
 
-**Efficient:**
+**Root Cause:** Calling view helper directly without `helpers.` prefix
+
+**Prevention Rules:**
+- ViewComponents do NOT have direct access to view helpers
+- Must use `helpers.method_name` for any Rails helper
+
+**Helpers Requiring Prefix:**
 ```ruby
-# Only loads title column
-Post.pluck(:title)
-
-# Only loads IDs
-user.posts.ids  # or user.post_ids (if association exists)
-
-# Multiple columns
-Post.pluck(:id, :title, :created_at)
-
-# With select (returns ActiveRecord objects, but only with selected attributes)
-Post.select(:id, :title, :created_at)
+# WRONG                          # CORRECT
+link_to(...)                     helpers.link_to(...)
+image_tag(...)                   helpers.image_tag(...)
+url_for(...)                     helpers.url_for(...)
+form_with(...)                   helpers.form_with(...)
+number_to_currency(...)          helpers.number_to_currency(...)
+time_ago_in_words(...)           helpers.time_ago_in_words(...)
+truncate(...)                    helpers.truncate(...)
+pluralize(...)                   helpers.pluralize(...)
+content_tag(...)                 helpers.content_tag(...)
+tag(...)                         helpers.tag(...)
+content_for(...)                 helpers.content_for(...)
 ```
 
-### Pattern 2: Use exists? Instead of any?
-
-**Inefficient:**
+**Alternative - Delegate Helpers:**
 ```ruby
-if User.where(active: true).any?  # Loads records into memory
-if User.where(active: true).count > 0  # Counts all records
-```
+class Metrics::KpiCardComponent < ViewComponent::Base
+  delegate :number_to_currency, :link_to, to: :helpers
 
-**Efficient:**
-```ruby
-if User.where(active: true).exists?  # Just checks existence (LIMIT 1)
-```
-
-### Pattern 3: Batch Processing with find_each
-
-**Inefficient:**
-```ruby
-# Loads ALL users into memory at once
-User.all.each do |user|
-  user.update(processed: true)
-end
-```
-
-**Efficient:**
-```ruby
-# Processes in batches of 1000 (configurable)
-User.find_each(batch_size: 1000) do |user|
-  user.update(processed: true)
-end
-
-# For batch operations
-User.in_batches(of: 1000) do |batch|
-  batch.update_all(processed: true)  # Single UPDATE query per batch
-end
-```
-
-### Pattern 4: Avoid N+1 in Calculations
-
-**Inefficient:**
-```ruby
-# Queries for each post
-total_comments = posts.sum { |post| post.comments.count }
-```
-
-**Efficient:**
-```ruby
-# Single query with GROUP BY
-total_comments = Comment.where(post_id: posts.ids).count
-```
-
-### Pattern 5: Use find_by Instead of where.first
-
-**Less Efficient:**
-```ruby
-User.where(email: email).first  # WHERE ... LIMIT 1
-User.where(email: email).take  # WHERE ... LIMIT 1 (no ordering)
-```
-
-**More Efficient:**
-```ruby
-User.find_by(email: email)  # More idiomatic, same result
-```
-
----
-
-## 6. MIGRATION SAFETY PATTERNS
-
-### Pattern 1: Always Add Indexes on Foreign Keys
-
-**Always:**
-```ruby
-class CreatePayments < ActiveRecord::Migration[7.0]
-  def change
-    create_table :payments do |t|
-      # foreign_key: true adds constraint
-      # index: true adds index for performance
-      t.references :account, null: false, foreign_key: true, index: true
-      t.references :user, null: false, foreign_key: true, index: true
-
-      t.decimal :amount, precision: 10, scale: 2, null: false
-      t.string :status, null: false, default: 'pending'
-
-      t.timestamps
-    end
-
-    # Composite indexes for common queries
-    add_index :payments, [:account_id, :status]
-    add_index :payments, [:user_id, :created_at]
+  def formatted_value
+    number_to_currency(@value)  # Now works without prefix
   end
 end
 ```
 
-### Pattern 2: Make Migrations Reversible
+### Content Block Errors
 
-**Bad:**
-```ruby
-def change
-  execute "UPDATE users SET role = 'member' WHERE role IS NULL"
-end
+**Error Pattern:**
+```
+content is not defined
 ```
 
-**Good:**
-```ruby
-def up
-  execute "UPDATE users SET role = 'member' WHERE role IS NULL"
-end
-
-def down
-  # Provide a way to reverse (if possible)
-  execute "UPDATE users SET role = NULL WHERE role = 'member'"
-end
-```
-
-**For irreversible migrations:**
-```ruby
-def up
-  drop_table :legacy_data
-end
-
-def down
-  raise ActiveRecord::IrreversibleMigration
-end
-```
-
-### Pattern 3: Add NULL Constraints Safely
-
-**Unsafe (will fail if existing rows have nil):**
-```ruby
-def change
-  change_column_null :users, :email, false
-end
-```
-
-**Safe:**
-```ruby
-def up
-  # 1. Set default for existing nil values
-  User.where(email: nil).update_all(email: 'noemail@example.com')
-
-  # 2. Add constraint
-  change_column_null :users, :email, false
-end
-
-def down
-  change_column_null :users, :email, true
-end
-```
-
-### Pattern 4: Add Uniqueness Constraints with Index
-
-**Race Condition (validation only):**
-```ruby
-# Model only
-validates :email, uniqueness: true
-
-# Two simultaneous requests can create duplicates
-```
-
-**Safe (database constraint):**
-```ruby
-# Migration
-add_index :users, :email, unique: true
-
-# Model
-validates :email, uniqueness: true
-```
-
----
-
-## 7. COMMON EDGE CASES TO TEST
-
-Always write tests for these scenarios:
-
-**Nil and Empty Values:**
-- [ ] Nil values
-- [ ] Empty strings (`""`)
-- [ ] Empty arrays (`[]`)
-- [ ] Empty hashes (`{}`)
-- [ ] Blank strings with whitespace (`"   "`)
-
-**Numeric Edge Cases:**
-- [ ] Zero (`0`)
-- [ ] Negative numbers
-- [ ] Very large numbers
-- [ ] Decimal precision issues
-- [ ] Division by zero
-
-**String Edge Cases:**
-- [ ] Very long strings
-- [ ] Special characters
-- [ ] Unicode characters
-- [ ] SQL injection attempts
-- [ ] XSS attempts
-
-**Date/Time Edge Cases:**
-- [ ] Timezones
-- [ ] Daylight saving time transitions
-- [ ] Leap years
-- [ ] Date boundaries (beginning/end of month/year)
-
-**ActiveRecord Edge Cases:**
-- [ ] Records not found
-- [ ] Validation failures
-- [ ] Duplicate values (uniqueness)
-- [ ] Missing associations
-- [ ] Cascading deletes
-- [ ] Concurrent updates (optimistic locking)
-
----
-
-## 8. PRE-IMPLEMENTATION CHECKLIST
-
-Before writing any code, ensure you understand:
-
-**For Models:**
-- [ ] What fields are required? (add validations)
-- [ ] What associations exist? (add `dependent:` option)
-- [ ] What should be indexed? (foreign keys, frequently queried columns)
-- [ ] Are there uniqueness constraints? (add unique index)
-- [ ] What can be nil? (use safe navigation for optional fields)
-
-**For Controllers:**
-- [ ] What parameters are accepted? (define strong params)
-- [ ] How are validation failures handled? (render vs redirect)
-- [ ] What exceptions might occur? (rescue specific exceptions)
-- [ ] Are there authorization checks? (before_action)
-- [ ] Is this vulnerable to N+1? (use includes)
-
-**For Services:**
-- [ ] What inputs are required? (validate at start)
-- [ ] What can go wrong? (rescue specific exceptions)
-- [ ] How are errors communicated? (Result pattern)
-- [ ] Is this transactional? (wrap in ActiveRecord::Base.transaction)
-- [ ] Are there external dependencies? (handle timeouts, failures)
-
-**For Views:**
-- [ ] Can any values be nil? (use safe navigation)
-- [ ] Is user input displayed? (sanitize or escape)
-- [ ] Are there N+1 queries? (check with Bullet)
-- [ ] Is this accessible? (proper HTML semantics, ARIA)
-
----
-
-## 9. QUICK REFERENCE: SAFE VS UNSAFE PATTERNS
-
-### Nil Safety
-
-| Unsafe | Safe |
-|--------|------|
-| `user.email` | `user&.email` |
-| `params[:id].to_i` | `params[:id]&.to_i || 0` |
-| `find_by(...).name` | `find_by(...)&.name` |
-| `data.each { \|k,v\| k.to_sym }` | `data.compact.each { \|k,v\| k.to_sym }` |
-
-### N+1 Prevention
-
-| Unsafe | Safe |
-|--------|------|
-| `Post.all` (in view with `post.author`) | `Post.includes(:author)` |
-| `posts.map(&:comments).flatten` | `Comment.where(post_id: posts.ids)` |
-| `post.comments.count` (in loop) | Add counter_cache |
-| `where(...).count > 0` | `where(...).exists?` |
-
-### Security
-
-| Unsafe | Safe |
-|--------|------|
-| `User.create(params[:user])` | `User.create(user_params)` |
-| `where("email = '#{email}'"` | `where("email = ?", email)` |
-| `<%= raw user.bio %>` | `<%= sanitize user.bio %>` |
-| Storing plain text passwords | `has_secure_password` |
-
-### Performance
-
-| Inefficient | Efficient |
-|-------------|-----------|
-| `Post.all.map(&:title)` | `Post.pluck(:title)` |
-| `User.all.each { ... }` | `User.find_each { ... }` |
-| `where(...).any?` | `where(...).exists?` |
-| `where(...).first` | `find_by(...)` |
-
----
-
-## 10. REMEMBER
-
-**The Error Prevention Hierarchy:**
-
-1. **Prevent at Database Level** (constraints, indexes, NOT NULL)
-2. **Validate at Model Level** (presence, format, uniqueness)
-3. **Check at Service Level** (input validation, explicit nil checks)
-4. **Handle at Controller Level** (strong params, rescue exceptions)
-5. **Safe Navigation in Views** (`&.`, presence checks)
-
-**When in Doubt:**
-- Add a validation
-- Use safe navigation
-- Handle the error explicitly
-- Write a test for the edge case
-
-**Junior Developer Motto:**
-> "If it can be nil, it will be nil. If it can fail, it will fail. Plan accordingly."
-
----
-
-## 11. CONTEXT AWARENESS - PREVENT ASSUMPTION BUGS
-
-**Never assume helper methods, authentication patterns, or namespace conventions exist. Always verify first.**
-
-### The Assumption Bug Pattern
-
-**Example: The `current_admin` Bug**
+**Prevention:** Always check `content?` before using `content`
 
 ```erb
-<%# Agent assumes current_admin exists %>
-<%= current_admin.email %>
-
-# ERROR: undefined method 'current_admin' for #<ActionView::Base>
-# Actual helper name: current_administrator
+<% if content? %>
+  <%= content %>
+<% end %>
 ```
 
-**Root Cause:** Agent copied pattern from client namespace to admin namespace without verification.
+---
 
-### Critical Rule: Search First, Code Second
+## ActiveRecord Errors
 
-**BEFORE using ANY helper method in code:**
+### Grouping Error (PostgreSQL)
 
-```bash
-# 1. Search for authentication helpers
-rg "def current_" app/controllers/ app/helpers/
-
-# Example output:
-# app/controllers/application_controller.rb:
-#   def current_administrator
-
-# 2. Use the VERIFIED helper name
-<%= current_administrator.email %>  # ✅ WORKS
+**Error Pattern:**
+```
+PG::GroupingError: ERROR: column "{table}.{column}" must appear in the GROUP BY clause
 ```
 
-### Common Assumption Bugs to Prevent
+**Root Causes:**
+- SELECT includes columns not in GROUP BY or aggregate functions
+- Using `.select` with `.group` but including non-grouped columns
+- Eager loading (`includes`/`preload`) with GROUP BY
+- Using `.pluck` or `.select` with associations and GROUP BY
 
-#### Bug 1: Authentication Helper Assumptions
+**Prevention Rules:**
+1. Every non-aggregated column in SELECT must be in GROUP BY
+2. **NEVER** combine `includes`/`preload`/`eager_load` with GROUP BY
+3. Use `.select` only for grouped columns and aggregates
+4. If you need associated data with grouped results, query separately
 
-**Unsafe (Assumption):**
+**Examples:**
+
 ```ruby
-# Agent assumes current_admin exists
-current_admin.email
-admin_signed_in?
+# WRONG - selecting all columns with group
+Task.includes(:user).group(:task_type).count
+# This tries to select tasks.* which fails
+
+# WRONG - selecting id with group
+Task.select(:task_type, :id).group(:task_type).count
+# id is not grouped or aggregated
+
+# CORRECT - only select grouped columns and aggregates
+Task.group(:task_type).count
+# => { "type_a" => 5, "type_b" => 3 }
+
+# CORRECT - explicit select with only valid columns
+Task.select(:task_type, 'COUNT(*) as count').group(:task_type)
+
+# CORRECT - if you need associated data, query separately
+type_counts = Task.group(:task_type).count
+tasks_by_type = type_counts.keys.each_with_object({}) do |type, hash|
+  hash[type] = Task.where(task_type: type).includes(:user).limit(5)
+end
+
+# CORRECT - using pluck for simple aggregations
+Task.group(:task_type).pluck(:task_type, 'COUNT(*)')
+# => [["type_a", 5], ["type_b", 3]]
 ```
 
-**Safe (Verified):**
+**Before Writing GROUP BY Query:**
 ```bash
-# Verify first:
-$ rg "def current_" app/controllers/
-
-# Found: current_administrator
-# Use verified helper:
-current_administrator.email
-administrator_signed_in?
+# Detection command
+grep -r '\.group(' app/ --include='*.rb' -A3 -B3
+grep -r '\.includes.*\.group\|.group.*\.includes' app/ --include='*.rb'
 ```
 
-#### Bug 2: Route Helper Assumptions
+### N+1 Queries
 
-**Unsafe (Assumption):**
+**Detection:** Multiple queries for same association in logs
+
+**Prevention:**
 ```ruby
-# Agent assumes route prefix
-admin_users_path  # May not exist!
+# WRONG - N+1
+tasks.each { |t| puts t.user.name }
+
+# CORRECT
+tasks.includes(:user).each { |t| puts t.user.name }
 ```
 
-**Safe (Verified):**
-```bash
-# Verify first:
-$ rails routes | grep admin | head -5
+### Ambiguous Column
 
-# Output: admins_users_path (note plural)
-# Use verified prefix:
-admins_users_path  # ✅
+**Error Pattern:**
+```
+PG::AmbiguousColumn: ERROR: column reference "{column}" is ambiguous
 ```
 
-#### Bug 3: Namespace Pattern Copying
+**Prevention:** Always qualify columns when joining
 
-**Unsafe (Assumption):**
 ```ruby
-# Agent copies client pattern to admin
-# Client has:
-before_action :set_account
+# WRONG
+User.joins(:tasks).where(status: 'active')  # Both have status?
 
-# Agent assumes admin also has set_account
-before_action :set_account  # May not exist in admin!
+# CORRECT
+User.joins(:tasks).where(users: { status: 'active' })
+# OR
+User.joins(:tasks).where('users.status = ?', 'active')
 ```
 
-**Safe (Verified):**
-```bash
-# Check what exists in admin namespace:
-$ rg "before_action" app/controllers/admins/base_controller.rb
+### Missing Attribute
 
-# Use only verified callbacks
+**Error Pattern:**
+```
+ActiveModel::MissingAttributeError: missing attribute: {attribute}
 ```
 
-#### Bug 4: Instance Variable Assumptions
+**Prevention:** Include all attributes needed downstream
 
-**Unsafe (Assumption):**
-```erb
-<%# Agent assumes @current_account is set %>
-<%= @current_account.name %>
+```ruby
+# WRONG - later code needs 'email'
+users = User.select(:id, :name)
+users.each { |u| puts u.email }  # ERROR!
+
+# CORRECT
+users = User.select(:id, :name, :email)
 ```
 
-**Safe (Verified):**
-```bash
-# Check if controller sets this variable:
-$ rg "@current_account\s*=" app/controllers/namespace/
+---
 
-# If not found → DON'T use in view
-# Add to controller first or use different pattern
+## Controller Errors
+
+### Missing Template
+
+**Error Pattern:**
+```
+ActionView::MissingTemplate
 ```
 
-### Verification Checklist Before Code Generation
-
-**For Views:**
-- [ ] Verify authentication helper: `rg "def current_" app/controllers/`
-- [ ] Verify signed_in? helper: `rg "signed_in\?" app/views/namespace/`
-- [ ] Verify instance variables: `rg "@variable=" controller_file`
-- [ ] Verify route helpers: `rails routes | grep namespace`
-
-**For Controllers:**
-- [ ] Verify authentication method: `rg "authenticate_" app/controllers/base_controller.rb`
-- [ ] Verify before_actions: `rg "before_action" base_controller.rb`
-- [ ] Verify authorization: `rg "authorize\|policy" base_controller.rb`
-
-**For Services:**
-- [ ] Verify model methods: `rg "def method_name" app/models/model.rb`
-- [ ] Verify associations: `rg "has_many\|belongs_to" app/models/model.rb`
-
-### Integration with Context Verification Skill
-
-**Before implementing, invoke rails-context-verification skill:**
+**Prevention:**
+- Every non-redirect action needs a view OR explicit render
+- View path must match controller namespace
 
 ```bash
-Invoke SKILL: rails-context-verification
-
-I need to verify authentication helpers and routing patterns for the admin namespace.
-
-This will provide verification procedures to prevent assumption bugs.
+# Before creating controller action:
+ls app/views/{controller}/
 ```
 
-### Remember: Context Matters
+### Unknown Action
 
-**Different namespaces = Different patterns:**
+**Error Pattern:**
+```
+AbstractController::ActionNotFound
+```
 
-| Namespace | Auth Helper | Route Prefix | Example |
-|-----------|-------------|--------------|---------|
-| Client | `current_user` | `clients_` | `clients_dashboard_path` |
-| Admin | `current_administrator` | `admins_` | `admins_users_path` |
-| API | `current_api_user` | `api_v1_` | `api_v1_posts_path` |
+**Root Causes:**
+- Route points to non-existent action
+- Action is private/protected (must be public)
 
-**NEVER copy patterns across namespaces without verification!**
+```bash
+# Verification
+rails routes | grep {controller}
+grep -n 'def ' app/controllers/{controller}_controller.rb
+```
 
-### Quick Reference: Verification Commands
+---
 
-| What to Verify | Command |
-|----------------|---------|
-| Authentication helper | `rg "def current_" app/controllers/` |
-| Signed-in helper | `rg "signed_in\?" app/views/namespace/` |
-| Route prefix | `rails routes \| grep namespace` |
-| Before actions | `rg "before_action" base_controller.rb` |
-| Instance variables | `rg "@variable\s*=" controller.rb` |
-| View helpers | `rg "def helper_name" app/helpers/` |
+## Nil Errors
 
-### The 2-Minute Rule
+**Error Pattern:**
+```
+undefined method '{method}' for nil:NilClass
+```
 
-**Spend 2 minutes verifying → Save hours debugging**
+**Prevention Patterns:**
 
-1. Identify namespace (admin/client/api)
-2. Search for existing patterns
-3. Extract verified helper names
-4. Use ONLY verified names in code
+```ruby
+# Safe navigation
+user&.profile&.settings&.theme
 
-**Assumption bugs cause production errors. Context verification prevents them at the source.**
+# Guard clause
+return unless user&.profile
+
+# With default
+user&.profile&.settings&.theme || 'default'
+
+# Early return
+def process_user(user)
+  return if user.nil?
+  # ... rest of method
+end
+```
+
+---
+
+## Argument Errors
+
+**Error Pattern:**
+```
+ArgumentError: wrong number of arguments (given X, expected Y)
+```
+
+**Prevention:**
+```bash
+# Before modifying method signature
+grep -r 'method_name' app/ --include='*.rb'
+# Update all call sites
+```
+
+**Rules:**
+- Prefer keyword arguments for methods with 2+ params
+- Use default values for optional params
+
+---
+
+## Prevention Checklists
+
+### Before Creating ViewComponent
+
+```
+[ ] Check app/components/ structure
+[ ] Review existing component for template pattern (inline vs file)
+[ ] Verify naming: Namespace::ComponentNameComponent
+[ ] Create both .rb AND .html.erb files (unless using inline)
+[ ] List ALL methods view will need
+[ ] Implement ALL needed methods in component
+[ ] Prefix ALL Rails helpers with 'helpers.' or delegate them
+```
+
+### Before Writing View Code
+
+```
+[ ] List ALL methods view will call on component
+[ ] For EACH method, verify it exists in component class
+[ ] If method missing, ADD to component BEFORE view code
+[ ] Verify underlying service/model has implementation
+```
+
+### Before Writing ActiveRecord Query with GROUP BY
+
+```
+[ ] List ALL columns in SELECT
+[ ] Verify each is in GROUP BY or aggregate function
+[ ] Remove includes/preload/eager_load
+[ ] Test query in rails console first
+```
+
+### Before Writing ActiveRecord Query with Joins
+
+```
+[ ] Qualify ambiguous columns with table name
+[ ] Consider if includes is better for the use case
+```
+
+### Before Creating Controller Action
+
+```
+[ ] View exists for non-redirect actions?
+[ ] Routes point to public methods?
+[ ] All @variables view needs are set?
+```
+
+### Before Any Code
+
+```
+[ ] Inspect existing similar implementations
+[ ] Check naming conventions in codebase
+[ ] Verify all dependencies exist (gems, files, routes)
+[ ] Verify method exposure across all layers (view→component→service)
+```
+
+---
+
+## Quick Debugging Commands
+
+```bash
+# Find where method is called
+grep -r 'method_name' app/ --include='*.rb'
+
+# Find method definition
+grep -rn 'def method_name' app/ --include='*.rb'
+
+# Check method visibility
+grep -B5 'def method_name' app/path/to/file.rb
+
+# List component methods
+grep -E '^\s+def [a-z_]+' app/components/path_component.rb
+
+# List service methods  
+grep -E '^\s+def [a-z_]+' app/services/path.rb
+
+# Compare view calls vs component methods
+grep -oE '@\w+\.\w+' app/views/path/*.erb | sort -u
+```
