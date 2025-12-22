@@ -50,6 +50,24 @@ if [ -n "$RENAMED_FILES" ]; then
         DETECTIONS="${DETECTIONS}  ⚠️  Namespace change detected in path\n"
       fi
     fi
+
+    # If JavaScript file, extract potential controller/module name change
+    if [[ "$old" == *.js ]] && [[ "$new" == *.js ]]; then
+      # Check for Stimulus controller rename
+      if [[ "$old" == *_controller.js ]] && [[ "$new" == *_controller.js ]]; then
+        OLD_CONTROLLER=$(basename "$old" _controller.js | sed -E 's/(^|_)([a-z])/\U\2/g' | sed 's/_//g')
+        NEW_CONTROLLER=$(basename "$new" _controller.js | sed -E 's/(^|_)([a-z])/\U\2/g' | sed 's/_//g')
+
+        if [ -n "$OLD_CONTROLLER" ] && [ -n "$NEW_CONTROLLER" ] && [ "$OLD_CONTROLLER" != "$NEW_CONTROLLER" ]; then
+          DETECTIONS="${DETECTIONS}  ⚠️  Stimulus controller rename: ${OLD_CONTROLLER}Controller → ${NEW_CONTROLLER}Controller\n"
+          DETECTIONS="${DETECTIONS}  ⚠️  Update data-controller attributes in views\n"
+        fi
+      else
+        # Regular JavaScript file rename
+        DETECTIONS="${DETECTIONS}  ⚠️  JavaScript file rename detected\n"
+        DETECTIONS="${DETECTIONS}  ⚠️  Check for imports and references\n"
+      fi
+    fi
   done
 fi
 
@@ -141,7 +159,55 @@ if [ -n "$MODIFIED_FILES" ]; then
 fi
 
 #==============================================================================
-# 4. OUTPUT WARNINGS IF DETECTIONS FOUND
+# 4. DETECT CONFIGURATION FILE CHANGES
+#==============================================================================
+
+# Check for modified configuration files that might reference classes
+CONFIG_FILES=$(git diff --name-only --cached 2>/dev/null | grep -E '^config/(initializers|environments|locales)/' || true)
+
+if [ -n "$CONFIG_FILES" ]; then
+  for file in $CONFIG_FILES; do
+    # For Ruby config files, check for class constant changes
+    if [[ "$file" == *.rb ]]; then
+      # Get old and new class constants
+      OLD_CONSTANTS=$(git show HEAD:"$file" 2>/dev/null | grep -oE '\b[A-Z][a-zA-Z0-9_:]*\b' | sort -u || true)
+      NEW_CONSTANTS=$(grep -oE '\b[A-Z][a-zA-Z0-9_:]*\b' "$file" 2>/dev/null | sort -u || true)
+
+      # Find removed constants
+      REMOVED=$(comm -23 <(echo "$OLD_CONSTANTS") <(echo "$NEW_CONSTANTS") 2>/dev/null || true)
+
+      if [ -n "$REMOVED" ]; then
+        if [ -z "$DETECTIONS" ]; then
+          DETECTIONS="\n"
+        fi
+        DETECTIONS="${DETECTIONS}📝 **Config File Change** in $file:\n"
+        DETECTIONS="${DETECTIONS}  Removed constants: $(echo $REMOVED | tr '\n' ' ')\n"
+        ((DETECTION_COUNT++))
+      fi
+    fi
+
+    # For YAML locale files, check for model/attribute key changes
+    if [[ "$file" == *.yml ]] || [[ "$file" == *.yaml ]]; then
+      # Check if activerecord keys changed
+      OLD_MODELS=$(git show HEAD:"$file" 2>/dev/null | grep -E '^\s+models:' -A 50 | grep -oE '^\s+[a-z_]+:' | tr -d ' :' || true)
+      NEW_MODELS=$(grep -E '^\s+models:' "$file" 2>/dev/null -A 50 | grep -oE '^\s+[a-z_]+:' | tr -d ' :' || true)
+
+      REMOVED_MODELS=$(comm -23 <(echo "$OLD_MODELS" | sort) <(echo "$NEW_MODELS" | sort) 2>/dev/null || true)
+
+      if [ -n "$REMOVED_MODELS" ]; then
+        if [ -z "$DETECTIONS" ]; then
+          DETECTIONS="\n"
+        fi
+        DETECTIONS="${DETECTIONS}📝 **Locale File Change** in $file:\n"
+        DETECTIONS="${DETECTIONS}  Removed model keys: $(echo $REMOVED_MODELS | tr '\n' ' ')\n"
+        ((DETECTION_COUNT++))
+      fi
+    fi
+  done
+fi
+
+#==============================================================================
+# 5. OUTPUT WARNINGS IF DETECTIONS FOUND
 #==============================================================================
 
 if [ $DETECTION_COUNT -gt 0 ]; then

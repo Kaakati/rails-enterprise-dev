@@ -94,6 +94,10 @@ ROUTE_REFS=0
 SPEC_REFS=0
 FACTORY_REFS=0
 MIGRATION_REFS=0
+JS_REFS=0
+JS_ERB_REFS=0
+CONFIG_REFS=0
+LOCALE_REFS=0
 
 # Temporary files for storing results
 RUBY_RESULTS=$(mktemp)
@@ -102,9 +106,13 @@ ROUTE_RESULTS=$(mktemp)
 SPEC_RESULTS=$(mktemp)
 FACTORY_RESULTS=$(mktemp)
 MIGRATION_RESULTS=$(mktemp)
+JS_RESULTS=$(mktemp)
+JS_ERB_RESULTS=$(mktemp)
+CONFIG_RESULTS=$(mktemp)
+LOCALE_RESULTS=$(mktemp)
 
 # Cleanup temp files on exit
-trap "rm -f $RUBY_RESULTS $VIEW_RESULTS $ROUTE_RESULTS $SPEC_RESULTS $FACTORY_RESULTS $MIGRATION_RESULTS" EXIT
+trap "rm -f $RUBY_RESULTS $VIEW_RESULTS $ROUTE_RESULTS $SPEC_RESULTS $FACTORY_RESULTS $MIGRATION_RESULTS $JS_RESULTS $JS_ERB_RESULTS $CONFIG_RESULTS $LOCALE_RESULTS" EXIT
 
 # Search for remaining references to old name
 
@@ -157,8 +165,42 @@ else
   MIGRATION_REFS=0
 fi
 
+# 7. JavaScript files (app/javascript, app/assets/javascripts)
+if [ -d "app/javascript" ] || [ -d "app/assets/javascripts" ]; then
+  if rg "$OLD_NAME" --type js app/javascript app/assets/javascripts $IGNORE_ARGS > "$JS_RESULTS" 2>/dev/null; then
+    JS_REFS=$(wc -l < "$JS_RESULTS" | tr -d ' ')
+  else
+    JS_REFS=0
+  fi
+fi
+
+# 8. JavaScript ERB templates (*.js.erb)
+if rg "$OLD_NAME" --glob '*.js.erb' app/views app/assets $IGNORE_ARGS > "$JS_ERB_RESULTS" 2>/dev/null; then
+  JS_ERB_REFS=$(wc -l < "$JS_ERB_RESULTS" | tr -d ' ')
+else
+  JS_ERB_REFS=0
+fi
+
+# 9. Configuration files (initializers, environments, application.rb)
+if [ -d "config" ]; then
+  if rg "\b$OLD_NAME\b" --type ruby config/initializers config/environments config/application.rb config/importmap.rb $IGNORE_ARGS > "$CONFIG_RESULTS" 2>/dev/null; then
+    CONFIG_REFS=$(wc -l < "$CONFIG_RESULTS" | tr -d ' ')
+  else
+    CONFIG_REFS=0
+  fi
+fi
+
+# 10. Locale files (YAML/YML in config/locales)
+if [ -d "config/locales" ]; then
+  if rg "$OLD_NAME|${OLD_NAME,,}" --glob '*.yml' --glob '*.yaml' config/locales $IGNORE_ARGS > "$LOCALE_RESULTS" 2>/dev/null; then
+    LOCALE_REFS=$(wc -l < "$LOCALE_RESULTS" | tr -d ' ')
+  else
+    LOCALE_REFS=0
+  fi
+fi
+
 # Calculate total
-TOTAL_REFS=$((RUBY_REFS + VIEW_REFS + ROUTE_REFS + SPEC_REFS + FACTORY_REFS + MIGRATION_REFS))
+TOTAL_REFS=$((RUBY_REFS + VIEW_REFS + ROUTE_REFS + SPEC_REFS + FACTORY_REFS + MIGRATION_REFS + JS_REFS + JS_ERB_REFS + CONFIG_REFS + LOCALE_REFS))
 
 # Display results summary
 echo "📊 Validation Results:"
@@ -168,6 +210,10 @@ echo "  Routes:         $ROUTE_REFS references"
 echo "  Spec files:     $SPEC_REFS references"
 echo "  Factories:      $FACTORY_REFS references"
 echo "  Migrations:     $MIGRATION_REFS references"
+echo "  JavaScript:     $JS_REFS references"
+echo "  JS ERB:         $JS_ERB_REFS references"
+echo "  Config files:   $CONFIG_REFS references"
+echo "  Locales:        $LOCALE_REFS references"
 echo "  ────────────────────────────"
 echo "  Total:          $TOTAL_REFS references"
 echo ""
@@ -192,6 +238,10 @@ if [ $TOTAL_REFS -eq 0 ]; then
 - Spec files: 0 references
 - Factories: 0 references
 - Migrations: 0 references
+- JavaScript: 0 references
+- JS ERB: 0 references
+- Config files: 0 references
+- Locales: 0 references
 
 No remaining references to '$OLD_NAME' found. Refactoring is complete." 2>/dev/null || true
   fi
@@ -252,6 +302,42 @@ if [ $MIGRATION_REFS -gt 0 ]; then
   echo ""
 fi
 
+if [ $JS_REFS -gt 0 ]; then
+  echo "JavaScript files ($JS_REFS references):"
+  cat "$JS_RESULTS" | head -20
+  if [ $JS_REFS -gt 20 ]; then
+    echo "... and $((JS_REFS - 20)) more"
+  fi
+  echo ""
+fi
+
+if [ $JS_ERB_REFS -gt 0 ]; then
+  echo "JavaScript ERB templates ($JS_ERB_REFS references):"
+  cat "$JS_ERB_RESULTS" | head -20
+  if [ $JS_ERB_REFS -gt 20 ]; then
+    echo "... and $((JS_ERB_REFS - 20)) more"
+  fi
+  echo ""
+fi
+
+if [ $CONFIG_REFS -gt 0 ]; then
+  echo "Configuration files ($CONFIG_REFS references):"
+  cat "$CONFIG_RESULTS" | head -20
+  if [ $CONFIG_REFS -gt 20 ]; then
+    echo "... and $((CONFIG_REFS - 20)) more"
+  fi
+  echo ""
+fi
+
+if [ $LOCALE_REFS -gt 0 ]; then
+  echo "Locale files ($LOCALE_REFS references):"
+  cat "$LOCALE_RESULTS" | head -20
+  if [ $LOCALE_REFS -gt 20 ]; then
+    echo "... and $((LOCALE_REFS - 20)) more"
+  fi
+  echo ""
+fi
+
 echo "Next steps:"
 echo "1. Update the remaining references listed above"
 echo "2. Add intentional references to .refactorignore if needed"
@@ -277,6 +363,10 @@ if [ -n "$ISSUE_ID" ] && command -v bd &> /dev/null; then
 - Spec files: $SPEC_REFS references
 - Factories: $FACTORY_REFS references
 - Migrations: $MIGRATION_REFS references
+- JavaScript: $JS_REFS references
+- JS ERB: $JS_ERB_REFS references
+- Config files: $CONFIG_REFS references
+- Locales: $LOCALE_REFS references
 
 **Total**: $TOTAL_REFS remaining references
 

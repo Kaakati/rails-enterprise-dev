@@ -1632,6 +1632,14 @@ When refactoring, check these layers:
 - [ ] Serializer references
 - [ ] Migration table names (if applicable)
 - [ ] String references (e.g., `"Payment"` in polymorphic associations)
+- [ ] JavaScript/Stimulus controllers (`app/javascript/controllers/payment_controller.js`)
+- [ ] Stimulus controller class names (`PaymentController`)
+- [ ] data-controller attributes in views (`data-controller="payment"`)
+- [ ] JavaScript imports and references
+- [ ] I18n locale keys (`activerecord.models.payment`)
+- [ ] Initializer references (`config/initializers`)
+- [ ] Package.json references (if applicable)
+- [ ] Importmap references (`config/importmap.rb`)
 
 **Attribute Rename** (`user_id` → `account_id`):
 - [ ] Database migration (column rename)
@@ -1645,6 +1653,9 @@ When refactoring, check these layers:
 - [ ] Factory attributes
 - [ ] Serializer attributes
 - [ ] API documentation
+- [ ] JavaScript data attributes (`data-user-id-value` → `data-account-id-value`)
+- [ ] Stimulus value definitions (`static values = { userId: ... }`)
+- [ ] I18n attribute keys (`activerecord.attributes.model.user_id`)
 
 **Table Rename** (`payments` → `transactions`):
 - [ ] Database migration (table rename)
@@ -1653,6 +1664,28 @@ When refactoring, check these layers:
 - [ ] Indexes
 - [ ] Raw SQL queries
 - [ ] Database views (if any)
+
+**JavaScript/Stimulus Refactoring** (`payment` → `transaction`):
+- [ ] Stimulus controller file rename (`payment_controller.js` → `transaction_controller.js`)
+- [ ] Controller class name (`PaymentController` → `TransactionController`)
+- [ ] data-controller attributes in views (`data-controller="payment"` → `"transaction"`)
+- [ ] data-{controller}-target attributes (`data-payment-target="form"` → `data-transaction-target="form"`)
+- [ ] data-action attributes (`data-action="payment#submit"` → `"transaction#submit"`)
+- [ ] JavaScript imports (`import PaymentController` → `import TransactionController`)
+- [ ] Event names (`payment:updated` → `transaction:updated`)
+- [ ] Custom event dispatching (`new CustomEvent('payment:updated')`)
+- [ ] CSS class names that reference the controller
+- [ ] Turbo frame IDs (`turbo-frame#payment-form` → `#transaction-form`)
+- [ ] Importmap pins (`pin "payment_controller"` → `pin "transaction_controller"`)
+
+**Namespace/Module Move** (`Services::Payment` → `Billing::Transaction`):
+- [ ] File path (`app/services/payment.rb` → `app/billing/transaction.rb`)
+- [ ] Module/namespace declaration
+- [ ] All references to the old namespace
+- [ ] Autoload paths (if custom)
+- [ ] Spec file path
+- [ ] Factory namespace
+- [ ] Route namespace (if applicable)
 
 ### Step 5: Phase Completion
 
