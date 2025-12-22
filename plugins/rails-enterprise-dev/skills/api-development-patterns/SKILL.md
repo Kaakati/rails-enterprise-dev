@@ -1,604 +1,1221 @@
 ---
-name: "Sidekiq & Async Patterns"
-description: "Complete guide to background job processing with Sidekiq in Ruby on Rails. Use this skill when: (1) Creating background jobs, (2) Configuring queues and workers, (3) Implementing retry logic and error handling, (4) Designing idempotent jobs, (5) Setting up scheduled/recurring jobs, (6) Optimizing job performance."
+name: API Development Patterns
+description: Comprehensive guide to building production-ready REST APIs in Rails with serialization, authentication, versioning, rate limiting, and testing
+version: 1.0.0
 ---
 
-# Sidekiq & Async Patterns Skill
+# API Development Patterns
 
-This skill provides comprehensive guidance for implementing background jobs with Sidekiq in Rails applications.
+Complete patterns and best practices for building production-grade REST APIs in Rails 7.x/8.x.
 
-## When to Use This Skill
+## RESTful API Conventions
 
-- Creating new background jobs
-- Configuring Sidekiq queues
-- Implementing retry strategies
-- Designing idempotent operations
-- Setting up scheduled jobs
-- Handling job failures
-- Optimizing async processing
+### Resource-Oriented Design
 
-## External Documentation
+**Core Principles:**
+- Resources are nouns (not verbs): `/users`, `/posts`, not `/get_user`
+- Use HTTP methods for actions: GET (read), POST (create), PATCH/PUT (update), DELETE (destroy)
+- Nest resources for relationships, but limit nesting to 1-2 levels
+- Use plural resource names: `/users` not `/user`
 
-**Official Wiki**: https://github.com/sidekiq/sidekiq/wiki
-
-```bash
-# Always check the official wiki for latest patterns
-# Key wiki pages:
-# - Best Practices: https://github.com/sidekiq/sidekiq/wiki/Best-Practices
-# - Error Handling: https://github.com/sidekiq/sidekiq/wiki/Error-Handling
-# - Scheduled Jobs: https://github.com/sidekiq/sidekiq/wiki/Scheduled-Jobs
-```
-
-## Pre-Work Inspection
-
-```bash
-# Check existing jobs
-ls app/jobs/ app/sidekiq/ app/workers/ 2>/dev/null
-
-# Check job naming conventions
-head -30 $(find app/jobs -name '*.rb' | head -1) 2>/dev/null
-
-# Check Sidekiq configuration
-cat config/sidekiq.yml 2>/dev/null
-cat config/initializers/sidekiq.rb 2>/dev/null
-
-# Check queue configuration
-grep -r 'queue_as\|sidekiq_options' app/jobs/ --include='*.rb' | head -10
-
-# Check scheduled jobs
-cat config/schedule.yml 2>/dev/null
-cat config/recurring.yml 2>/dev/null
-```
-
-## Core Principles
-
-### 1. Idempotency (CRITICAL)
-
-**Jobs MUST be idempotent** - running the same job multiple times produces the same result.
+**Standard Resource Routes:**
 
 ```ruby
-# WRONG - Not idempotent (sends duplicate emails)
-class SendWelcomeEmailJob < ApplicationJob
-  def perform(user_id)
-    user = User.find(user_id)
-    UserMailer.welcome(user).deliver_now
-  end
-end
+# config/routes.rb
+Rails.application.routes.draw do
+  namespace :api do
+    namespace :v1 do
+      resources :posts do
+        resources :comments, only: [:index, :create] # Nested but limited
+        member do
+          post :publish
+          post :archive
+        end
+        collection do
+          get :trending
+        end
+      end
 
-# CORRECT - Idempotent (checks before sending)
-class SendWelcomeEmailJob < ApplicationJob
-  def perform(user_id)
-    user = User.find(user_id)
-    return if user.welcome_email_sent_at.present?
-    
-    UserMailer.welcome(user).deliver_now
-    user.update!(welcome_email_sent_at: Time.current)
-  end
-end
-```
-
-### 2. Small Payloads
-
-**Pass IDs, not objects** - objects serialize and can become stale.
-
-```ruby
-# WRONG - Object serialization
-NotificationJob.perform_later(@user)  # Serializes entire user object
-
-# CORRECT - Pass ID
-NotificationJob.perform_later(@user.id)
-```
-
-### 3. Fail Fast
-
-**Find records early** - fail immediately if data doesn't exist.
-
-```ruby
-class ProcessTaskJob < ApplicationJob
-  def perform(task_id)
-    task = Task.find(task_id)  # Raises if not found
-    # ... process task
-  end
-end
-```
-
-## Job Structure Template
-
-```ruby
-# app/jobs/task_notification_job.rb
-class TaskNotificationJob < ApplicationJob
-  queue_as :notifications
-  
-  # Retry configuration
-  retry_on ActiveRecord::RecordNotFound, wait: 5.seconds, attempts: 3
-  retry_on Net::OpenTimeout, wait: :polynomially_longer, attempts: 5
-  discard_on ActiveJob::DeserializationError
-
-  def perform(task_id, notification_type = :created)
-    task = Task.find(task_id)
-    
-    case notification_type.to_sym
-    when :created
-      send_creation_notification(task)
-    when :completed
-      send_completion_notification(task)
+      # Flat route for comments by ID (better than deep nesting)
+      resources :comments, only: [:show, :update, :destroy]
     end
   end
+end
+```
 
-  private
+### HTTP Methods & Status Codes
 
-  def send_creation_notification(task)
-    return unless task.recipient.phone.present?
-    return if task.notification_sent_at.present?  # Idempotency check
-    
-    SmsService.send(
-      to: task.recipient.phone,
-      message: I18n.t('sms.task_created', tracking: task.tracking_number)
-    )
-    
-    task.update!(notification_sent_at: Time.current)
-  end
+**Standard API Actions:**
 
-  def send_completion_notification(task)
-    # Implementation
+| Method | Action | Success Status | Body |
+|--------|--------|----------------|------|
+| GET | Index/List | 200 OK | Resource array + pagination |
+| GET | Show | 200 OK | Single resource |
+| POST | Create | 201 Created | Created resource |
+| PATCH/PUT | Update | 200 OK | Updated resource |
+| DELETE | Destroy | 204 No Content | Empty |
+
+**Error Status Codes:**
+
+| Code | Meaning | When to Use |
+|------|---------|-------------|
+| 400 | Bad Request | Invalid JSON, malformed request |
+| 401 | Unauthorized | Missing or invalid authentication |
+| 403 | Forbidden | Authenticated but not authorized |
+| 404 | Not Found | Resource doesn't exist |
+| 422 | Unprocessable Entity | Validation errors |
+| 429 | Too Many Requests | Rate limit exceeded |
+| 500 | Internal Server Error | Unexpected server error |
+| 503 | Service Unavailable | Maintenance mode, overloaded |
+
+**Controller Example:**
+
+```ruby
+# app/controllers/api/v1/posts_controller.rb
+module Api
+  module V1
+    class PostsController < Api::BaseController
+      before_action :authenticate_api_user!
+      before_action :set_post, only: [:show, :update, :destroy]
+
+      def index
+        @posts = Post.published
+                     .page(params[:page])
+                     .per(params[:per_page] || 25)
+
+        render json: PostBlueprint.render(@posts, root: :posts), status: :ok
+      end
+
+      def show
+        render json: PostBlueprint.render(@post), status: :ok
+      end
+
+      def create
+        @post = Current.user.posts.build(post_params)
+
+        if @post.save
+          render json: PostBlueprint.render(@post), status: :created, location: api_v1_post_url(@post)
+        else
+          render json: { errors: @post.errors }, status: :unprocessable_entity
+        end
+      end
+
+      def update
+        if @post.update(post_params)
+          render json: PostBlueprint.render(@post), status: :ok
+        else
+          render json: { errors: @post.errors }, status: :unprocessable_entity
+        end
+      end
+
+      def destroy
+        @post.destroy
+        head :no_content
+      end
+
+      private
+
+      def set_post
+        @post = Post.find(params[:id])
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Post not found" }, status: :not_found
+      end
+
+      def post_params
+        params.require(:post).permit(:title, :body, :published_at, tag_ids: [])
+      end
+    end
   end
 end
 ```
 
-## Sidekiq Configuration
-
-### config/sidekiq.yml
-
-```yaml
 ---
-:concurrency: <%= ENV.fetch('SIDEKIQ_CONCURRENCY', 10) %>
-:timeout: 25
-:max_retries: 5
 
-:queues:
-  - [critical, 6]      # Highest priority
-  - [default, 5]
-  - [notifications, 4]
-  - [integrations, 3]  # External API calls
-  - [bulk, 2]          # Batch processing
-  - [scheduled, 1]
-  - [low, 1]           # Lowest priority
+## Serialization Patterns
 
-production:
-  :concurrency: 20
+### Blueprinter (Recommended)
 
-development:
-  :concurrency: 5
-```
-
-### config/initializers/sidekiq.rb
+**Installation:**
 
 ```ruby
-Sidekiq.configure_server do |config|
-  config.redis = {
-    url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/0'),
-    network_timeout: 5,
-    pool_timeout: 5
-  }
-
-  # Death handler - job exhausted all retries
-  config.death_handlers << ->(job, ex) do
-    Rails.logger.error("Job #{job['class']} died: #{ex.message}")
-    Sentry.capture_exception(ex, extra: { job: job })
-  end
-end
-
-Sidekiq.configure_client do |config|
-  config.redis = {
-    url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/0'),
-    network_timeout: 5,
-    pool_timeout: 5
-  }
-end
-
-# Recommended: strict argument mode
-Sidekiq.strict_args!
+# Gemfile
+gem 'blueprinter'
+gem 'oj' # Fast JSON parser
 ```
 
-## Queue Strategy
-
-### Priority Guidelines
-
-| Queue | Priority | Use For |
-|-------|----------|---------|
-| `critical` | 6 | Payment processing, time-sensitive operations |
-| `default` | 5 | Standard operations |
-| `notifications` | 4 | User notifications (SMS, email, push) |
-| `integrations` | 3 | External API calls (may be slow) |
-| `bulk` | 2 | Batch processing, imports |
-| `scheduled` | 1 | Scheduled/recurring tasks |
-| `low` | 1 | Non-urgent, can wait |
-
-### Setting Queue in Jobs
+**Basic Blueprint:**
 
 ```ruby
-class PaymentProcessingJob < ApplicationJob
-  queue_as :critical
-  
-  def perform(payment_id)
-    # Critical payment processing
-  end
-end
+# app/blueprints/post_blueprint.rb
+class PostBlueprint < Blueprinter::Base
+  identifier :id
 
-class SendNewsletterJob < ApplicationJob
-  queue_as :low
-  
-  def perform(user_ids)
-    # Low priority newsletter
-  end
-end
+  fields :title, :body, :published_at, :created_at
 
-# Dynamic queue selection
-class FlexibleJob < ApplicationJob
-  queue_as do
-    if self.arguments.first.priority == 'high'
-      :critical
-    else
-      :default
-    end
+  field :slug do |post|
+    post.title.parameterize
+  end
+
+  association :author, blueprint: UserBlueprint, view: :compact
+
+  association :comments, blueprint: CommentBlueprint do |post, options|
+    post.comments.limit(options[:comment_limit] || 10)
+  end
+
+  view :compact do
+    fields :id, :title, :slug
+  end
+
+  view :extended do
+    include_view :default
+    fields :view_count, :like_count
+    association :tags, blueprint: TagBlueprint
   end
 end
 ```
 
-## Retry Strategies
-
-### Built-in Retry Configuration
+**Using Views:**
 
 ```ruby
-class ExternalApiJob < ApplicationJob
-  # Retry specific exceptions
-  retry_on Net::OpenTimeout, wait: 5.seconds, attempts: 3
-  retry_on Faraday::TimeoutError, wait: :polynomially_longer, attempts: 5
-  
-  # Exponential backoff: 3s, 18s, 83s, 258s, 627s
-  retry_on ApiRateLimitError, wait: :polynomially_longer, attempts: 5
-  
-  # Custom wait calculation
-  retry_on CustomError, wait: ->(executions) { executions * 10.seconds }
-  
-  # Don't retry these - discard instead
-  discard_on ActiveJob::DeserializationError
-  discard_on UnrecoverableError
-  
-  def perform(task_id)
-    # Implementation
-  end
-end
+# Compact view for lists
+PostBlueprint.render(@posts, view: :compact, root: :posts)
+
+# Extended view for show
+PostBlueprint.render(@post, view: :extended)
+
+# Pass options to associations
+PostBlueprint.render(@post, comment_limit: 5)
 ```
 
-### Manual Retry Control
+### JSONAPI::Serializer (Alternative)
+
+**For JSON:API Specification Compliance:**
 
 ```ruby
-class ManualRetryJob < ApplicationJob
-  def perform(task_id)
-    task = Task.find(task_id)
-    
-    begin
-      external_service.process(task)
-    rescue RateLimitError => e
-      # Re-enqueue with delay
-      self.class.set(wait: 1.minute).perform_later(task_id)
-    rescue PermanentError => e
-      # Don't retry, log and notify
-      Rails.logger.error("Permanent failure: #{e.message}")
-      Sentry.capture_exception(e)
-    end
-  end
-end
-```
+# Gemfile
+gem 'jsonapi-serializer'
 
-## Common Job Patterns
+# app/serializers/post_serializer.rb
+class PostSerializer
+  include JSONAPI::Serializer
 
-### Batch Processing
+  attributes :title, :body, :published_at
 
-```ruby
-class BulkUpdateJob < ApplicationJob
-  queue_as :bulk
+  belongs_to :author, serializer: UserSerializer
+  has_many :comments, serializer: CommentSerializer
 
-  def perform(record_ids, attributes)
-    Model.where(id: record_ids).find_each(batch_size: 100) do |record|
-      record.update!(attributes)
-    rescue ActiveRecord::RecordInvalid => e
-      Rails.logger.error("Failed to update #{record.id}: #{e.message}")
-      # Continue with next record
-    end
-  end
-end
-```
-
-### Progress Tracking
-
-```ruby
-class ImportJob < ApplicationJob
-  queue_as :bulk
-
-  def perform(import_id)
-    import = Import.find(import_id)
-    import.update!(status: 'processing', started_at: Time.current)
-
-    total = import.rows.count
-    processed = 0
-    errors = []
-
-    import.rows.each do |row|
-      begin
-        process_row(row, import)
-        processed += 1
-      rescue StandardError => e
-        errors << { row: row[:number], error: e.message }
-      end
-
-      # Update progress every 10 rows
-      if processed % 10 == 0
-        import.update!(
-          progress: (processed.to_f / total * 100).round(1),
-          processed_count: processed
-        )
-      end
-    end
-
-    import.update!(
-      status: errors.empty? ? 'completed' : 'completed_with_errors',
-      completed_at: Time.current,
-      error_details: errors
-    )
-  end
-end
-```
-
-### External API Calls
-
-```ruby
-class SyncExternalDataJob < ApplicationJob
-  queue_as :integrations
-
-  retry_on Faraday::TimeoutError, wait: 1.minute, attempts: 3
-  retry_on Faraday::ConnectionFailed, wait: 5.minutes, attempts: 3
-  discard_on ExternalApi::ClientError  # 4xx errors - don't retry
-
-  def perform(resource_id)
-    resource = Resource.find(resource_id)
-    
-    data = ExternalApi.fetch(resource.external_id)
-    
-    resource.update!(
-      external_data: data,
-      synced_at: Time.current
-    )
-  end
-end
-```
-
-### Scheduled Jobs (with sidekiq-scheduler)
-
-```yaml
-# config/recurring.yml
-daily_cleanup:
-  cron: '0 2 * * *'  # 2 AM daily
-  class: DailyCleanupJob
-  queue: scheduled
-
-hourly_sync:
-  cron: '0 * * * *'  # Every hour
-  class: HourlySyncJob
-  queue: integrations
-
-weekly_report:
-  cron: '0 9 * * 1'  # Monday 9 AM
-  class: WeeklyReportJob
-  queue: low
-```
-
-### Unique Jobs (with sidekiq-unique-jobs)
-
-```ruby
-class UniqueProcessingJob < ApplicationJob
-  queue_as :default
-
-  # Prevent duplicate jobs for same arguments
-  sidekiq_options lock: :until_executed,
-                  lock_args_method: :lock_args
-
-  def self.lock_args(args)
-    [args[0]]  # Lock on first argument only
+  attribute :slug do |post|
+    post.title.parameterize
   end
 
-  def perform(resource_id, options = {})
-    # Only one job per resource_id at a time
-  end
-end
-```
-
-## Error Handling
-
-### Comprehensive Error Wrapper
-
-```ruby
-# app/jobs/concerns/error_handling.rb
-module ErrorHandling
-  extend ActiveSupport::Concern
-
-  included do
-    around_perform :with_error_handling
-  end
-
-  private
-
-  def with_error_handling
-    yield
-  rescue ActiveRecord::RecordNotFound => e
-    # Log but don't re-raise (job completes)
-    Rails.logger.warn("#{self.class.name}: Record not found - #{e.message}")
-  rescue StandardError => e
-    # Log, notify, and re-raise (triggers retry)
-    Rails.logger.error("#{self.class.name} failed: #{e.message}")
-    Sentry.capture_exception(e, extra: { job_args: arguments })
-    raise
+  link :self do |post|
+    Rails.application.routes.url_helpers.api_v1_post_url(post)
   end
 end
 
 # Usage
-class MyJob < ApplicationJob
-  include ErrorHandling
-  
-  def perform(task_id)
-    # Implementation
+PostSerializer.new(@posts, include: [:author, :comments]).serializable_hash
+```
+
+### Alba (Lightweight Alternative)
+
+```ruby
+# Gemfile
+gem 'alba'
+
+# app/serializers/post_serializer.rb
+class PostSerializer
+  include Alba::Resource
+
+  attributes :id, :title, :body, :published_at
+
+  one :author, resource: UserSerializer
+  many :comments, resource: CommentSerializer
+
+  attribute :slug do |post|
+    post.title.parameterize
+  end
+end
+
+# Usage
+PostSerializer.new(@posts).serialize
+```
+
+---
+
+## Authentication
+
+### JWT (JSON Web Tokens)
+
+**Installation:**
+
+```ruby
+# Gemfile
+gem 'jwt'
+gem 'bcrypt' # For password hashing
+```
+
+**JWT Service:**
+
+```ruby
+# app/services/json_web_token_service.rb
+class JsonWebTokenService
+  SECRET_KEY = Rails.application.credentials.secret_key_base
+  ALGORITHM = 'HS256'
+
+  def self.encode(payload, expiration = 24.hours.from_now)
+    payload[:exp] = expiration.to_i
+    JWT.encode(payload, SECRET_KEY, ALGORITHM)
+  end
+
+  def self.decode(token)
+    decoded = JWT.decode(token, SECRET_KEY, true, algorithm: ALGORITHM)[0]
+    HashWithIndifferentAccess.new(decoded)
+  rescue JWT::DecodeError, JWT::ExpiredSignature => e
+    nil
   end
 end
 ```
 
-## Testing Jobs
+**Authentication Controller:**
 
 ```ruby
-# spec/jobs/task_notification_job_spec.rb
-require 'rails_helper'
+# app/controllers/api/v1/authentication_controller.rb
+module Api
+  module V1
+    class AuthenticationController < Api::BaseController
+      skip_before_action :authenticate_api_user!, only: [:create]
 
-RSpec.describe TaskNotificationJob, type: :job do
-  include ActiveJob::TestHelper
+      def create
+        user = User.find_by(email: params[:email])
 
-  let(:task) { create(:task) }
+        if user&.authenticate(params[:password])
+          token = JsonWebTokenService.encode(user_id: user.id)
+          render json: {
+            token: token,
+            user: UserBlueprint.render_as_hash(user)
+          }, status: :ok
+        else
+          render json: { error: 'Invalid credentials' }, status: :unauthorized
+        end
+      end
 
-  describe '#perform' do
-    it 'sends notification' do
-      expect(SmsService).to receive(:send).with(
-        to: task.recipient.phone,
-        message: include(task.tracking_number)
-      )
-
-      described_class.perform_now(task.id)
-    end
-
-    it 'is idempotent' do
-      allow(SmsService).to receive(:send)
-      
-      # First call
-      described_class.perform_now(task.id)
-      
-      # Second call should not send again
-      expect(SmsService).not_to receive(:send)
-      described_class.perform_now(task.id)
-    end
-
-    context 'when task not found' do
-      it 'raises error' do
-        expect {
-          described_class.perform_now(0)
-        }.to raise_error(ActiveRecord::RecordNotFound)
+      def destroy
+        # Implement token revocation (requires Redis/database storage)
+        head :no_content
       end
     end
   end
+end
+```
 
-  describe 'queueing' do
-    it 'queues on correct queue' do
-      expect {
-        described_class.perform_later(task.id)
-      }.to have_enqueued_job.on_queue('notifications')
+**Base Controller with JWT Authentication:**
+
+```ruby
+# app/controllers/api/base_controller.rb
+module Api
+  class BaseController < ActionController::API
+    before_action :authenticate_api_user!
+
+    rescue_from ActiveRecord::RecordNotFound, with: :not_found
+    rescue_from ActionController::ParameterMissing, with: :bad_request
+
+    private
+
+    def authenticate_api_user!
+      token = request.headers['Authorization']&.split(' ')&.last
+      return render_unauthorized unless token
+
+      decoded_token = JsonWebTokenService.decode(token)
+      return render_unauthorized unless decoded_token
+
+      @current_user = User.find_by(id: decoded_token[:user_id])
+      return render_unauthorized unless @current_user
+
+      # Store in Current for easy access
+      Current.user = @current_user
+    rescue
+      render_unauthorized
+    end
+
+    def current_user
+      @current_user
+    end
+
+    def render_unauthorized
+      render json: { error: 'Unauthorized' }, status: :unauthorized
+    end
+
+    def not_found
+      render json: { error: 'Resource not found' }, status: :not_found
+    end
+
+    def bad_request
+      render json: { error: 'Bad request' }, status: :bad_request
     end
   end
 end
 ```
 
-## Monitoring & Debugging
+### API Keys (Alternative)
 
-### Sidekiq Web UI
+**For Service-to-Service Authentication:**
+
+```ruby
+# Migration
+create_table :api_keys do |t|
+  t.references :user, null: false, foreign_key: true
+  t.string :key, null: false, index: { unique: true }
+  t.string :name # e.g., "Production Server", "Mobile App"
+  t.datetime :last_used_at
+  t.datetime :expires_at
+  t.timestamps
+end
+
+# app/models/api_key.rb
+class ApiKey < ApplicationRecord
+  belongs_to :user
+
+  before_create :generate_key
+
+  scope :active, -> { where('expires_at IS NULL OR expires_at > ?', Time.current) }
+
+  def self.authenticate(key)
+    active.find_by(key: key)&.tap do |api_key|
+      api_key.update_column(:last_used_at, Time.current)
+    end
+  end
+
+  private
+
+  def generate_key
+    self.key = SecureRandom.base58(32)
+  end
+end
+
+# Authentication in controller
+def authenticate_api_key!
+  key = request.headers['X-API-Key'] || params[:api_key]
+  return render_unauthorized unless key
+
+  @api_key = ApiKey.authenticate(key)
+  return render_unauthorized unless @api_key
+
+  @current_user = @api_key.user
+  Current.user = @current_user
+end
+```
+
+---
+
+## Authorization
+
+### Pundit for APIs
+
+```ruby
+# Gemfile
+gem 'pundit'
+
+# app/controllers/api/base_controller.rb
+module Api
+  class BaseController < ActionController::API
+    include Pundit::Authorization
+
+    rescue_from Pundit::NotAuthorizedError, with: :forbidden
+
+    private
+
+    def forbidden
+      render json: { error: 'Forbidden' }, status: :forbidden
+    end
+  end
+end
+
+# app/policies/post_policy.rb
+class PostPolicy < ApplicationPolicy
+  def index?
+    true
+  end
+
+  def show?
+    record.published? || record.author == user
+  end
+
+  def create?
+    user.present?
+  end
+
+  def update?
+    record.author == user
+  end
+
+  def destroy?
+    record.author == user || user.admin?
+  end
+end
+
+# In controller
+def show
+  @post = Post.find(params[:id])
+  authorize @post
+  render json: PostBlueprint.render(@post)
+end
+```
+
+---
+
+## Versioning Strategies
+
+### URL Versioning (Recommended)
+
+**Routes:**
 
 ```ruby
 # config/routes.rb
-require 'sidekiq/web'
-
 Rails.application.routes.draw do
-  # Protect with authentication
-  authenticate :user, ->(u) { u.admin? } do
-    mount Sidekiq::Web => '/sidekiq'
+  namespace :api do
+    namespace :v1 do
+      resources :posts
+    end
+
+    namespace :v2 do
+      resources :posts
+    end
   end
 end
 ```
 
-### Useful Commands
+**Pros:** Simple, clear, cache-friendly
+**Cons:** URLs change between versions
+
+### Header Versioning
+
+```ruby
+# config/routes.rb
+namespace :api, defaults: { format: :json } do
+  scope module: :v1, constraints: ApiVersion.new('v1', default: true) do
+    resources :posts
+  end
+
+  scope module: :v2, constraints: ApiVersion.new('v2') do
+    resources :posts
+  end
+end
+
+# lib/api_version.rb
+class ApiVersion
+  def initialize(version, default = false)
+    @version = version
+    @default = default
+  end
+
+  def matches?(request)
+    @default || check_headers(request.headers)
+  end
+
+  private
+
+  def check_headers(headers)
+    accept = headers['Accept']
+    accept&.include?("application/vnd.myapp.#{@version}+json")
+  end
+end
+```
+
+**Usage:**
+```
+Accept: application/vnd.myapp.v2+json
+```
+
+---
+
+## Pagination
+
+### Kaminari
+
+```ruby
+# Gemfile
+gem 'kaminari'
+
+# Controller
+def index
+  @posts = Post.published
+               .page(params[:page])
+               .per(params[:per_page] || 25)
+
+  render json: {
+    posts: PostBlueprint.render_as_hash(@posts, view: :compact),
+    meta: pagination_meta(@posts)
+  }
+end
+
+private
+
+def pagination_meta(collection)
+  {
+    current_page: collection.current_page,
+    next_page: collection.next_page,
+    prev_page: collection.prev_page,
+    total_pages: collection.total_pages,
+    total_count: collection.total_count,
+    per_page: collection.limit_value
+  }
+end
+```
+
+### pagy (Faster Alternative)
+
+```ruby
+# Gemfile
+gem 'pagy'
+
+# app/controllers/api/base_controller.rb
+include Pagy::Backend
+
+def index
+  @pagy, @posts = pagy(Post.published, items: params[:per_page] || 25)
+
+  render json: {
+    posts: PostBlueprint.render_as_hash(@posts),
+    meta: pagy_metadata(@pagy)
+  }
+end
+
+private
+
+def pagy_metadata(pagy_object)
+  {
+    current_page: pagy_object.page,
+    next_page: pagy_object.next,
+    prev_page: pagy_object.prev,
+    total_pages: pagy_object.pages,
+    total_count: pagy_object.count,
+    per_page: pagy_object.items
+  }
+end
+```
+
+---
+
+## Rate Limiting
+
+### Rack::Attack
+
+```ruby
+# Gemfile
+gem 'rack-attack'
+
+# config/initializers/rack_attack.rb
+class Rack::Attack
+  # Throttle all requests by IP
+  throttle('req/ip', limit: 300, period: 5.minutes) do |req|
+    req.ip if req.path.start_with?('/api/')
+  end
+
+  # Throttle API requests by authentication token
+  throttle('api/token', limit: 1000, period: 1.hour) do |req|
+    req.env['HTTP_AUTHORIZATION']&.split(' ')&.last if req.path.start_with?('/api/')
+  end
+
+  # Throttle login attempts
+  throttle('logins/email', limit: 5, period: 20.minutes) do |req|
+    if req.path == '/api/v1/login' && req.post?
+      req.params['email'].to_s.downcase.gsub(/\s+/, "")
+    end
+  end
+
+  # Block specific IPs
+  blocklist('block bad IPs') do |req|
+    # Read from Redis or database
+    Redis.current.sismember('blocked_ips', req.ip)
+  end
+
+  # Custom response for throttled requests
+  self.throttled_responder = lambda do |env|
+    retry_after = env['rack.attack.match_data'][:period]
+    [
+      429,
+      {
+        'Content-Type' => 'application/json',
+        'Retry-After' => retry_after.to_s
+      },
+      [{ error: 'Rate limit exceeded', retry_after: retry_after }.to_json]
+    ]
+  end
+end
+
+# config/application.rb
+config.middleware.use Rack::Attack
+```
+
+---
+
+## Error Handling
+
+### Standardized Error Format
+
+```ruby
+# app/controllers/api/base_controller.rb
+module Api
+  class BaseController < ActionController::API
+    rescue_from StandardError, with: :internal_server_error
+    rescue_from ActiveRecord::RecordNotFound, with: :not_found
+    rescue_from ActiveRecord::RecordInvalid, with: :unprocessable_entity
+    rescue_from ActionController::ParameterMissing, with: :bad_request
+    rescue_from Pundit::NotAuthorizedError, with: :forbidden
+
+    private
+
+    def render_error(message, status, details = {})
+      render json: {
+        error: {
+          message: message,
+          status: status,
+          **details
+        }
+      }, status: status
+    end
+
+    def bad_request(exception)
+      render_error('Bad request', :bad_request, details: exception.message)
+    end
+
+    def unauthorized
+      render_error('Unauthorized', :unauthorized)
+    end
+
+    def forbidden(exception)
+      render_error('Forbidden', :forbidden, details: exception.message)
+    end
+
+    def not_found(exception)
+      render_error('Resource not found', :not_found, resource: exception.model)
+    end
+
+    def unprocessable_entity(exception)
+      render json: {
+        error: {
+          message: 'Validation failed',
+          status: 422,
+          errors: exception.record.errors.as_json
+        }
+      }, status: :unprocessable_entity
+    end
+
+    def internal_server_error(exception)
+      Rails.logger.error(exception.message)
+      Rails.logger.error(exception.backtrace.join("\n"))
+
+      # Report to error tracking service (Sentry, Rollbar, etc.)
+      ErrorTrackingService.report(exception) if defined?(ErrorTrackingService)
+
+      render_error('Internal server error', :internal_server_error)
+    end
+  end
+end
+```
+
+### Validation Errors Format
+
+```ruby
+# app/models/post.rb
+class Post < ApplicationRecord
+  validates :title, presence: true, length: { minimum: 5, maximum: 100 }
+  validates :body, presence: true
+end
+
+# Response for validation errors (422):
+{
+  "error": {
+    "message": "Validation failed",
+    "status": 422,
+    "errors": {
+      "title": ["can't be blank", "is too short (minimum is 5 characters)"],
+      "body": ["can't be blank"]
+    }
+  }
+}
+```
+
+---
+
+## CORS Configuration
+
+```ruby
+# Gemfile
+gem 'rack-cors'
+
+# config/initializers/cors.rb
+Rails.application.config.middleware.insert_before 0, Rack::Cors do
+  allow do
+    origins 'https://example.com', 'https://app.example.com'
+
+    resource '/api/*',
+      headers: :any,
+      methods: [:get, :post, :put, :patch, :delete, :options, :head],
+      credentials: true,
+      max_age: 86400
+  end
+
+  # Development
+  if Rails.env.development?
+    allow do
+      origins 'http://localhost:3000', 'http://localhost:3001'
+      resource '*', headers: :any, methods: :any
+    end
+  end
+end
+```
+
+---
+
+## API Documentation
+
+### rswag (OpenAPI/Swagger)
+
+**Installation:**
+
+```ruby
+# Gemfile
+gem 'rswag'
+
+# Run installer
+rails g rswag:install
+```
+
+**Request Spec:**
+
+```ruby
+# spec/requests/api/v1/posts_spec.rb
+require 'swagger_helper'
+
+RSpec.describe 'API V1 Posts', type: :request do
+  path '/api/v1/posts' do
+    get 'Retrieves posts' do
+      tags 'Posts'
+      produces 'application/json'
+      parameter name: :page, in: :query, type: :integer, required: false
+      parameter name: :per_page, in: :query, type: :integer, required: false
+
+      response '200', 'posts found' do
+        schema type: :object,
+          properties: {
+            posts: {
+              type: :array,
+              items: {
+                type: :object,
+                properties: {
+                  id: { type: :integer },
+                  title: { type: :string },
+                  body: { type: :string },
+                  published_at: { type: :string, format: 'date-time' }
+                },
+                required: ['id', 'title']
+              }
+            },
+            meta: {
+              type: :object,
+              properties: {
+                current_page: { type: :integer },
+                total_pages: { type: :integer },
+                total_count: { type: :integer }
+              }
+            }
+          }
+
+        run_test!
+      end
+    end
+
+    post 'Creates a post' do
+      tags 'Posts'
+      consumes 'application/json'
+      produces 'application/json'
+      parameter name: :post, in: :body, schema: {
+        type: :object,
+        properties: {
+          title: { type: :string },
+          body: { type: :string }
+        },
+        required: ['title', 'body']
+      }
+
+      response '201', 'post created' do
+        let(:post) { { title: 'Test Post', body: 'Test body' } }
+        run_test!
+      end
+
+      response '422', 'invalid request' do
+        let(:post) { { title: '' } }
+        run_test!
+      end
+    end
+  end
+end
+```
+
+**Generate Swagger Docs:**
 
 ```bash
-# Check queue sizes
-redis-cli LLEN queue:default
-redis-cli LLEN queue:critical
-
-# Monitor Sidekiq processes
-bundle exec sidekiq -q critical -q default
-
-# Clear all queues (DANGEROUS)
-redis-cli FLUSHDB
-
-# Check scheduled jobs
-redis-cli ZRANGE schedule 0 -1
+rake rswag:specs:swaggerize
 ```
+
+**Access at:** `http://localhost:3000/api-docs`
+
+---
+
+## Performance Optimization
+
+### Caching
+
+```ruby
+# Controller with caching
+def index
+  @posts = Rails.cache.fetch(['posts', 'index', params[:page]], expires_in: 5.minutes) do
+    Post.published
+        .includes(:author, :tags)
+        .page(params[:page])
+        .per(25)
+        .to_a
+  end
+
+  render json: PostBlueprint.render(@posts)
+end
+
+# ETags for conditional requests
+def show
+  @post = Post.find(params[:id])
+
+  if stale?(@post)
+    render json: PostBlueprint.render(@post)
+  end
+end
+```
+
+### N+1 Query Prevention
+
+```ruby
+# Always use includes/eager_load for associations
+def index
+  @posts = Post.published
+               .includes(:author, :tags, comments: :user)
+               .page(params[:page])
+
+  render json: PostBlueprint.render(@posts)
+end
+```
+
+### Bullet Gem (Development)
+
+```ruby
+# Gemfile
+group :development do
+  gem 'bullet'
+end
+
+# config/environments/development.rb
+config.after_initialize do
+  Bullet.enable = true
+  Bullet.alert = true
+  Bullet.bullet_logger = true
+  Bullet.console = true
+  Bullet.rails_logger = true
+  Bullet.add_footer = false # API doesn't need HTML footer
+end
+```
+
+---
+
+## Testing
+
+### Request Specs
+
+```ruby
+# spec/requests/api/v1/posts_spec.rb
+require 'rails_helper'
+
+RSpec.describe 'API V1 Posts', type: :request do
+  let(:user) { create(:user) }
+  let(:token) { JsonWebTokenService.encode(user_id: user.id) }
+  let(:auth_headers) { { 'Authorization' => "Bearer #{token}" } }
+
+  describe 'GET /api/v1/posts' do
+    before do
+      create_list(:post, 3, :published)
+      create(:post, :draft) # Should not be included
+    end
+
+    it 'returns published posts' do
+      get '/api/v1/posts', headers: auth_headers
+
+      expect(response).to have_http_status(:ok)
+      json = JSON.parse(response.body)
+      expect(json['posts'].size).to eq(3)
+    end
+
+    it 'paginates results' do
+      create_list(:post, 30, :published)
+
+      get '/api/v1/posts', params: { page: 2, per_page: 10 }, headers: auth_headers
+
+      json = JSON.parse(response.body)
+      expect(json['posts'].size).to eq(10)
+      expect(json['meta']['current_page']).to eq(2)
+    end
+
+    it 'returns 401 without authentication' do
+      get '/api/v1/posts'
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
+
+  describe 'POST /api/v1/posts' do
+    let(:valid_params) do
+      { post: { title: 'Test Post', body: 'Test body' } }
+    end
+
+    it 'creates a post' do
+      expect {
+        post '/api/v1/posts', params: valid_params, headers: auth_headers
+      }.to change(Post, :count).by(1)
+
+      expect(response).to have_http_status(:created)
+      json = JSON.parse(response.body)
+      expect(json['title']).to eq('Test Post')
+      expect(response.headers['Location']).to be_present
+    end
+
+    it 'returns validation errors' do
+      post '/api/v1/posts', params: { post: { title: '' } }, headers: auth_headers
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      json = JSON.parse(response.body)
+      expect(json['error']['errors']).to have_key('title')
+    end
+  end
+
+  describe 'PATCH /api/v1/posts/:id' do
+    let(:post_record) { create(:post, author: user) }
+
+    it 'updates the post' do
+      patch "/api/v1/posts/#{post_record.id}",
+        params: { post: { title: 'Updated' } },
+        headers: auth_headers
+
+      expect(response).to have_http_status(:ok)
+      expect(post_record.reload.title).to eq('Updated')
+    end
+
+    it 'returns 403 for unauthorized update' do
+      other_post = create(:post)
+
+      patch "/api/v1/posts/#{other_post.id}",
+        params: { post: { title: 'Hacked' } },
+        headers: auth_headers
+
+      expect(response).to have_http_status(:forbidden)
+    end
+  end
+end
+```
+
+### Factory for API Testing
+
+```ruby
+# spec/factories/users.rb
+FactoryBot.define do
+  factory :user do
+    email { Faker::Internet.email }
+    password { 'password123' }
+    password_confirmation { 'password123' }
+  end
+end
+
+# spec/factories/posts.rb
+FactoryBot.define do
+  factory :post do
+    title { Faker::Lorem.sentence }
+    body { Faker::Lorem.paragraphs(number: 3).join("\n") }
+    association :author, factory: :user
+
+    trait :published do
+      published_at { 1.day.ago }
+    end
+
+    trait :draft do
+      published_at { nil }
+    end
+  end
+end
+```
+
+### Shared Examples for API Responses
+
+```ruby
+# spec/support/shared_examples/api_responses.rb
+RSpec.shared_examples 'requires authentication' do
+  it 'returns 401 without token' do
+    make_request(headers: {})
+    expect(response).to have_http_status(:unauthorized)
+  end
+
+  it 'returns 401 with invalid token' do
+    make_request(headers: { 'Authorization' => 'Bearer invalid' })
+    expect(response).to have_http_status(:unauthorized)
+  end
+end
+
+RSpec.shared_examples 'paginates results' do
+  it 'includes pagination metadata' do
+    make_request
+
+    json = JSON.parse(response.body)
+    expect(json['meta']).to include(
+      'current_page',
+      'total_pages',
+      'total_count'
+    )
+  end
+end
+
+# Usage in specs
+describe 'GET /api/v1/posts' do
+  def make_request(headers: auth_headers)
+    get '/api/v1/posts', headers: headers
+  end
+
+  it_behaves_like 'requires authentication'
+  it_behaves_like 'paginates results'
+end
+```
+
+---
+
+## Security Best Practices
+
+### Input Sanitization
+
+```ruby
+# Always use strong parameters
+def post_params
+  params.require(:post).permit(:title, :body, :published_at, tag_ids: [])
+end
+```
+
+### SQL Injection Prevention
+
+```ruby
+# BAD - vulnerable to SQL injection
+Post.where("title = '#{params[:title]}'")
+
+# GOOD - use parameterized queries
+Post.where("title = ?", params[:title])
+Post.where(title: params[:title])
+```
+
+### Mass Assignment Protection
+
+```ruby
+# Models automatically protected with strong parameters
+# Never use:
+Post.new(params[:post]) # BAD
+Post.create(params[:post]) # BAD
+
+# Always use:
+Post.new(post_params) # GOOD
+Post.create(post_params) # GOOD
+```
+
+### Sensitive Data Filtering
+
+```ruby
+# config/initializers/filter_parameter_logging.rb
+Rails.application.config.filter_parameters += [
+  :password,
+  :password_confirmation,
+  :token,
+  :api_key,
+  :secret,
+  :credit_card
+]
+```
+
+---
 
 ## Anti-Patterns to Avoid
 
-### ❌ Non-Idempotent Jobs
+### ❌ Don't Return ActiveRecord Objects Directly
 
 ```ruby
-# WRONG
-def perform(user_id)
-  User.find(user_id).increment!(:login_count)
+# BAD
+def index
+  render json: Post.all # Exposes all attributes
+end
+
+# GOOD
+def index
+  render json: PostBlueprint.render(Post.all)
 end
 ```
 
-### ❌ Large Payloads
+### ❌ Don't Use Sessions/Cookies in APIs
 
 ```ruby
-# WRONG
-def perform(user_data)  # Passing full hash
-  User.create!(user_data)
-end
-
-# CORRECT
-def perform(user_id)
-  user = User.find(user_id)
-  # Process user
-end
+# APIs should be stateless
+# Use JWT or API keys, not session-based authentication
 ```
 
-### ❌ Long-Running Jobs
+### ❌ Don't Skip Authorization
 
 ```ruby
-# WRONG - Job runs for hours
-def perform
-  User.all.each { |u| process(u) }
+# BAD
+def destroy
+  @post = Post.find(params[:id])
+  @post.destroy
 end
 
-# CORRECT - Batch into smaller jobs
-def perform(user_ids)
-  User.where(id: user_ids).find_each { |u| process(u) }
+# GOOD
+def destroy
+  @post = Post.find(params[:id])
+  authorize @post # Pundit
+  @post.destroy
 end
 ```
 
-### ❌ No Error Handling
+### ❌ Don't Ignore Rate Limiting
 
 ```ruby
-# WRONG
-def perform(task_id)
-  external_api.call(task_id)  # May fail silently
-end
-
-# CORRECT
-def perform(task_id)
-  result = external_api.call(task_id)
-  raise "API failed: #{result.error}" unless result.success?
-end
+# Always implement rate limiting for public APIs
+# Use Rack::Attack or similar
 ```
 
-## Checklist Before Creating Jobs
+### ❌ Don't Return 200 for All Responses
 
+```ruby
+# Use appropriate status codes
+# 200 OK, 201 Created, 204 No Content, 400 Bad Request, etc.
 ```
-[ ] Job is idempotent (safe to run multiple times)
-[ ] Passes IDs, not objects
-[ ] Has appropriate retry configuration
-[ ] Handles expected errors gracefully
-[ ] Logs failures for debugging
-[ ] Has correct queue assignment
-[ ] Has tests covering happy path and failures
-```
+
+---
+
+## Summary Checklist
+
+When building a new API endpoint:
+
+- [ ] Use RESTful resource naming and HTTP methods
+- [ ] Implement proper authentication (JWT/API keys)
+- [ ] Add authorization checks (Pundit)
+- [ ] Use serializers (Blueprinter) - never expose raw models
+- [ ] Return appropriate HTTP status codes
+- [ ] Implement pagination for list endpoints
+- [ ] Add rate limiting (Rack::Attack)
+- [ ] Configure CORS properly
+- [ ] Handle errors consistently
+- [ ] Write comprehensive request specs
+- [ ] Document with rswag/OpenAPI
+- [ ] Optimize queries (includes, caching)
+- [ ] Version your API (URL or header)
+- [ ] Filter sensitive parameters in logs
+- [ ] Use strong parameters for mass assignment protection
+
+This skill provides the foundation for building production-ready REST APIs in Rails!

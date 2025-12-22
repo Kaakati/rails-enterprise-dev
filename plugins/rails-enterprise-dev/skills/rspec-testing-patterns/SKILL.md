@@ -650,6 +650,685 @@ RSpec.configure do |config|
 end
 ```
 
+## API Testing Comprehensive Patterns
+
+### Request Specs for REST APIs
+
+```ruby
+# spec/requests/api/v1/posts_spec.rb
+require 'rails_helper'
+
+RSpec.describe 'API V1 Posts', type: :request do
+  let(:user) { create(:user) }
+  let(:token) { JsonWebTokenService.encode(user_id: user.id) }
+  let(:auth_headers) { { 'Authorization' => "Bearer #{token}", 'Content-Type' => 'application/json' } }
+
+  describe 'GET /api/v1/posts' do
+    context 'with valid authentication' do
+      before do
+        create_list(:post, 3, :published)
+        create(:post, :draft)
+      end
+
+      it 'returns published posts' do
+        get '/api/v1/posts', headers: auth_headers
+
+        expect(response).to have_http_status(:ok)
+        expect(json_response['posts'].size).to eq(3)
+      end
+
+      it 'includes pagination metadata' do
+        create_list(:post, 30, :published)
+
+        get '/api/v1/posts', params: { page: 2, per_page: 10 }, headers: auth_headers
+
+        expect(json_response['meta']).to include(
+          'current_page' => 2,
+          'total_pages' => 3,
+          'total_count' => 30,
+          'per_page' => 10
+        )
+      end
+
+      it 'filters by status' do
+        create_list(:post, 2, status: 'published')
+        create_list(:post, 3, status: 'draft')
+
+        get '/api/v1/posts', params: { status: 'draft' }, headers: auth_headers
+
+        expect(json_response['posts'].size).to eq(3)
+      end
+    end
+
+    context 'without authentication' do
+      it 'returns 401 unauthorized' do
+        get '/api/v1/posts'
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(json_response['error']).to eq('Unauthorized')
+      end
+    end
+
+    context 'with invalid token' do
+      it 'returns 401 unauthorized' do
+        get '/api/v1/posts', headers: { 'Authorization' => 'Bearer invalid' }
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+  end
+
+  describe 'POST /api/v1/posts' do
+    let(:valid_params) do
+      {
+        post: {
+          title: 'Test Post',
+          body: 'Test body content',
+          published_at: Time.current
+        }
+      }
+    end
+
+    context 'with valid parameters' do
+      it 'creates a post' do
+        expect {
+          post '/api/v1/posts', params: valid_params.to_json, headers: auth_headers
+        }.to change(Post, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+        expect(json_response['title']).to eq('Test Post')
+        expect(response.headers['Location']).to be_present
+      end
+
+      it 'returns serialized post' do
+        post '/api/v1/posts', params: valid_params.to_json, headers: auth_headers
+
+        expect(json_response).to include(
+          'id',
+          'title',
+          'body',
+          'published_at'
+        )
+        expect(json_response).not_to include('password', 'internal_notes')
+      end
+    end
+
+    context 'with invalid parameters' do
+      let(:invalid_params) { { post: { title: '' } } }
+
+      it 'returns validation errors' do
+        post '/api/v1/posts', params: invalid_params.to_json, headers: auth_headers
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json_response['error']['errors']).to have_key('title')
+        expect(json_response['error']['errors']['title']).to include("can't be blank")
+      end
+
+      it 'does not create post' do
+        expect {
+          post '/api/v1/posts', params: invalid_params.to_json, headers: auth_headers
+        }.not_to change(Post, :count)
+      end
+    end
+  end
+
+  describe 'PATCH /api/v1/posts/:id' do
+    let(:post_record) { create(:post, author: user) }
+    let(:update_params) { { post: { title: 'Updated Title' } } }
+
+    context 'when user is post author' do
+      it 'updates the post' do
+        patch "/api/v1/posts/#{post_record.id}",
+              params: update_params.to_json,
+              headers: auth_headers
+
+        expect(response).to have_http_status(:ok)
+        expect(post_record.reload.title).to eq('Updated Title')
+      end
+    end
+
+    context 'when user is not post author' do
+      let(:other_post) { create(:post) }
+
+      it 'returns 403 forbidden' do
+        patch "/api/v1/posts/#{other_post.id}",
+              params: update_params.to_json,
+              headers: auth_headers
+
+        expect(response).to have_http_status(:forbidden)
+        expect(json_response['error']).to eq('Forbidden')
+      end
+    end
+
+    context 'when post does not exist' do
+      it 'returns 404 not found' do
+        patch '/api/v1/posts/99999',
+              params: update_params.to_json,
+              headers: auth_headers
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+  end
+
+  describe 'DELETE /api/v1/posts/:id' do
+    let(:post_record) { create(:post, author: user) }
+
+    it 'deletes the post' do
+      delete "/api/v1/posts/#{post_record.id}", headers: auth_headers
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to be_empty
+      expect(Post.exists?(post_record.id)).to be false
+    end
+  end
+
+  # Helper method for parsing JSON responses
+  def json_response
+    JSON.parse(response.body)
+  end
+end
+```
+
+### Testing Rate Limiting
+
+```ruby
+# spec/requests/api/rate_limiting_spec.rb
+require 'rails_helper'
+
+RSpec.describe 'API Rate Limiting', type: :request do
+  let(:user) { create(:user) }
+  let(:token) { JsonWebTokenService.encode(user_id: user.id) }
+  let(:auth_headers) { { 'Authorization' => "Bearer #{token}" } }
+
+  before do
+    # Use Rack::Attack test mode
+    Rack::Attack.cache.store = ActiveSupport::Cache::MemoryStore.new
+    Rack::Attack.enabled = true
+  end
+
+  after do
+    Rack::Attack.cache.store.clear
+  end
+
+  it 'allows requests within limit' do
+    5.times do
+      get '/api/v1/posts', headers: auth_headers
+      expect(response).to have_http_status(:ok)
+    end
+  end
+
+  it 'throttles requests exceeding limit' do
+    # Assuming limit is 10 requests per minute
+    11.times do |i|
+      get '/api/v1/posts', headers: auth_headers
+    end
+
+    expect(response).to have_http_status(:too_many_requests)
+    expect(response.headers['Retry-After']).to be_present
+  end
+end
+```
+
+### Testing API Versioning
+
+```ruby
+# spec/requests/api/versioning_spec.rb
+require 'rails_helper'
+
+RSpec.describe 'API Versioning', type: :request do
+  let(:user) { create(:user) }
+  let(:token) { JsonWebTokenService.encode(user_id: user.id) }
+
+  describe 'v1 endpoint' do
+    it 'returns v1 response format' do
+      get '/api/v1/posts', headers: { 'Authorization' => "Bearer #{token}" }
+
+      expect(json_response).to have_key('posts')
+      expect(json_response).to have_key('meta')
+    end
+  end
+
+  describe 'v2 endpoint' do
+    it 'returns v2 response format' do
+      get '/api/v2/posts', headers: { 'Authorization' => "Bearer #{token}" }
+
+      # v2 might have different structure
+      expect(json_response).to have_key('data')
+      expect(json_response).to have_key('pagination')
+    end
+  end
+
+  describe 'header-based versioning' do
+    it 'uses v2 with accept header' do
+      get '/api/posts',
+          headers: {
+            'Authorization' => "Bearer #{token}",
+            'Accept' => 'application/vnd.myapp.v2+json'
+          }
+
+      expect(response).to have_http_status(:ok)
+    end
+  end
+end
+```
+
+### Shared Examples for API Responses
+
+```ruby
+# spec/support/shared_examples/api_responses.rb
+RSpec.shared_examples 'requires authentication' do |method, path|
+  it 'returns 401 without token' do
+    send(method, path)
+    expect(response).to have_http_status(:unauthorized)
+  end
+
+  it 'returns 401 with invalid token' do
+    send(method, path, headers: { 'Authorization' => 'Bearer invalid' })
+    expect(response).to have_http_status(:unauthorized)
+  end
+end
+
+RSpec.shared_examples 'paginates results' do
+  it 'includes pagination metadata' do
+    make_request
+
+    expect(json_response['meta']).to include(
+      'current_page',
+      'total_pages',
+      'total_count',
+      'per_page'
+    )
+  end
+
+  it 'respects per_page parameter' do
+    make_request(per_page: 5)
+
+    expect(json_response['meta']['per_page']).to eq(5)
+    expect(json_response[collection_key].size).to be <= 5
+  end
+end
+
+RSpec.shared_examples 'returns JSON API format' do
+  it 'sets correct content type' do
+    make_request
+    expect(response.content_type).to include('application/json')
+  end
+
+  it 'returns valid JSON' do
+    make_request
+    expect { JSON.parse(response.body) }.not_to raise_error
+  end
+end
+
+# Usage
+describe 'GET /api/v1/posts' do
+  def make_request(params = {})
+    get '/api/v1/posts', params: params, headers: auth_headers
+  end
+
+  let(:collection_key) { 'posts' }
+
+  it_behaves_like 'requires authentication', :get, '/api/v1/posts'
+  it_behaves_like 'paginates results'
+  it_behaves_like 'returns JSON API format'
+end
+```
+
+## Hotwire Testing Patterns
+
+### System Tests for Turbo
+
+```ruby
+# spec/system/turbo_posts_spec.rb
+require 'rails_helper'
+
+RSpec.describe 'Turbo Posts', type: :system do
+  before do
+    driven_by(:selenium_chrome_headless)
+  end
+
+  describe 'creating a post with Turbo' do
+    it 'creates post without full page reload' do
+      visit posts_path
+
+      within '#new_post' do
+        fill_in 'Title', with: 'My Turbo Post'
+        fill_in 'Body', with: 'Content here'
+        click_button 'Create Post'
+      end
+
+      # Post appears without page reload
+      expect(page).to have_content('My Turbo Post')
+      expect(page).to have_current_path(posts_path) # No redirect
+
+      # Form is reset
+      expect(find_field('Title').value).to be_blank
+    end
+
+    it 'displays validation errors inline' do
+      visit posts_path
+
+      within '#new_post' do
+        fill_in 'Title', with: ''
+        click_button 'Create Post'
+      end
+
+      # Error displayed without reload
+      within '#new_post' do
+        expect(page).to have_content("can't be blank")
+      end
+    end
+  end
+
+  describe 'updating post with Turbo Frame' do
+    let!(:post) { create(:post, title: 'Original Title') }
+
+    it 'updates post inline' do
+      visit posts_path
+
+      within "##{dom_id(post)}" do
+        click_link 'Edit'
+
+        # Edit form loads in frame
+        fill_in 'Title', with: 'Updated Title'
+        click_button 'Update'
+
+        # Updated content shows in place
+        expect(page).to have_content('Updated Title')
+        expect(page).not_to have_field('Title') # No longer editing
+      end
+
+      # Rest of page unchanged
+      expect(page).to have_current_path(posts_path)
+    end
+  end
+
+  describe 'deleting post with Turbo Stream' do
+    let!(:post) { create(:post, title: 'To Delete') }
+
+    it 'removes post from list' do
+      visit posts_path
+
+      within "##{dom_id(post)}" do
+        accept_confirm do
+          click_button 'Delete'
+        end
+      end
+
+      # Post removed without page reload
+      expect(page).not_to have_content('To Delete')
+      expect(page).to have_current_path(posts_path)
+    end
+  end
+
+  describe 'real-time updates with Turbo Streams' do
+    it 'shows new posts from other users', :js do
+      visit posts_path
+
+      # Simulate another user creating a post
+      perform_enqueued_jobs do
+        create(:post, title: 'Real-time Post')
+      end
+
+      # New post appears automatically
+      expect(page).to have_content('Real-time Post')
+    end
+  end
+end
+```
+
+### Testing Turbo Frames
+
+```ruby
+# spec/system/turbo_frames_spec.rb
+require 'rails_helper'
+
+RSpec.describe 'Turbo Frames', type: :system do
+  before do
+    driven_by(:selenium_chrome_headless)
+  end
+
+  describe 'lazy loading frames' do
+    let!(:post) { create(:post) }
+
+    it 'loads frame content when visible' do
+      visit post_path(post)
+
+      # Frame starts with loading message
+      within 'turbo-frame#comments' do
+        expect(page).to have_content('Loading comments...')
+      end
+
+      # Wait for lazy load
+      sleep 0.5
+
+      # Comments loaded
+      within 'turbo-frame#comments' do
+        expect(page).not_to have_content('Loading comments...')
+        expect(page).to have_selector('.comment', count: post.comments.count)
+      end
+    end
+  end
+
+  describe 'frame navigation' do
+    let!(:post) { create(:post) }
+
+    it 'navigates within frame boundary' do
+      visit posts_path
+
+      # Click link that targets frame
+      within 'turbo-frame#sidebar' do
+        click_link 'Categories'
+
+        # Only frame content changes
+        expect(page).to have_content('All Categories')
+      end
+
+      # Main content unchanged
+      expect(page).to have_current_path(posts_path)
+    end
+
+    it 'breaks out of frame with data-turbo-frame="_top"' do
+      visit posts_path
+
+      within 'turbo-frame#sidebar' do
+        click_link 'View All Posts', data: { turbo_frame: '_top' }
+      end
+
+      # Full page navigation occurred
+      expect(page).to have_current_path(posts_path)
+    end
+  end
+end
+```
+
+### Testing Stimulus Controllers
+
+```ruby
+# spec/javascript/controllers/search_controller_spec.js
+import { Application } from "@hotwired/stimulus"
+import SearchController from "controllers/search_controller"
+
+describe("SearchController", () => {
+  let application
+  let controller
+
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div data-controller="search">
+        <input data-search-target="input" type="text">
+        <div data-search-target="results"></div>
+        <span data-search-target="count"></span>
+      </div>
+    `
+
+    application = Application.start()
+    application.register("search", SearchController)
+    controller = application.getControllerForElementAndIdentifier(
+      document.querySelector('[data-controller="search"]'),
+      "search"
+    )
+  })
+
+  afterEach(() => {
+    application.stop()
+  })
+
+  describe("#connect", () => {
+    it("initializes with empty results", () => {
+      expect(controller.resultsTarget.innerHTML).toBe("")
+    })
+  })
+
+  describe("#search", () => {
+    it("performs search with query", async () => {
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          text: () => Promise.resolve("<div class='result'>Result 1</div>")
+        })
+      )
+
+      controller.inputTarget.value = "test query"
+      await controller.search()
+
+      expect(global.fetch).toHaveBeenCalledWith("/search?q=test query")
+      expect(controller.resultsTarget.innerHTML).toContain("Result 1")
+    })
+
+    it("updates count", async () => {
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          text: () => Promise.resolve("<div>1</div><div>2</div>")
+        })
+      )
+
+      controller.inputTarget.value = "test"
+      await controller.search()
+
+      expect(controller.countTarget.textContent).toBe("2")
+    })
+  })
+
+  describe("#clear", () => {
+    it("clears input and results", () => {
+      controller.inputTarget.value = "test"
+      controller.resultsTarget.innerHTML = "<div>Results</div>"
+
+      controller.clear()
+
+      expect(controller.inputTarget.value).toBe("")
+      expect(controller.resultsTarget.innerHTML).toBe("")
+    })
+  })
+})
+```
+
+### Testing Turbo Streams in Request Specs
+
+```ruby
+# spec/requests/turbo_streams_spec.rb
+require 'rails_helper'
+
+RSpec.describe 'Turbo Streams', type: :request do
+  let(:user) { create(:user) }
+
+  before { sign_in user }
+
+  describe 'POST /posts' do
+    let(:valid_params) { { post: { title: 'Test', body: 'Content' } } }
+
+    it 'returns turbo stream response' do
+      post posts_path, params: valid_params, as: :turbo_stream
+
+      expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+      expect(response.body).to include('turbo-stream')
+    end
+
+    it 'prepends new post' do
+      post posts_path, params: valid_params, as: :turbo_stream
+
+      expect(response.body).to include('action="prepend"')
+      expect(response.body).to include('target="posts"')
+      expect(response.body).to include('Test')
+    end
+
+    it 'resets form' do
+      post posts_path, params: valid_params, as: :turbo_stream
+
+      # Check for form reset stream
+      expect(response.body).to include('action="replace"')
+      expect(response.body).to include('target="post_form"')
+    end
+
+    context 'with validation errors' do
+      let(:invalid_params) { { post: { title: '' } } }
+
+      it 'returns unprocessable entity status' do
+        post posts_path, params: invalid_params, as: :turbo_stream
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+
+      it 'replaces form with errors' do
+        post posts_path, params: invalid_params, as: :turbo_stream
+
+        expect(response.body).to include('action="replace"')
+        expect(response.body).to include("can't be blank")
+      end
+    end
+  end
+
+  describe 'DELETE /posts/:id' do
+    let!(:post) { create(:post, author: user) }
+
+    it 'removes post via turbo stream' do
+      delete post_path(post), as: :turbo_stream
+
+      expect(response.body).to include('action="remove"')
+      expect(response.body).to include(dom_id(post))
+    end
+  end
+end
+```
+
+### Integration with Capybara Helpers
+
+```ruby
+# spec/support/turbo_helpers.rb
+module TurboHelpers
+  def expect_turbo_stream(action:, target:)
+    expect(page).to have_selector(
+      "turbo-stream[action='#{action}'][target='#{target}']",
+      visible: false
+    )
+  end
+
+  def wait_for_turbo_frame(id, timeout: 5)
+    expect(page).to have_selector("turbo-frame##{id}[complete]", wait: timeout)
+  end
+
+  def within_turbo_frame(id, &block)
+    within("turbo-frame##{id}", &block)
+  end
+end
+
+RSpec.configure do |config|
+  config.include TurboHelpers, type: :system
+end
+
+# Usage
+it 'loads comments in frame' do
+  visit post_path(post)
+
+  wait_for_turbo_frame('comments')
+
+  within_turbo_frame('comments') do
+    expect(page).to have_selector('.comment', count: 5)
+  end
+end
+```
+
 ## Configuration
 
 ```ruby
