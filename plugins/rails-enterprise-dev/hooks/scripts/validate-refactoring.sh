@@ -98,6 +98,7 @@ JS_REFS=0
 JS_ERB_REFS=0
 CONFIG_REFS=0
 LOCALE_REFS=0
+SCHEMA_REFS=0
 
 # Temporary files for storing results
 RUBY_RESULTS=$(mktemp)
@@ -110,9 +111,10 @@ JS_RESULTS=$(mktemp)
 JS_ERB_RESULTS=$(mktemp)
 CONFIG_RESULTS=$(mktemp)
 LOCALE_RESULTS=$(mktemp)
+SCHEMA_RESULTS=$(mktemp)
 
 # Cleanup temp files on exit
-trap "rm -f $RUBY_RESULTS $VIEW_RESULTS $ROUTE_RESULTS $SPEC_RESULTS $FACTORY_RESULTS $MIGRATION_RESULTS $JS_RESULTS $JS_ERB_RESULTS $CONFIG_RESULTS $LOCALE_RESULTS" EXIT
+trap "rm -f $RUBY_RESULTS $VIEW_RESULTS $ROUTE_RESULTS $SPEC_RESULTS $FACTORY_RESULTS $MIGRATION_RESULTS $JS_RESULTS $JS_ERB_RESULTS $CONFIG_RESULTS $LOCALE_RESULTS $SCHEMA_RESULTS" EXIT
 
 # Search for remaining references to old name
 
@@ -199,8 +201,54 @@ if [ -d "config/locales" ]; then
   fi
 fi
 
+# 11. Schema.rb verification (database consistency check)
+if [ -f "db/schema.rb" ]; then
+  # Determine refactor type from OLD_NAME and NEW_NAME patterns
+  # If both are capitalized (e.g., Payment, Transaction), likely a table/model rename
+  # Check if this looks like a table-level refactoring
+
+  if [[ "$OLD_NAME" =~ ^[A-Z] ]] && [[ "$NEW_NAME" =~ ^[A-Z] ]]; then
+    # Likely a class/table rename - convert to snake_case for table name
+    OLD_TABLE=$(echo "$OLD_NAME" | sed 's/\([A-Z]\)/_\L\1/g' | sed 's/^_//' | sed 's/__/_/g')
+    NEW_TABLE=$(echo "$NEW_NAME" | sed 's/\([A-Z]\)/_\L\1/g' | sed 's/^_//' | sed 's/__/_/g')
+
+    # Verify new table exists in schema.rb
+    if ! grep -q "create_table \"${NEW_TABLE}\"" db/schema.rb 2>/dev/null; then
+      echo "❌ New table '${NEW_TABLE}' NOT FOUND in schema.rb" >> "$SCHEMA_RESULTS"
+      echo "   Migration may not have been run yet" >> "$SCHEMA_RESULTS"
+      ((SCHEMA_REFS++))
+    fi
+
+    # Verify old table doesn't exist in schema.rb
+    if grep -q "create_table \"${OLD_TABLE}\"" db/schema.rb 2>/dev/null; then
+      echo "❌ Old table '${OLD_TABLE}' still exists in schema.rb" >> "$SCHEMA_RESULTS"
+      echo "   Schema not updated after refactoring" >> "$SCHEMA_RESULTS"
+      ((SCHEMA_REFS++))
+    fi
+
+    # If both checks passed and we have results, add success message
+    if [ $SCHEMA_REFS -eq 0 ]; then
+      echo "✅ Schema.rb verified: '${NEW_TABLE}' exists, '${OLD_TABLE}' removed" >> "$SCHEMA_RESULTS"
+    fi
+  else
+    # Likely a column/attribute rename - would need table name to verify
+    # For now, just check if schema.rb was updated recently
+    if [ -n "$(find db/schema.rb -mmin -60 2>/dev/null)" ]; then
+      echo "ℹ️  Schema.rb modified recently (within last hour)" >> "$SCHEMA_RESULTS"
+    else
+      echo "⚠️  Schema.rb not recently modified - verify migration was run" >> "$SCHEMA_RESULTS"
+      echo "   (Column-level validation requires table name parameter)" >> "$SCHEMA_RESULTS"
+    fi
+  fi
+elif [ -f "db/structure.sql" ]; then
+  echo "ℹ️  Project uses structure.sql instead of schema.rb" >> "$SCHEMA_RESULTS"
+  echo "   Schema validation skipped (SQL format not yet supported)" >> "$SCHEMA_RESULTS"
+else
+  echo "⚠️  No schema file found (db/schema.rb or db/structure.sql)" >> "$SCHEMA_RESULTS"
+fi
+
 # Calculate total
-TOTAL_REFS=$((RUBY_REFS + VIEW_REFS + ROUTE_REFS + SPEC_REFS + FACTORY_REFS + MIGRATION_REFS + JS_REFS + JS_ERB_REFS + CONFIG_REFS + LOCALE_REFS))
+TOTAL_REFS=$((RUBY_REFS + VIEW_REFS + ROUTE_REFS + SPEC_REFS + FACTORY_REFS + MIGRATION_REFS + JS_REFS + JS_ERB_REFS + CONFIG_REFS + LOCALE_REFS + SCHEMA_REFS))
 
 # Display results summary
 echo "📊 Validation Results:"
@@ -214,6 +262,7 @@ echo "  JavaScript:     $JS_REFS references"
 echo "  JS ERB:         $JS_ERB_REFS references"
 echo "  Config files:   $CONFIG_REFS references"
 echo "  Locales:        $LOCALE_REFS references"
+echo "  Schema.rb:      $SCHEMA_REFS issues"
 echo "  ────────────────────────────"
 echo "  Total:          $TOTAL_REFS references"
 echo ""
@@ -242,6 +291,7 @@ if [ $TOTAL_REFS -eq 0 ]; then
 - JS ERB: 0 references
 - Config files: 0 references
 - Locales: 0 references
+- Schema.rb: 0 issues
 
 No remaining references to '$OLD_NAME' found. Refactoring is complete." 2>/dev/null || true
   fi
@@ -338,6 +388,12 @@ if [ $LOCALE_REFS -gt 0 ]; then
   echo ""
 fi
 
+if [ $SCHEMA_REFS -gt 0 ] || [ -s "$SCHEMA_RESULTS" ]; then
+  echo "Schema.rb validation:"
+  cat "$SCHEMA_RESULTS"
+  echo ""
+fi
+
 echo "Next steps:"
 echo "1. Update the remaining references listed above"
 echo "2. Add intentional references to .refactorignore if needed"
@@ -367,6 +423,7 @@ if [ -n "$ISSUE_ID" ] && command -v bd &> /dev/null; then
 - JS ERB: $JS_ERB_REFS references
 - Config files: $CONFIG_REFS references
 - Locales: $LOCALE_REFS references
+- Schema.rb: $SCHEMA_REFS issues
 
 **Total**: $TOTAL_REFS remaining references
 

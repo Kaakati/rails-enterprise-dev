@@ -994,8 +994,10 @@ end
 
 **Validation**:
 - [ ] Migration runs: `rails db:migrate`
+- [ ] Schema updated: `git diff db/schema.rb` shows expected changes
+- [ ] New table/column appears in schema.rb
+- [ ] Old table/column removed from schema.rb (if rename)
 - [ ] Rollback works: `rails db:rollback`
-- [ ] Schema updated correctly
 
 **Skills**: activerecord-patterns (for index strategy)
 

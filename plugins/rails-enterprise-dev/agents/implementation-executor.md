@@ -1643,6 +1643,8 @@ When refactoring, check these layers:
 
 **Attribute Rename** (`user_id` → `account_id`):
 - [ ] Database migration (column rename)
+- [ ] Run migration: `rails db:migrate`
+- [ ] Schema.rb updated: column rename appears in table definition
 - [ ] Model attribute references
 - [ ] Validations
 - [ ] Associations (`:foreign_key` option)
@@ -1659,6 +1661,10 @@ When refactoring, check these layers:
 
 **Table Rename** (`payments` → `transactions`):
 - [ ] Database migration (table rename)
+- [ ] Run migration: `rails db:migrate`
+- [ ] Schema.rb updated: `git diff db/schema.rb` shows table rename
+- [ ] New table name appears in schema.rb
+- [ ] Old table name removed from schema.rb
 - [ ] Model `table_name` declaration
 - [ ] Foreign key constraints
 - [ ] Indexes

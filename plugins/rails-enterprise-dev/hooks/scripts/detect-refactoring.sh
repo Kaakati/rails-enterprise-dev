@@ -207,7 +207,73 @@ if [ -n "$CONFIG_FILES" ]; then
 fi
 
 #==============================================================================
-# 5. OUTPUT WARNINGS IF DETECTIONS FOUND
+# 5. DETECT SCHEMA.RB CHANGES
+#==============================================================================
+
+# Only check if schema.rb is tracked in git and has changed
+if git ls-files --error-unmatch db/schema.rb &>/dev/null 2>&1; then
+  if git diff --name-only --cached 2>/dev/null | grep -q "db/schema.rb"; then
+
+    if [ -z "$DETECTIONS" ]; then
+      DETECTIONS="\n"
+    fi
+
+    DETECTIONS="${DETECTIONS}📝 **Schema.rb Changes Detected**:\n"
+
+    SCHEMA_DIFF=$(git diff --cached db/schema.rb 2>/dev/null)
+
+    # Detect table name changes
+    REMOVED_TABLES=$(echo "$SCHEMA_DIFF" | grep -E "^-.*create_table" | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u)
+    ADDED_TABLES=$(echo "$SCHEMA_DIFF" | grep -E "^\+.*create_table" | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u)
+
+    if [ -n "$REMOVED_TABLES" ] || [ -n "$ADDED_TABLES" ]; then
+      DETECTIONS="${DETECTIONS}  Tables removed: ${REMOVED_TABLES:-none}\n"
+      DETECTIONS="${DETECTIONS}  Tables added: ${ADDED_TABLES:-none}\n"
+      ((DETECTION_COUNT++))
+    fi
+
+    # Count column definition changes
+    COLUMN_CHANGES=$(echo "$SCHEMA_DIFF" | grep -cE "^[-+].*t\.(string|integer|text|decimal|datetime|boolean|date|time|float|binary|references|bigint)" || echo "0")
+
+    if [ "$COLUMN_CHANGES" -gt 0 ]; then
+      DETECTIONS="${DETECTIONS}  Column definitions changed: $COLUMN_CHANGES lines\n"
+      ((DETECTION_COUNT++))
+    fi
+
+    # Count foreign key changes
+    FK_CHANGES=$(echo "$SCHEMA_DIFF" | grep -cE "^[-+].*add_foreign_key" || echo "0")
+
+    if [ "$FK_CHANGES" -gt 0 ]; then
+      DETECTIONS="${DETECTIONS}  Foreign key changes: $FK_CHANGES\n"
+      ((DETECTION_COUNT++))
+    fi
+
+    # Count index changes
+    IDX_CHANGES=$(echo "$SCHEMA_DIFF" | grep -cE "^[-+].*add_index" || echo "0")
+
+    if [ "$IDX_CHANGES" -gt 0 ]; then
+      DETECTIONS="${DETECTIONS}  Index changes: $IDX_CHANGES\n"
+      ((DETECTION_COUNT++))
+    fi
+
+  fi
+elif [ -f "db/schema.rb" ]; then
+  # schema.rb exists but not tracked - check if migrations exist
+  RECENT_MIGRATIONS=$(find db/migrate -name "*.rb" -mmin -60 2>/dev/null || true)
+
+  if [ -n "$RECENT_MIGRATIONS" ]; then
+    if [ -z "$DETECTIONS" ]; then
+      DETECTIONS="\n"
+    fi
+    DETECTIONS="${DETECTIONS}⚠️  **Schema.rb Not Tracked**:\n"
+    DETECTIONS="${DETECTIONS}  Migration files exist but schema.rb not in git\n"
+    DETECTIONS="${DETECTIONS}  Run 'rails db:migrate' and commit schema.rb\n"
+    ((DETECTION_COUNT++))
+  fi
+fi
+
+#==============================================================================
+# 6. OUTPUT WARNINGS IF DETECTIONS FOUND
 #==============================================================================
 
 if [ $DETECTION_COUNT -gt 0 ]; then
