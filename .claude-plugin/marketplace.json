@@ -19,6 +19,18 @@
       },
       "homepage": "https://github.com/kaakati/rails-enterprise-dev",
       "category": "development"
-    }
+    },
+        {
+  "name": "reactree-rails-dev",
+  "version": "1.0.0",
+  "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution and dual memory systems",
+  "author": {
+    "name": "Mohamad Kaakati",
+    "email": "hello@kaakati.me"
+  },
+  "homepage": "https://github.com/kaakati/rails-enterprise-dev",
+  "license": "MIT"
+}
+
   ]
 }
