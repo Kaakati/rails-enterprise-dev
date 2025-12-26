@@ -1076,6 +1076,246 @@ if [ -f "$STATE_FILE" ]; then
 fi
 ```
 
+## Feedback Handling (v2.0)
+
+**Enable backwards communication** from child nodes to parent nodes for adaptive fix-verify cycles.
+
+### When to Use Feedback
+
+1. **Tests discover issues**: Test specs find missing validations or associations
+2. **Dependency discovery**: Node discovers missing prerequisite during execution
+3. **Architecture problems**: Circular dependencies or design flaws detected
+4. **Context needed**: Child needs parent's information to proceed correctly
+
+### Feedback Routing
+
+**Check for feedback queue after each phase**:
+
+```bash
+check_feedback_queue() {
+  local FEEDBACK_FILE=".claude/reactree-feedback.jsonl"
+
+  if [ ! -f "$FEEDBACK_FILE" ]; then
+    return 0  # No feedback to process
+  fi
+
+  # Check for queued or delivered feedback
+  local pending_feedback=$(cat "$FEEDBACK_FILE" | \
+    jq -r 'select(.status == "queued" or .status == "delivered")' | \
+    wc -l)
+
+  if [ "$pending_feedback" -gt 0 ]; then
+    echo "📢 Detected $pending_feedback pending feedback messages"
+    return 1  # Feedback needs processing
+  fi
+
+  return 0  # All feedback resolved
+}
+
+process_feedback_queue() {
+  local FEEDBACK_FILE=".claude/reactree-feedback.jsonl"
+
+  echo "🔄 Processing feedback queue..."
+
+  # Get all pending feedback
+  local feedback_messages=$(cat "$FEEDBACK_FILE" | \
+    jq -c 'select(.status == "queued" or .status == "delivered")')
+
+  if [ -z "$feedback_messages" ]; then
+    echo "✓ Feedback queue empty"
+    return 0
+  fi
+
+  # Process each feedback message
+  while IFS= read -r feedback; do
+    local from_node=$(echo "$feedback" | jq -r '.from_node')
+    local to_node=$(echo "$feedback" | jq -r '.to_node')
+    local feedback_type=$(echo "$feedback" | jq -r '.feedback_type')
+
+    echo "Processing: $from_node → $to_node ($feedback_type)"
+
+    # Delegate to feedback-coordinator
+    use_task "feedback-coordinator" "Process feedback from $from_node to $to_node" <<EOF
+Execute fix-verify cycle for feedback:
+
+From node: $from_node
+To node: $to_node
+Feedback: $(echo "$feedback" | jq -c '.')
+
+Follow these steps:
+1. Route feedback to target node
+2. Re-execute parent node with feedback context
+3. Verify fix by re-running child node
+4. Update feedback status (resolved/failed)
+
+Use execute_fix_verify_cycle() function.
+EOF
+  done <<< "$feedback_messages"
+
+  echo "✓ Feedback queue processed"
+}
+```
+
+### Integration with Workflow Phases
+
+**After Phase 4 (Implementation)**, check for feedback:
+
+```bash
+echo "Phase 4: IMPLEMENTATION"
+use_task "implementation-executor" "Execute implementation phases" "$PLAN"
+
+# Check for feedback from implementation
+if ! check_feedback_queue; then
+  echo "📢 Feedback detected from implementation phase"
+  process_feedback_queue
+
+  # Verify all feedback resolved
+  if ! check_feedback_queue; then
+    echo "⚠️  Feedback still pending after processing"
+    echo "Manual intervention may be required"
+  fi
+fi
+```
+
+**After Phase 5 (Testing)**, check for test-driven feedback:
+
+```bash
+echo "Phase 5: TESTING & REVIEW"
+# Run tests
+bundle exec rspec
+
+# Check for test feedback
+if ! check_feedback_queue; then
+  echo "📢 Tests generated feedback (missing validations, associations, etc.)"
+  process_feedback_queue
+
+  # Re-run tests to verify fixes
+  echo "Re-running tests after feedback fixes..."
+  bundle exec rspec
+fi
+```
+
+### Feedback Flow Example
+
+**Test discovers missing validation**:
+
+```
+1. Phase 4: Implement Payment model
+2. Phase 5: Run PaymentSpec
+3. Test fails: "Expected validates_presence_of(:email)"
+4. Test generates FEEDBACK:
+   {
+     "from_node": "test-payment-model",
+     "to_node": "create-payment-model",
+     "feedback_type": "FIX_REQUEST",
+     "message": "Missing email validation",
+     "suggested_fix": "validates :email, presence: true"
+   }
+5. Workflow detects feedback in queue
+6. Delegates to feedback-coordinator
+7. Coordinator routes to create-payment-model node
+8. Model node re-executes with feedback context
+9. Model adds validation
+10. Test node re-runs
+11. Test passes ✓
+12. Feedback marked as resolved
+```
+
+### Sending Feedback from Agents
+
+**Any agent can send feedback** using working memory:
+
+```bash
+send_feedback() {
+  local from_node="$1"
+  local to_node="$2"
+  local feedback_type="$3"
+  local message="$4"
+  local suggested_fix="$5"
+  local priority="${6:-medium}"
+
+  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  local FEEDBACK_FILE=".claude/reactree-feedback.jsonl"
+
+  cat >> "$FEEDBACK_FILE" <<EOF
+{"timestamp":"$timestamp","from_node":"$from_node","to_node":"$to_node","feedback_type":"$feedback_type","message":"$message","suggested_fix":"$suggested_fix","priority":"$priority","status":"queued","round":1}
+EOF
+
+  echo "📢 Feedback sent: $from_node → $to_node ($feedback_type)"
+}
+
+# Example usage in test agent
+if [ "$test_status" = "failed" ]; then
+  local error_message=$(extract_test_error)
+
+  if echo "$error_message" | grep -q "Expected validates_presence_of"; then
+    send_feedback \
+      "test-payment-model" \
+      "create-payment-model" \
+      "FIX_REQUEST" \
+      "PaymentSpec:42 - Expected validates_presence_of(:email)" \
+      "validates :email, presence: true" \
+      "high"
+  fi
+fi
+```
+
+### Reading Feedback Context
+
+**Parent nodes check for feedback** before re-execution:
+
+```bash
+# In any agent that might receive feedback
+local node_id="create-payment-model"
+local feedback=$(read_memory "feedback.${node_id}")
+
+if [ -n "$feedback" ] && [ "$feedback" != "null" ]; then
+  echo "📢 Feedback received for this node:"
+  echo "$feedback" | jq '.'
+
+  local feedback_type=$(echo "$feedback" | jq -r '.feedback_type')
+  local message=$(echo "$feedback" | jq -r '.message')
+  local suggested_fix=$(echo "$feedback" | jq -r '.suggested_fix')
+
+  echo "Type: $feedback_type"
+  echo "Message: $message"
+  echo "Applying suggested fix: $suggested_fix"
+
+  # Apply the fix...
+
+  # Clear feedback from memory
+  delete_memory "feedback.${node_id}"
+fi
+```
+
+### Loop Prevention
+
+**Automatic enforcement** by feedback-coordinator:
+
+- **Max 2 feedback rounds** per node pair
+- **Max depth 3** in feedback chains
+- **Cycle detection** prevents A → B → A loops
+
+If limits exceeded, feedback is marked as `failed` and workflow continues without fix.
+
+### Feedback Metrics
+
+**Track feedback effectiveness**:
+
+```bash
+# Success rate
+resolved=$(cat .claude/reactree-feedback.jsonl | jq -r 'select(.status == "resolved")' | wc -l)
+total=$(cat .claude/reactree-feedback.jsonl | wc -l)
+echo "Feedback success rate: $((resolved * 100 / total))%"
+
+# Common feedback types
+cat .claude/reactree-feedback.jsonl | jq -r '.feedback_type' | sort | uniq -c
+
+# Average rounds to resolution
+cat .claude/reactree-feedback.jsonl | jq -r 'select(.status == "resolved") | .round' | \
+  awk '{sum+=$1; count++} END {print "Average rounds:", sum/count}'
+```
+
 ## State Management
 
 **Read current state from settings file**:
@@ -1113,6 +1353,108 @@ When delegating to specialist agents:
 4. **Blocking**: Wait for completion before proceeding
 5. **Validation**: Verify deliverable meets requirements
 6. **Update beads**: Close subtask after validation
+
+### Control Flow Delegation (v2.0)
+
+**When to delegate to control-flow-manager**:
+
+1. **LOOP Nodes**: Iterative refinement needed (TDD, optimization)
+2. **CONDITIONAL Nodes**: Runtime branching based on observations
+3. **TRANSACTION Nodes**: Atomic operations with rollback (Phase 5)
+
+**Example: TDD Workflow with LOOP**:
+
+```
+I need you to implement payment processing using TDD with iterative refinement.
+
+**Context**:
+- Feature: Stripe payment processing
+- Implementation plan: Service object pattern with TDD
+- Available skills: rspec-testing-patterns, service-object-patterns
+- Beads tracking: BD-abc7
+
+**Control Flow**:
+Use a LOOP node for test-driven development:
+  - Max iterations: 3
+  - Exit condition: All tests passing
+  - Children:
+    1. Run RSpec tests for PaymentService
+    2. IF tests failing → Fix code
+    3. IF tests passing → Break loop
+
+**Deliverable**:
+- PaymentService implemented with passing tests
+- Iterations logged in state file
+- Final status: tests passing or max iterations reached
+
+Delegate to control-flow-manager for LOOP execution.
+```
+
+**Handoff to control-flow-manager**:
+
+```json
+{
+  "type": "LOOP",
+  "node_id": "tdd-payment-service",
+  "max_iterations": 3,
+  "exit_on": "condition_true",
+  "timeout_seconds": 600,
+  "condition": {
+    "type": "test_result",
+    "key": "payment_service_spec.status",
+    "operator": "equals",
+    "value": "passing"
+  },
+  "children": [
+    {
+      "type": "ACTION",
+      "skill": "rspec_run",
+      "target": "spec/services/payment_service_spec.rb",
+      "agent": "RSpec Specialist"
+    },
+    {
+      "type": "CONDITIONAL",
+      "condition": {
+        "type": "test_result",
+        "key": "payment_service_spec.status",
+        "operator": "equals",
+        "value": "failing"
+      },
+      "true_branch": {
+        "type": "ACTION",
+        "skill": "fix_failing_specs",
+        "context": "Payment service implementation",
+        "agent": "Backend Lead"
+      },
+      "false_branch": {
+        "type": "ACTION",
+        "skill": "break_loop"
+      }
+    }
+  ]
+}
+```
+
+**After LOOP completes**:
+
+```bash
+# Check LOOP results
+LOOP_STATUS=$(cat .claude/reactree-state.jsonl | \
+  jq -r "select(.type == \"loop_complete\" and .node_id == \"tdd-payment-service\") | .status" | \
+  tail -1)
+
+if [ "$LOOP_STATUS" = "success" ]; then
+  echo "✅ TDD cycle completed: Tests passing"
+  bd close $SERVICE_ID --reason "PaymentService implementation complete with passing tests"
+elif [ "$LOOP_STATUS" = "max_iterations" ]; then
+  echo "⚠️  TDD cycle incomplete: Max iterations reached with failing tests"
+  bd update $SERVICE_ID --status blocked
+  bd comment $SERVICE_ID "Tests still failing after 3 iterations, needs manual review"
+else
+  echo "❌ TDD cycle failed: LOOP error or timeout"
+  bd update $SERVICE_ID --status blocked
+fi
+```
 
 ## Output Format
 

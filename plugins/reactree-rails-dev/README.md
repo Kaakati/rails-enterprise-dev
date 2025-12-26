@@ -132,6 +132,27 @@ Fetch TailAdmin patterns:
   Fallback3: Warn + Use plain HTML
 ```
 
+**LOOP** (iterative refinement - NEW in v1.1):
+```
+TDD Cycle (max 3 iterations):
+  LOOP until tests pass:
+    1. Run RSpec tests
+    2. IF failing → Fix code
+    3. IF passing → Break
+
+Iteration 1: 5 tests, 2 failures → Fix
+Iteration 2: 5 tests, 0 failures → DONE ✓
+```
+
+**CONDITIONAL** (branching - NEW in v1.1):
+```
+IF integration tests pass:
+  THEN: Deploy to staging
+  ELSE: Debug failures
+
+Result: Tests passing → Deployed ✓
+```
+
 ### Memory Systems
 
 **Working Memory** (`.claude/reactree-memory.jsonl`):
@@ -324,6 +345,68 @@ MIT License - see LICENSE file for details
 - **Email**: hello@kaakati.me
 
 ## Changelog
+
+### v2.0.0 (2025-12-26) - FEEDBACK Edges
+
+**Backwards Communication**:
+- ✨ **FEEDBACK edges** - Child nodes can request parent fixes when discovering issues
+- ✨ **feedback-coordinator agent** - Routes feedback, manages fix-verify cycles, enforces loop limits
+- ✨ **4 feedback types** - FIX_REQUEST, CONTEXT_REQUEST, DEPENDENCY_MISSING, ARCHITECTURE_ISSUE
+- ✨ **Loop prevention** - Max 2 rounds per pair, max depth 3, cycle detection
+- ✨ **Fix-verify cycles** - Automatic parent re-execution + child verification
+- ✨ **Feedback state tracking** - Complete audit trail in `.claude/reactree-feedback.jsonl`
+- 📚 **TDD feedback example** - Self-correcting workflow where tests drive model improvements
+- 📚 **5 feedback patterns** - Test-driven, dependency discovery, architecture correction, context request, multi-round
+
+**Benefits**:
+- Self-correcting workflows (tests find issues → auto-fix → verify)
+- Dynamic dependency discovery (missing models auto-created)
+- Architecture validation (circular dependencies detected and fixed)
+- No manual intervention needed for common failures
+- Bounded execution prevents infinite loops
+
+**Test-First Development**:
+- ✨ **test-oracle agent** - Comprehensive test planning before implementation
+- ✨ **Test pyramid validation** - Ensures 70% unit, 20% integration, 10% system ratios
+- ✨ **Coverage analysis** - Tracks coverage with 85% threshold enforcement
+- ✨ **Test quality validation** - No pending tests, assertions present, uses factories, fast execution
+- ✨ **Red-green-refactor orchestration** - LOOP-driven TDD cycles with automatic fix iterations
+- ✨ **Test-first mode** - Enable via `--test-first` flag or `TEST_FIRST_MODE=enabled`
+- 📚 **Subscription billing example** - Complete test-first workflow (71 tests, 89.5% coverage, 3 iterations)
+- 📚 **6 test strategy patterns** - Test pyramid, red-green-refactor, coverage expansion, quality validation, feedback integration, metrics
+
+**Benefits**:
+- Comprehensive test coverage (85%+) achieved automatically
+- Balanced test suite (no pyramid inversions)
+- Test-driven design (tests inform implementation)
+- 60% time savings vs manual TDD (45 min vs 2+ hours)
+- Self-correcting via FEEDBACK (failed tests drive fixes)
+
+**Use Cases**:
+- Test-Driven Development (specs drive implementation quality)
+- Dependency discovery (auto-detect and create missing prerequisites)
+- Architecture validation (prevent circular dependencies)
+- Just-in-time context sharing (child requests parent info)
+- Test-first feature development (comprehensive coverage from start)
+
+### v1.1.0 (2025-12-26) - LOOP & CONDITIONAL
+
+**Control Flow Enhancements**:
+- ✨ **LOOP control flow node** - Iterative refinement for TDD cycles, performance optimization, error recovery
+- ✨ **CONDITIONAL control flow node** - Runtime branching based on observations and test results
+- ✨ **control-flow-manager agent** - Dedicated agent for executing control flow nodes
+- ✨ **State persistence** - Track iterations, conditions, and execution state in `.claude/reactree-state.jsonl`
+- ✨ **Condition evaluation** - Support for observation checks, test results, file existence, custom expressions
+- ✨ **Condition caching** - 5-minute TTL cache for expensive evaluations (avoid redundant test runs)
+- 📚 **TDD workflow example** - Complete example demonstrating LOOP usage with test-driven development
+- 📚 **Deployment workflow example** - Intelligent staging deployment with nested CONDITIONAL nodes
+- 📚 **Enhanced documentation** - Comprehensive patterns and examples for LOOP and CONDITIONAL nodes
+
+**Use Cases**:
+- Test-Driven Development with red-green-refactor cycles
+- Performance optimization with iterative measurement
+- Deployment workflows with conditional logic
+- Error recovery with retry mechanisms
 
 ### v1.0.0 (2025-01-21)
 

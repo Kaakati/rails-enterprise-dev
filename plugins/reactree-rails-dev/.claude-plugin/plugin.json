@@ -1,7 +1,7 @@
 {
   "name": "reactree-rails-dev",
-  "version": "1.0.0",
-  "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution and dual memory systems",
+  "version": "2.0.0",
+  "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, dual memory systems, iterative control flow (LOOP, CONDITIONAL), and backwards communication (FEEDBACK edges) for self-correcting workflows",
   "author": {
     "name": "Mohamad Kaakati",
     "email": "hello@kaakati.me"

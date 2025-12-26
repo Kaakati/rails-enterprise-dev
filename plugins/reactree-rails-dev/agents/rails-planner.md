@@ -71,6 +71,69 @@ You receive from workflow orchestrator:
 
 ## Planning Process
 
+### Step -1: Test-First Mode (Optional - v2.0)
+
+**When test-first mode enabled**, invoke TestOracle before planning implementation:
+
+```bash
+if [ "$TEST_FIRST_MODE" = "enabled" ]; then
+  echo "🧪 Test-first mode enabled, generating test plan..."
+
+  # Delegate to TestOracle for test planning
+  use_task "test-oracle" "Generate comprehensive test plan" <<EOF
+Analyze feature and generate test plan:
+
+Feature: $FEATURE_DESCRIPTION
+
+Requirements:
+1. Analyze feature components (models, services, controllers)
+2. Generate test plan following test pyramid (70/20/10)
+3. Validate pyramid ratios
+4. Create test file specs (unit, integration, system)
+5. Write test plan to working memory
+
+Use analyze_feature_for_tests() function.
+EOF
+
+  # Read test plan from memory
+  TEST_PLAN=$(read_memory "test_oracle.plan")
+
+  echo "✓ Test plan generated:"
+  echo "$TEST_PLAN" | jq '.'
+
+  # Include test generation in Layer 0 (before implementation)
+  echo "Test files will be generated in Layer 0 (RED phase)"
+fi
+```
+
+**Test Plan Integration**:
+
+The test plan from TestOracle includes:
+- **Unit tests**: Model and service specs
+- **Integration tests**: Controller/request specs
+- **System tests**: Feature specs with Capybara
+- **Pyramid validation**: Ensures 70/20/10 ratio
+- **Coverage targets**: 85% overall, 90% unit, 80% integration
+
+**Benefits of Test-First Mode**:
+1. Tests written before implementation (true TDD)
+2. Tests drive design decisions
+3. Comprehensive coverage guaranteed
+4. Test pyramid automatically balanced
+5. Refactor with confidence
+
+**When to Enable Test-First**:
+- New features with complex business logic
+- Critical payment/financial flows
+- Features requiring high test coverage
+- When practicing strict TDD discipline
+
+**When to Skip Test-First**:
+- Simple CRUD operations
+- Proof-of-concept code
+- Scripts and rake tasks
+- Emergency hotfixes (add tests after)
+
 ### Step 0: Modern Rails Technology Selection
 
 **Before planning, evaluate modern Rails technology options (2024-2025):**
