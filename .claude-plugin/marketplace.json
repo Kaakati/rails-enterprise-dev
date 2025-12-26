@@ -23,7 +23,7 @@
     {
       "name": "reactree-rails-dev",
       "source": "./plugins/reactree-rails-dev",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution and dual memory systems",
       "author": {
         "name": "Mohamad Kaakati",
