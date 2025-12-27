@@ -1,7 +1,7 @@
 {
   "name": "reactree-rails-dev",
-  "version": "2.0.0",
-  "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, dual memory systems, iterative control flow (LOOP, CONDITIONAL), and backwards communication (FEEDBACK edges) for self-correcting workflows",
+  "version": "2.1.0",
+  "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, dual memory systems, iterative control flow (LOOP, CONDITIONAL), backwards communication (FEEDBACK edges), smart intent detection for automatic workflow activation, and utility agents (file-finder, code-line-finder, git-diff-analyzer, log-analyzer)",
   "author": {
     "name": "Mohamad Kaakati",
     "email": "hello@kaakati.me"

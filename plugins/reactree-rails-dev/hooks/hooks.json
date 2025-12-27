@@ -1,0 +1,31 @@
+{
+  "description": "ReAcTree Rails Development workflow hooks for smart intent detection, skill discovery, and utility agent routing",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/discover-skills.sh",
+            "timeout": 10,
+            "description": "Discover available skills and initialize working memory"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/detect-intent.sh",
+            "timeout": 5,
+            "description": "Smart detection: analyze prompt intent and suggest appropriate ReAcTree workflow or utility agent"
+          }
+        ]
+      }
+    ]
+  }
+}
