@@ -1,6 +1,6 @@
 ---
 name: Smart Intent Detection
-description: Automatic workflow suggestion and utility agent routing based on prompt analysis
+description: "Automatic workflow suggestion and utility agent routing based on prompt analysis. Trigger keywords: auto-detect, intent, suggest, trigger, routing, workflow detection, utility agents, prompt analysis, smart routing"
 version: 1.0.0
 ---
 

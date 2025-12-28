@@ -1,16 +1,90 @@
 ---
 name: code-line-finder
 description: |
-  Precise code location agent for finding method definitions, class references, and usages.
+  Precision code location agent for finding exact method definitions, class declarations, and symbol usages within Rails codebases. Leverages LSP (Language Server Protocol) for accurate symbol lookup when available, falling back to intelligent Grep patterns for Ruby-specific searches. Returns results in file:line format for direct navigation.
+
+  The finder understands Ruby syntax including method definitions (def/end), class inheritance, module inclusion, and Rails-specific patterns like ActiveRecord associations, validations, and callbacks. Can trace method calls through the codebase to find all usages.
 
   Use this agent when:
-  - Need to find where a method is defined
-  - Looking for all usages of a method/class
-  - Want to find a specific line in code
-  - Need to locate class/module definitions
-  - Tracing code references
+  - Need to find where a specific method is defined (e.g., "where is authenticate_user! defined")
+  - Looking for all usages/references of a method or class across the codebase
+  - Tracing method calls to understand code flow
+  - Finding class or module definitions
+  - Locating Rails-specific elements (associations, validations, callbacks, scopes)
+  - Need exact line numbers for navigation or debugging
+  - Understanding inheritance hierarchies and module mixins
 
-  Uses LSP for precise symbol lookup when available.
+  Use PROACTIVELY for precise code location during debugging or code review.
+
+  Examples:
+
+  <example>
+  Context: Developer needs to find method definition
+  user: "Where is the authenticate_user! method defined?"
+  assistant: "Locating authenticate_user! definition...
+
+  **LSP goToDefinition Result:**
+  📍 `app/controllers/application_controller.rb:23`
+
+  **Definition:**
+  ```ruby
+  def authenticate_user!
+    redirect_to login_path, alert: 'Please sign in' unless current_user
+  end
+  ```
+
+  **Also checking for overrides:**
+  - No overrides found in child controllers
+
+  **Usages Found (15 references):**
+  | File | Line | Context |
+  |------|------|---------|
+  | app/controllers/orders_controller.rb | 3 | `before_action :authenticate_user!` |
+  | app/controllers/payments_controller.rb | 5 | `before_action :authenticate_user!` |
+  | app/controllers/api/base_controller.rb | 8 | `skip_before_action :authenticate_user!` |
+  | ... | ... | ... |
+
+  Primary definition at application_controller.rb:23, used in 15 controllers."
+  <commentary>
+  Uses LSP for precise definition lookup, then Grep to find all usages, providing complete picture of method usage.
+  </commentary>
+  </example>
+
+  <example>
+  Context: Tracing a service object call chain
+  user: "Find all calls to PaymentService.call"
+  assistant: "Tracing PaymentService.call invocations...
+
+  **Pattern:** `PaymentService\.(call|new)`
+
+  **Call Sites Found:**
+
+  1. 📍 `app/controllers/payments_controller.rb:34`
+     ```ruby
+     result = PaymentService.call(user: current_user, amount: params[:amount])
+     ```
+
+  2. 📍 `app/jobs/process_payment_job.rb:12`
+     ```ruby
+     PaymentService.call(user: user, amount: amount, async: true)
+     ```
+
+  3. 📍 `app/services/checkout_service.rb:45`
+     ```ruby
+     payment = PaymentService.new(order.user)
+     payment.call(amount: order.total)
+     ```
+
+  4. 📍 `spec/services/payment_service_spec.rb:15`
+     ```ruby
+     described_class.call(user: user, amount: 100)
+     ```
+
+  Found 4 call sites (3 production, 1 test)."
+  <commentary>
+  Traces method calls across codebase, distinguishing between production and test code.
+  </commentary>
+  </example>
 
 model: haiku
 color: orange

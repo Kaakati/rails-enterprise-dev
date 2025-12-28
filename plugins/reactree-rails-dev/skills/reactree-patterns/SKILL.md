@@ -1,6 +1,6 @@
 ---
 name: ReAcTree Agent Coordination Patterns
-description: Hierarchical task decomposition with control flow nodes and dual memory systems from ReAcTree research
+description: "Hierarchical task decomposition with control flow nodes and dual memory systems from ReAcTree research. Trigger keywords: ReAcTree, parallel execution, working memory, episodic memory, LOOP, CONDITIONAL, FEEDBACK, hierarchical agents, coordination, control flow, agent trees"
 version: 1.0.0
 source: "ReAcTree: Hierarchical LLM Agent Trees with Control Flow for Long-Horizon Task Planning" (Choi et al., 2024)
 ---
