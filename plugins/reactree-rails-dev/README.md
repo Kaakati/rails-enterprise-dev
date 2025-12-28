@@ -59,6 +59,56 @@ mkdir -p .claude/plugins
 cp -r /path/to/reactree-rails-dev .claude/plugins/
 ```
 
+## Getting Started
+
+After installing the plugin, run the initialization command:
+
+```bash
+/reactree-init
+```
+
+This will:
+1. **Validate prerequisites** - Check plugin installation and hooks
+2. **Set up skills** - Option to copy bundled skills to your project
+3. **Create configuration** - Generate `.claude/reactree-rails-dev.local.md`
+4. **Initialize memory** - Set up working and episodic memory files
+5. **Enable auto-triggering** - Configure smart detection for automatic workflow suggestions
+
+### What You'll See
+
+```
+🚀 ReAcTree Plugin Initialized!
+
+Prerequisites:
+  ✅ Plugin installed at .claude/plugins/reactree-rails-dev/
+  ✅ Hooks configured (SessionStart, UserPromptSubmit)
+  ✅ Configuration created
+
+Skills Discovered (18 total):
+  📦 Core: rails-conventions, rails-error-prevention
+  💾 Data: activerecord-patterns
+  ⚙️ Service: service-object-patterns, sidekiq-async-patterns
+  ...
+
+Auto-triggering is now active!
+```
+
+### Auto-Triggering
+
+Once initialized, the plugin will automatically suggest workflows based on your prompts:
+
+| Your Prompt | Suggested Workflow |
+|-------------|-------------------|
+| "Add user authentication" | `/reactree-dev` |
+| "Fix the login bug" | `/reactree-debug` |
+| "Refactor the user service" | `/reactree-refactor` |
+| "Find the payment controller" | `file-finder` agent |
+
+You can disable auto-triggering in `.claude/reactree-rails-dev.local.md`:
+```yaml
+smart_detection_enabled: false
+```
+
 ## Usage
 
 ### Basic Development Workflow
@@ -360,6 +410,27 @@ MIT License - see LICENSE file for details
 - **Email**: hello@kaakati.me
 
 ## Changelog
+
+### v2.3.0 (2025-12-28) - Explicit Initialization
+
+**New Command**:
+- ✨ **`/reactree-init`** - Explicit initialization command that:
+  - Validates plugin installation and hooks
+  - Checks/creates skills directory with interactive setup
+  - Generates configuration file with sensible defaults
+  - Initializes memory files (working, episodic, feedback, state)
+  - Provides comprehensive status report
+  - Offers to copy bundled skills if project has none
+
+**Improved Hook Reliability**:
+- 🔧 **discover-skills.sh** - No longer silently fails when prerequisites are missing
+- 📝 **Logging** - Added `.claude/reactree-init.log` for troubleshooting
+- 🚨 **Placeholder config** - Creates "needs setup" config if skills directory missing
+- 📖 **Clear guidance** - Tells users to run `/reactree-init` when setup incomplete
+
+**Documentation**:
+- 📚 **Getting Started section** - New section explaining initialization workflow
+- 📚 **Auto-triggering guide** - How smart detection works after initialization
 
 ### v2.2.0 (2025-12-28) - Official Claude Code Compliance
 

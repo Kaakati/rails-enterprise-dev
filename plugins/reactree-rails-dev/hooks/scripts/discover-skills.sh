@@ -4,17 +4,65 @@
 set -e
 
 SKILLS_DIR=".claude/skills"
+PLUGIN_SKILLS_DIR="${CLAUDE_PLUGIN_ROOT}/skills"
 CONFIG_FILE=".claude/reactree-rails-dev.local.md"
 MEMORY_FILE=".claude/reactree-memory.jsonl"
+LOG_FILE=".claude/reactree-init.log"
+PLUGIN_VERSION="2.3.0"
+
+#==============================================================================
+# 0. LOGGING HELPER
+#==============================================================================
+
+log_message() {
+  local level="$1"
+  local message="$2"
+  local timestamp
+  timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+  # Ensure .claude directory exists
+  mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+
+  echo "[$timestamp] [$level] $message" >> "$LOG_FILE" 2>/dev/null || true
+}
 
 #==============================================================================
 # 1. SKILL DISCOVERY
 #==============================================================================
 
-# Exit silently if skills directory doesn't exist (not a configured project)
+log_message "INFO" "SessionStart hook triggered for project: $(basename "$(pwd)")"
+
+# Check if skills directory exists
 if [ ! -d "$SKILLS_DIR" ]; then
+  log_message "WARN" "Skills directory not found at $SKILLS_DIR"
+  log_message "INFO" "Run /reactree-init to set up the plugin for this project"
+
+  # Create minimal config to indicate plugin needs initialization
+  mkdir -p "$(dirname "$CONFIG_FILE")" 2>/dev/null || true
+  if [ ! -f "$CONFIG_FILE" ]; then
+    cat > "$CONFIG_FILE" <<EOF
+---
+initialized: false
+needs_setup: true
+smart_detection_enabled: false
+---
+
+# ReAcTree Plugin - Needs Initialization
+
+Run \`/reactree-init\` to complete setup.
+
+This will:
+1. Set up the skills directory
+2. Configure smart detection
+3. Initialize memory systems
+EOF
+    log_message "INFO" "Created placeholder config - awaiting /reactree-init"
+  fi
+
   exit 0
 fi
+
+log_message "INFO" "Found skills directory at $SKILLS_DIR"
 
 # Initialize skill categories
 declare -A SKILLS
@@ -114,7 +162,7 @@ auto_create_pr: false
 
 **Project**: $(basename "$(pwd)")
 **Skills Discovered**: $(date)
-**Plugin Version**: 2.1.0
+**Plugin Version**: $PLUGIN_VERSION
 
 ## Smart Detection
 
@@ -174,8 +222,9 @@ if [ ! -f "$MEMORY_FILE" ]; then
   done
 
   cat >> "$MEMORY_FILE" <<EOF
-{"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","agent":"system","knowledge_type":"initialization","key":"session.start","value":{"project":"$(basename "$(pwd)")","plugin_version":"2.1.0","smart_detection":"enabled"},"confidence":"verified"}
+{"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","agent":"system","knowledge_type":"initialization","key":"session.start","value":{"project":"$(basename "$(pwd)")","plugin_version":"$PLUGIN_VERSION","smart_detection":"enabled"},"confidence":"verified"}
 EOF
 fi
 
+log_message "INFO" "Initialization complete - plugin version $PLUGIN_VERSION"
 exit 0
