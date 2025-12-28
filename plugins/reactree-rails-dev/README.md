@@ -297,19 +297,34 @@ mv .claude/reactree-memory-clean.jsonl .claude/reactree-memory.jsonl
 ```
 plugins/reactree-rails-dev/
 ├── .claude-plugin/
-│   └── plugin.json          # Plugin manifest
+│   └── plugin.json              # Plugin manifest
 ├── agents/
-│   ├── workflow-orchestrator.md
-│   ├── codebase-inspector.md
-│   ├── rails-planner.md
-│   └── implementation-executor.md
+│   ├── workflow-orchestrator.md # Master workflow coordinator
+│   ├── codebase-inspector.md    # Pattern analysis agent
+│   ├── rails-planner.md         # Implementation planning
+│   ├── implementation-executor.md # Code generation coordinator
+│   ├── test-oracle.md           # TDD/test validation agent
+│   ├── feedback-coordinator.md  # FEEDBACK edge management
+│   ├── control-flow-manager.md  # LOOP/CONDITIONAL execution
+│   ├── file-finder.md           # Fast file discovery (haiku)
+│   ├── code-line-finder.md      # LSP-based code location (haiku)
+│   ├── git-diff-analyzer.md     # Git change analysis (sonnet)
+│   └── log-analyzer.md          # Rails log parsing (haiku)
 ├── commands/
-│   ├── reactree-dev.md
-│   ├── reactree-feature.md
-│   └── reactree-debug.md
+│   ├── reactree-dev.md          # Main development workflow
+│   ├── reactree-feature.md      # Feature-driven development
+│   ├── reactree-debug.md        # Debugging workflow
+│   └── reactree-refactor.md     # Safe refactoring workflow (NEW)
 ├── skills/
-│   └── reactree-patterns/
-│       └── SKILL.md
+│   ├── reactree-patterns/       # ReAcTree coordination patterns
+│   ├── smart-detection/         # Intent detection and routing
+│   ├── skill-discovery/         # Skill discovery system
+│   ├── workflow-orchestration/  # Agent coordination
+│   ├── beads-integration/       # Task tracking integration
+│   └── ... (18 total skills)
+├── hooks/
+│   ├── hooks.json               # Hook configuration
+│   └── scripts/                 # Automation scripts
 └── README.md
 ```
 
@@ -345,6 +360,67 @@ MIT License - see LICENSE file for details
 - **Email**: hello@kaakati.me
 
 ## Changelog
+
+### v2.2.0 (2025-12-28) - Official Claude Code Compliance
+
+**Agent Enhancements (All 11 Agents)**:
+- ✨ **Comprehensive descriptions** - Rich multi-paragraph summaries following official Claude Code patterns
+- ✨ **Skills field** - All agents now declare skill dependencies via `skills:` field
+- ✨ **Auto-triggering** - "Use this agent when:" sections with 5-8 specific scenarios each
+- ✨ **Example blocks** - 2 `<example>` blocks per agent with context, user, assistant, commentary
+- ✨ **Proactive language** - "Use PROACTIVELY" triggers for automatic activation
+
+**Agents Updated**:
+| Agent | Skills Added |
+|-------|-------------|
+| workflow-orchestrator | skill-discovery, workflow-orchestration, beads-integration, smart-detection, reactree-patterns |
+| codebase-inspector | rails-conventions, codebase-inspection, rails-context-verification, rails-error-prevention |
+| rails-planner | rails-conventions, service-object-patterns, activerecord-patterns, hotwire-patterns, rspec-testing-patterns |
+| implementation-executor | rails-conventions, service-object-patterns, activerecord-patterns, hotwire-patterns, viewcomponents-specialist, sidekiq-async-patterns |
+| test-oracle | rspec-testing-patterns, rails-error-prevention |
+| feedback-coordinator | rails-error-prevention, smart-detection, reactree-patterns |
+| control-flow-manager | reactree-patterns, smart-detection |
+| log-analyzer | rails-error-prevention |
+
+**New Command**:
+- ✨ **`/reactree-refactor`** - Safe refactoring workflow with:
+  - Pre-flight test verification (must be green before changes)
+  - Reference tracking via LSP (find all usages before modifying)
+  - Incremental transformation with working memory
+  - Post-refactoring validation via Test Oracle
+  - Quality gates (coverage, performance, complexity)
+  - FEEDBACK edge handling for test failures
+
+**Skills Enhanced (All 18 Skills)**:
+- ✨ **Trigger keywords** - All skills now include trigger keywords for auto-discovery
+- Enables smarter skill selection during workflows
+
+**Bug Fixes**:
+- 🐛 **file-finder.md** - Fixed invalid "LS" tool reference → "Bash"
+
+**LSP Integration**:
+- 📚 **code-line-finder** - Now documents LSP tool usage for precise symbol lookup
+- Supports: `find_definition`, `find_references`, `rename_symbol`
+
+**Stats**: 31 files changed, +17,451 lines
+
+### v2.1.0 (2025-12-27) - Smart Detection & Utility Agents
+
+**Smart Intent Detection**:
+- ✨ **UserPromptSubmit hook** - Analyzes prompts and suggests appropriate workflows
+- ✨ **Intent patterns** - Detects feature requests, debug needs, refactor requests
+- ✨ **Detection modes** - suggest, inject, or disabled
+- ✨ **Annoyance threshold** - Configurable sensitivity (low, medium, high)
+
+**Utility Agents (4 New Agents)**:
+- ✨ **file-finder** (haiku) - Fast file discovery by pattern/name
+- ✨ **code-line-finder** (haiku) - Find definitions/usages with LSP
+- ✨ **git-diff-analyzer** (sonnet) - Analyze diffs/history/blame
+- ✨ **log-analyzer** (haiku) - Parse Rails server logs
+
+**Configuration**:
+- Settings in `.claude/reactree-rails-dev.local.md`
+- Enable/disable smart detection per project
 
 ### v2.0.0 (2025-12-26) - FEEDBACK Edges
 
