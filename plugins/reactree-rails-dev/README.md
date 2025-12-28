@@ -80,7 +80,7 @@ This will:
 🚀 ReAcTree Plugin Initialized!
 
 Prerequisites:
-  ✅ Plugin installed at .claude/plugins/reactree-rails-dev/
+  ✅ Plugin located at: /path/to/plugin  (shown via CLAUDE_PLUGIN_ROOT)
   ✅ Hooks configured (SessionStart, UserPromptSubmit)
   ✅ Configuration created
 
@@ -410,6 +410,15 @@ MIT License - see LICENSE file for details
 - **Email**: hello@kaakati.me
 
 ## Changelog
+
+### v2.3.1 (2025-12-28) - Plugin Path Detection Fix
+
+**Bug Fix**:
+- 🐛 **`/reactree-init`** - Fixed plugin path detection for global/marketplace installations
+  - Now uses `${CLAUDE_PLUGIN_ROOT}` environment variable (set by Claude Code)
+  - Falls back to `.claude/plugins/reactree-rails-dev/` only if variable not set
+  - Works correctly regardless of installation method (local, global, marketplace)
+  - Improved error messages when plugin location cannot be determined
 
 ### v2.3.0 (2025-12-28) - Explicit Initialization
 

@@ -12,7 +12,7 @@ PLUGIN_SKILLS_DIR="${CLAUDE_PLUGIN_ROOT}/skills"
 CONFIG_FILE=".claude/reactree-rails-dev.local.md"
 MEMORY_FILE=".claude/reactree-memory.jsonl"
 LOG_FILE=".claude/reactree-init.log"
-PLUGIN_VERSION="2.3.0"
+PLUGIN_VERSION="2.3.1"
 
 #==============================================================================
 # 0. LOGGING HELPER

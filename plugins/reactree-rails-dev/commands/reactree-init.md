@@ -13,22 +13,41 @@ You are initializing the ReAcTree plugin for this Rails project. Follow these st
 
 ## Phase 1: Validate Plugin Installation
 
-First, verify the plugin is properly installed:
+First, determine the plugin's actual location using `${CLAUDE_PLUGIN_ROOT}`:
 
 ```bash
+# CLAUDE_PLUGIN_ROOT is set by Claude Code to the plugin's actual location
+# This works regardless of how the plugin was installed (local, global, marketplace)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+
+# Fallback to local path if not set (for manual testing)
+if [ -z "$PLUGIN_ROOT" ]; then
+  if [ -d ".claude/plugins/reactree-rails-dev" ]; then
+    PLUGIN_ROOT=".claude/plugins/reactree-rails-dev"
+  else
+    echo "ERROR: CLAUDE_PLUGIN_ROOT not set and no local plugin found"
+    echo "Plugin location could not be determined"
+    exit 1
+  fi
+fi
+
+echo "Plugin located at: $PLUGIN_ROOT"
+
 # Check plugin directory exists
-ls -la .claude/plugins/reactree-rails-dev/ 2>/dev/null
+ls -la "$PLUGIN_ROOT/" 2>/dev/null
 
 # Check hooks.json exists
-cat .claude/plugins/reactree-rails-dev/hooks/hooks.json 2>/dev/null | head -5
+cat "$PLUGIN_ROOT/hooks/hooks.json" 2>/dev/null | head -5
 
 # Check scripts are executable
-ls -la .claude/plugins/reactree-rails-dev/hooks/scripts/*.sh 2>/dev/null
+ls -la "$PLUGIN_ROOT/hooks/scripts/"*.sh 2>/dev/null
 ```
 
 **Expected**: Plugin directory with hooks.json and executable scripts.
 
-**If missing**: Report error - plugin not installed correctly.
+**If CLAUDE_PLUGIN_ROOT is empty**: The command will check for a local installation at `.claude/plugins/reactree-rails-dev/`.
+
+**If neither exists**: Report error - plugin not installed correctly.
 
 ## Phase 2: Check Skills Directory
 
@@ -91,28 +110,30 @@ Options:
 
 ### Copy/Replace Skills Based on User Choice
 
+**Important**: Use `$PLUGIN_ROOT` variable from Phase 1 (set via `${CLAUDE_PLUGIN_ROOT}`).
+
 **Replace all / Copy all bundled skills**:
 ```bash
 mkdir -p .claude/skills
 # Remove existing to ensure clean state
 rm -rf .claude/skills/*
-cp -r .claude/plugins/reactree-rails-dev/skills/* .claude/skills/
+cp -r "$PLUGIN_ROOT/skills/"* .claude/skills/
 echo "Copied 18 skills to .claude/skills/"
 ```
 
 **Copy only core skills**:
 ```bash
 mkdir -p .claude/skills
-cp -r .claude/plugins/reactree-rails-dev/skills/rails-conventions .claude/skills/
-cp -r .claude/plugins/reactree-rails-dev/skills/rails-error-prevention .claude/skills/
-cp -r .claude/plugins/reactree-rails-dev/skills/codebase-inspection .claude/skills/
+cp -r "$PLUGIN_ROOT/skills/rails-conventions" .claude/skills/
+cp -r "$PLUGIN_ROOT/skills/rails-error-prevention" .claude/skills/
+cp -r "$PLUGIN_ROOT/skills/codebase-inspection" .claude/skills/
 echo "Copied 3 core skills to .claude/skills/"
 ```
 
 **Merge (add missing only)**:
 ```bash
 mkdir -p .claude/skills
-for skill_dir in .claude/plugins/reactree-rails-dev/skills/*/; do
+for skill_dir in "$PLUGIN_ROOT/skills/"*/; do
   skill_name=$(basename "$skill_dir")
   if [ ! -d ".claude/skills/$skill_name" ]; then
     cp -r "$skill_dir" ".claude/skills/"
@@ -203,7 +224,7 @@ After completing all phases, output a comprehensive status report:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Prerequisites:
-  ✅ Plugin installed at .claude/plugins/reactree-rails-dev/
+  ✅ Plugin located at: $PLUGIN_ROOT
   ✅ Hooks configured (SessionStart, UserPromptSubmit)
   ✅ Scripts executable
 
@@ -257,18 +278,23 @@ Ready to use! Try one of the commands above or just describe what you want to bu
 
 If any phase fails, provide clear error messages:
 
-### Plugin Not Installed
+### Plugin Location Not Detected
 ```
-❌ Plugin Not Found
+❌ Plugin Location Not Detected
 
-The ReAcTree plugin is not installed at .claude/plugins/reactree-rails-dev/
+The CLAUDE_PLUGIN_ROOT environment variable is not set and no local
+plugin installation was found at .claude/plugins/reactree-rails-dev/
 
-To install:
-  1. Clone the plugin repository
-  2. Copy to your project:
-     mkdir -p .claude/plugins
-     cp -r /path/to/reactree-rails-dev .claude/plugins/
-  3. Run /reactree-init again
+This usually means:
+  1. The plugin is not properly installed
+  2. The plugin was installed but Claude Code isn't setting the root path
+
+To install locally:
+  mkdir -p .claude/plugins
+  cp -r /path/to/reactree-rails-dev .claude/plugins/
+
+Or install via Claude Code marketplace:
+  /install-plugin reactree-rails-dev
 ```
 
 ### Hooks Not Configured
@@ -276,7 +302,7 @@ To install:
 ⚠️ Hooks Configuration Issue
 
 hooks.json not found or invalid at:
-  .claude/plugins/reactree-rails-dev/hooks/hooks.json
+  $PLUGIN_ROOT/hooks/hooks.json
 
 This may prevent auto-triggering from working.
 The plugin will still work with manual /reactree-* commands.
@@ -287,7 +313,7 @@ The plugin will still work with manual /reactree-* commands.
 ⚠️ Scripts Need Execute Permission
 
 Run these commands to fix:
-  chmod +x .claude/plugins/reactree-rails-dev/hooks/scripts/*.sh
+  chmod +x "$PLUGIN_ROOT/hooks/scripts/"*.sh
 ```
 
 ## Idempotent Design
