@@ -1,18 +1,23 @@
 #!/bin/bash
 # Smart Intent Detection for ReAcTree Rails Development
 # Analyzes user prompts and suggests appropriate workflows or utility agents
-set -e
+#
+# NOTE: We intentionally DO NOT use set -e here because:
+# 1. Hooks should fail gracefully, not crash
+# 2. Missing config files are expected on first run
+# 3. jq parsing errors should not kill the hook
+# 4. We want silent exit, not error propagation
 
 # Get script directory for sourcing patterns
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Read hook input (JSON from stdin)
-input=$(cat)
+input=$(cat 2>/dev/null || echo '{}')
 
-# Extract user prompt
-user_prompt=$(echo "$input" | jq -r '.prompt // ""')
+# Extract user prompt with error handling
+user_prompt=$(echo "$input" | jq -r '.prompt // ""' 2>/dev/null || echo "")
 
-# Quick exit if empty prompt
+# Quick exit if empty prompt or jq failed
 if [ -z "$user_prompt" ]; then
   exit 0
 fi
@@ -47,7 +52,8 @@ fi
 #==============================================================================
 
 if [ -f "$SCRIPT_DIR/shared/intent-patterns.sh" ]; then
-  source "$SCRIPT_DIR/shared/intent-patterns.sh"
+  # Source with error suppression - patterns are optional enhancements
+  source "$SCRIPT_DIR/shared/intent-patterns.sh" 2>/dev/null || true
 fi
 
 #==============================================================================

@@ -38,15 +38,42 @@ Check if the project has skills:
 # Check skills directory
 ls -la .claude/skills/ 2>/dev/null
 
-# Count skill directories
-find .claude/skills -maxdepth 1 -type d 2>/dev/null | wc -l
+# Count skill directories (subtract 1 for the directory itself)
+skill_count=$(find .claude/skills -maxdepth 1 -type d 2>/dev/null | wc -l)
+echo "Found $((skill_count - 1)) skills"
 ```
 
-**If `.claude/skills/` exists with skills**: Scan and categorize them.
+### Case A: Skills Directory Exists WITH Skills
 
-**If `.claude/skills/` is empty or missing**: Use AskUserQuestion to offer options:
+If `.claude/skills/` exists and has skills, use AskUserQuestion to ask:
 
 ```
+Found X existing skills in .claude/skills/
+
+The plugin includes 18 bundled skills (may be newer versions).
+Would you like to update/replace them?
+
+Options:
+  [1] Replace all with bundled skills (Recommended)
+      - Overwrites existing skills with latest versions from plugin
+      - activerecord-patterns, service-object-patterns, hotwire-patterns, etc.
+
+  [2] Keep existing skills
+      - Don't modify .claude/skills/
+      - Continue with current skills
+
+  [3] Merge (add missing only)
+      - Keep existing skills
+      - Add any new skills not already present
+```
+
+### Case B: Skills Directory Empty or Missing
+
+If `.claude/skills/` is empty or missing, use AskUserQuestion to offer:
+
+```
+No skills found in .claude/skills/
+
 The plugin includes 18 bundled skills for Rails development.
 Would you like to copy them to your project?
 
@@ -62,20 +89,36 @@ Options:
   [3] Skip - I'll add skills manually later
 ```
 
-### Copy Skills (if user chooses option 1 or 2)
+### Copy/Replace Skills Based on User Choice
 
-**Option 1 - All skills**:
+**Replace all / Copy all bundled skills**:
 ```bash
 mkdir -p .claude/skills
+# Remove existing to ensure clean state
+rm -rf .claude/skills/*
 cp -r .claude/plugins/reactree-rails-dev/skills/* .claude/skills/
+echo "Copied 18 skills to .claude/skills/"
 ```
 
-**Option 2 - Core skills only**:
+**Copy only core skills**:
 ```bash
 mkdir -p .claude/skills
 cp -r .claude/plugins/reactree-rails-dev/skills/rails-conventions .claude/skills/
 cp -r .claude/plugins/reactree-rails-dev/skills/rails-error-prevention .claude/skills/
 cp -r .claude/plugins/reactree-rails-dev/skills/codebase-inspection .claude/skills/
+echo "Copied 3 core skills to .claude/skills/"
+```
+
+**Merge (add missing only)**:
+```bash
+mkdir -p .claude/skills
+for skill_dir in .claude/plugins/reactree-rails-dev/skills/*/; do
+  skill_name=$(basename "$skill_dir")
+  if [ ! -d ".claude/skills/$skill_name" ]; then
+    cp -r "$skill_dir" ".claude/skills/"
+    echo "Added missing skill: $skill_name"
+  fi
+done
 ```
 
 ## Phase 3: Generate Configuration File

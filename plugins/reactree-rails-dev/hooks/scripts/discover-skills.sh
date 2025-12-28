@@ -1,7 +1,11 @@
 #!/bin/bash
 # Discover skills and initialize ReAcTree memory systems
 # Runs on SessionStart hook
-set -e
+#
+# NOTE: We intentionally DO NOT use set -e here because:
+# 1. Hooks should fail gracefully, not crash
+# 2. Missing files/directories are expected in some cases
+# 3. We want to provide helpful messages, not silent failures
 
 SKILLS_DIR=".claude/skills"
 PLUGIN_SKILLS_DIR="${CLAUDE_PLUGIN_ROOT}/skills"
