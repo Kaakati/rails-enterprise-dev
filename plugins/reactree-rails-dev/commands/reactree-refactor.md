@@ -4,6 +4,7 @@ description: |
   ReAcTree-based safe refactoring workflow with test preservation, reference tracking,
   and quality gates. Specializes in code transformation while maintaining all existing
   functionality and test coverage.
+color: yellow
 allowed-tools: ["*"]
 ---
 
@@ -159,11 +160,29 @@ Start with Pre-Flight Check to ensure test suite is green.
 
 ## Specialist Agents Used
 
-- **code-line-finder** - Find all references before changes
-- **codebase-inspector** - Understand patterns and conventions
-- **implementation-executor** - Apply transformations
-- **test-oracle** - Verify coverage and test quality
-- **feedback-coordinator** - Handle failed test iterations
+- **code-line-finder** (Orange) - Find all references before changes
+- **codebase-inspector** (Cyan) - Understand patterns and conventions
+- **implementation-executor** (Yellow) - Apply transformations
+- **test-oracle** (Green) - Verify coverage and test quality
+- **feedback-coordinator** (Purple) - Handle failed test iterations
+
+## Skills Used
+
+Refactoring skills loaded from `${CLAUDE_PLUGIN_ROOT}/skills/`:
+
+**Core Analysis**:
+- `${CLAUDE_PLUGIN_ROOT}/skills/codebase-inspection/SKILL.md` - Code analysis procedures
+- `${CLAUDE_PLUGIN_ROOT}/skills/rails-conventions/SKILL.md` - Rails patterns to follow
+
+**Testing**:
+- `${CLAUDE_PLUGIN_ROOT}/skills/rspec-testing-patterns/SKILL.md` - Test preservation patterns
+
+**Implementation**:
+- `${CLAUDE_PLUGIN_ROOT}/skills/ruby-oop-patterns/SKILL.md` - OOP refactoring patterns
+- `${CLAUDE_PLUGIN_ROOT}/skills/service-object-patterns/SKILL.md` - Service extraction patterns
+
+**Meta**:
+- `${CLAUDE_PLUGIN_ROOT}/skills/reactree-patterns/SKILL.md` - ReAcTree workflow patterns
 
 ## Best Practices
 

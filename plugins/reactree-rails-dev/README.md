@@ -411,6 +411,55 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### v2.4.0 (2025-12-30) - Enhanced Commands with Color Coding & Skill References
+
+**Command Enhancements (All 4 Workflow Commands)**:
+- ✨ **Color coding** - Commands now display with distinct colors in UI:
+  - `/reactree-dev` (Green) - Primary development workflow
+  - `/reactree-feature` (Cyan) - Feature-driven development
+  - `/reactree-debug` (Orange) - Systematic debugging
+  - `/reactree-refactor` (Yellow) - Safe refactoring
+- ✨ **Skills Used sections** - All commands reference skills via `${CLAUDE_PLUGIN_ROOT}/skills/...` paths
+- ✨ **Specialist Agents sections** - Explicit agent references with colors and descriptions
+- ✨ **Expanded triggering words** - More examples for each command type
+
+**Major Command Expansions**:
+- 📚 **reactree-debug.md** - Expanded from 64 to 274 lines with:
+  - Debugging Philosophy section
+  - Bug Types Supported (Runtime, Logic, Performance, Integration, Security, Data)
+  - 7-phase workflow (Error Capture → Verification)
+  - Quality Gates table
+  - Debug-specific FEEDBACK types
+  - Best Practices and Anti-Patterns
+- 📚 **reactree-feature.md** - Expanded from 54 to 298 lines with:
+  - Feature Development Philosophy
+  - Feature Types Supported (CRUD, Dashboard, Import/Export, etc.)
+  - TDD-focused workflow phases
+  - Acceptance criteria validation
+  - Feature-specific FEEDBACK types
+- 📚 **reactree-dev.md** - Enhanced from 237 to 360 lines with:
+  - Development Philosophy section
+  - Development Types Supported
+  - All 11 agents referenced
+  - All 17 skills referenced
+  - Structured sections matching reactree-refactor
+- 📚 **reactree-refactor.md** - Added Skills Used section with ${} paths
+
+**Consistency Improvements**:
+- All commands now follow the same section structure:
+  1. Philosophy
+  2. Usage + Examples
+  3. Types Supported
+  4. Workflow Phases
+  5. Quality Gates
+  6. FEEDBACK Edge Handling
+  7. Activation template
+  8. Specialist Agents Used
+  9. Skills Used
+  10. Best Practices
+  11. Anti-Patterns to Avoid
+  12. Memory Systems Integration
+
 ### v2.3.1 (2025-12-28) - Plugin Path Detection Fix
 
 **Bug Fix**:

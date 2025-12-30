@@ -23,8 +23,8 @@
     {
       "name": "reactree-rails-dev",
       "source": "./plugins/reactree-rails-dev",
-      "version": "2.3.1",
-      "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, dual memory systems, smart intent detection, utility agents (file-finder, code-line-finder, git-diff-analyzer, log-analyzer), and safe refactoring workflow",
+      "version": "2.4.0",
+      "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, dual memory systems, smart intent detection, utility agents, color-coded commands, comprehensive skill references, and safe refactoring workflow",
       "author": {
         "name": "Mohamad Kaakati",
         "email": "hello@kaakati.me"
