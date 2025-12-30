@@ -47,111 +47,303 @@ This plugin implements research from ["ReAcTree: Hierarchical LLM Agent Trees wi
 ## Installation
 
 ### Prerequisites
-- Claude Code CLI (>=1.0.0)
-- Beads issue tracker (`bd` CLI)
-- Existing Rails skills in `.claude/skills/` (from rails-enterprise-dev or custom)
 
-### Install Plugin
+- **Claude Code CLI** (>=1.0.0)
+- **Ruby on Rails project** (Rails 6.x, 7.x, or 8.x)
+- **Beads issue tracker** (`bd` CLI) - Optional but recommended
+
+### Quick Install
 
 ```bash
 # In your Rails project root
 mkdir -p .claude/plugins
 cp -r /path/to/reactree-rails-dev .claude/plugins/
+
+# Or clone directly
+git clone https://github.com/kaakati/rails-enterprise-dev.git /tmp/rails-enterprise-dev
+cp -r /tmp/rails-enterprise-dev/plugins/reactree-rails-dev .claude/plugins/
 ```
+
+### Verify Installation
+
+```bash
+ls .claude/plugins/reactree-rails-dev/
+# Should show: agents/ commands/ skills/ hooks/ README.md
+```
+
+---
 
 ## Getting Started
 
-After installing the plugin, run the initialization command:
+### Step 1: Initialize the Plugin
 
-```bash
+Run the initialization command in Claude Code:
+
+```
 /reactree-init
 ```
 
-This will:
-1. **Validate prerequisites** - Check plugin installation and hooks
-2. **Set up skills** - Option to copy bundled skills to your project
-3. **Create configuration** - Generate `.claude/reactree-rails-dev.local.md`
-4. **Initialize memory** - Set up working and episodic memory files
-5. **Enable auto-triggering** - Configure smart detection for automatic workflow suggestions
+This command performs 5 phases:
 
-### What You'll See
+#### Phase 1: Validate Plugin Installation
+- Checks plugin is correctly installed
+- Verifies `${CLAUDE_PLUGIN_ROOT}` environment variable
+- Confirms hooks are configured
 
+#### Phase 2: Set Up Skills Directory
+- Checks if `.claude/skills/` exists
+- **If missing**: Offers to copy 17 bundled skills to your project
+- **If exists**: Lists discovered skills by category
+
+#### Phase 3: Create Configuration
+Creates `.claude/reactree-rails-dev.local.md` with:
+```yaml
+---
+enabled: true
+quality_gates_enabled: true
+test_coverage_threshold: 90
+auto_commit: false
+smart_detection_enabled: true
+detection_mode: suggest
+---
+```
+
+#### Phase 4: Initialize Memory Files
+Creates 4 memory files in `.claude/`:
+- `reactree-memory.jsonl` - Working memory (shared facts)
+- `reactree-episodes.jsonl` - Episodic memory (successful patterns)
+- `reactree-feedback.jsonl` - FEEDBACK edge state
+- `reactree-state.jsonl` - Control flow state (LOOP/CONDITIONAL)
+
+#### Phase 5: Status Report
+Displays comprehensive initialization summary:
 ```
 🚀 ReAcTree Plugin Initialized!
 
-Prerequisites:
-  ✅ Plugin located at: /path/to/plugin  (shown via CLAUDE_PLUGIN_ROOT)
-  ✅ Hooks configured (SessionStart, UserPromptSubmit)
-  ✅ Configuration created
+━━━ Prerequisites ━━━
+✅ Plugin: /path/to/.claude/plugins/reactree-rails-dev
+✅ Hooks: SessionStart, UserPromptSubmit
+✅ Config: .claude/reactree-rails-dev.local.md
 
-Skills Discovered (18 total):
-  📦 Core: rails-conventions, rails-error-prevention
-  💾 Data: activerecord-patterns
-  ⚙️ Service: service-object-patterns, sidekiq-async-patterns
-  ...
+━━━ Skills Discovered (17) ━━━
+📦 Core: rails-conventions, rails-error-prevention, codebase-inspection
+💾 Data: activerecord-patterns
+⚙️ Service: service-object-patterns, sidekiq-async-patterns, api-development-patterns
+🎨 UI: hotwire-patterns, viewcomponents-specialist, tailadmin-patterns
+🧪 Testing: rspec-testing-patterns
+🌍 Domain: localization, requirements-writing, ruby-oop-patterns
+🔧 Meta: reactree-patterns, smart-detection
 
-Auto-triggering is now active!
+━━━ Memory Files ━━━
+✅ Working memory initialized
+✅ Episodic memory initialized
+✅ Feedback state initialized
+✅ Control flow state initialized
+
+Smart detection is now active!
 ```
 
-### Auto-Triggering
+### Step 2: Start Using Commands
 
-Once initialized, the plugin will automatically suggest workflows based on your prompts:
+After initialization, you have access to 4 color-coded commands:
+
+| Command | Color | Purpose |
+|---------|-------|---------|
+| `/reactree-dev` | 🟢 Green | Full-featured development workflow |
+| `/reactree-feature` | 🔵 Cyan | User story & TDD-focused development |
+| `/reactree-debug` | 🟠 Orange | Systematic debugging with log analysis |
+| `/reactree-refactor` | 🟡 Yellow | Safe refactoring with test preservation |
+
+---
+
+## Usage
+
+### Command 1: `/reactree-dev` (Green)
+
+**Primary development workflow** for building new features with parallel execution.
+
+#### Trigger Words
+```
+add, implement, build, create, develop, integrate, set up, configure
+```
+
+#### Examples
+```bash
+# Authentication
+/reactree-dev add JWT authentication with refresh tokens
+/reactree-dev implement OAuth2 login with Google
+
+# APIs
+/reactree-dev create REST API for user management
+/reactree-dev build webhook receiver for Stripe events
+
+# Real-time
+/reactree-dev add real-time notifications with Action Cable
+/reactree-dev implement live chat feature
+
+# Background Jobs
+/reactree-dev implement Sidekiq job for report generation
+/reactree-dev add async email processing
+
+# UI
+/reactree-dev add Hotwire-powered search with autocomplete
+/reactree-dev create ViewComponent for user card
+
+# Data
+/reactree-dev add Order model with polymorphic associations
+/reactree-dev create migration for multi-tenant schema
+```
+
+#### What Happens
+1. **Phase 0: Setup** - Discovers skills, initializes working memory
+2. **Phase 2: Inspection** - Analyzes codebase patterns with `codebase-inspector`
+3. **Phase 3: Planning** - Creates parallel execution plan with `rails-planner`
+4. **Phase 4: Implementation** - Generates code with `implementation-executor`
+5. **Phase 5: Review** - Validates with `test-oracle`
+6. **Phase 6: Completion** - Records to episodic memory
+
+---
+
+### Command 2: `/reactree-feature` (Cyan)
+
+**Feature-driven development** with user stories, acceptance criteria, and TDD emphasis.
+
+#### Trigger Words
+```
+user story, as a user, feature, user can, customers should, acceptance criteria
+```
+
+#### Examples
+```bash
+# User Story Format
+/reactree-feature As a user I can export my tasks to CSV
+/reactree-feature As an admin I can view user activity logs
+/reactree-feature Users should be able to reset their password via email
+
+# Feature Requests
+/reactree-feature Add export functionality for reports
+/reactree-feature Implement bulk import from spreadsheet
+/reactree-feature Build real-time dashboard with live metrics
+
+# UI Features
+/reactree-feature Add drag-and-drop task reordering
+/reactree-feature Create interactive chart for sales data
+
+# Domain Features
+/reactree-feature Add multi-tenant support with subdomain routing
+/reactree-feature Implement Arabic RTL language support
+/reactree-feature Create role-based access control system
+```
+
+#### What Happens
+1. **Feature Definition** - Parses user story, generates acceptance criteria
+2. **TDD Planning** - Designs tests BEFORE implementation
+3. **Implementation** - Builds feature to pass acceptance tests
+4. **Validation** - Verifies ALL acceptance criteria met
+
+---
+
+### Command 3: `/reactree-debug` (Orange)
+
+**Systematic debugging** with log analysis, root cause identification, and regression prevention.
+
+#### Trigger Words
+```
+fix, debug, error, bug, issue, broken, not working, failing, crash, exception
+```
+
+#### Examples
+```bash
+# Error Messages
+/reactree-debug NoMethodError in TasksController#index
+/reactree-debug ArgumentError: wrong number of arguments
+/reactree-debug ActiveRecord::RecordNotFound in UsersController#show
+
+# Symptoms
+/reactree-debug Users can't login after password reset
+/reactree-debug Page loads but data is missing
+/reactree-debug Button click does nothing
+
+# Performance
+/reactree-debug Slow query on bundles index page
+/reactree-debug Request timeout on dashboard load
+/reactree-debug N+1 query detected in reports
+
+# Integration
+/reactree-debug API returns 500 for valid request
+/reactree-debug Sidekiq job keeps failing with retry
+```
+
+#### What Happens
+1. **Error Capture** - Reproduces error, captures stack trace
+2. **Investigation** - Uses `log-analyzer` and `codebase-inspector`
+3. **Root Cause** - Uses `code-line-finder` for precise location
+4. **Fix Planning** - Designs minimal fix
+5. **Implementation** - Applies fix with FEEDBACK edges
+6. **Regression Test** - Adds test to prevent recurrence
+7. **Verification** - Confirms fix, runs full suite
+
+---
+
+### Command 4: `/reactree-refactor` (Yellow)
+
+**Safe refactoring** with test preservation, reference tracking, and automatic rollback.
+
+#### Trigger Words
+```
+refactor, rename, move, extract, inline, reorganize, clean up, improve
+```
+
+#### Examples
+```bash
+# Extract
+/reactree-refactor PaymentService extract method for charge logic
+/reactree-refactor OrdersController extract service object
+
+# Rename
+/reactree-refactor User model rename email_address to email
+/reactree-refactor rename calculate_total to compute_order_total
+
+# Move
+/reactree-refactor OrdersController move business logic to service
+/reactree-refactor move helper methods to concern
+
+# Inline
+/reactree-refactor legacy_helper.rb inline and delete
+/reactree-refactor inline unused private method
+
+# Pattern Changes
+/reactree-refactor replace conditional with polymorphism in PaymentProcessor
+```
+
+#### What Happens
+1. **Pre-Flight** - Runs tests, must be GREEN
+2. **Reference Discovery** - Uses `code-line-finder` to find ALL usages
+3. **Safe Transformation** - Incremental changes with tests after each
+4. **Verification** - Coverage not degraded, all tests pass
+5. **Completion** - Detailed commit message
+
+---
+
+### Auto-Triggering (Smart Detection)
+
+Once initialized, the plugin automatically suggests workflows based on your prompts:
 
 | Your Prompt | Suggested Workflow |
 |-------------|-------------------|
 | "Add user authentication" | `/reactree-dev` |
+| "As a user I can export..." | `/reactree-feature` |
 | "Fix the login bug" | `/reactree-debug` |
 | "Refactor the user service" | `/reactree-refactor` |
 | "Find the payment controller" | `file-finder` agent |
 
-You can disable auto-triggering in `.claude/reactree-rails-dev.local.md`:
+#### Configuration
+In `.claude/reactree-rails-dev.local.md`:
 ```yaml
-smart_detection_enabled: false
+smart_detection_enabled: true   # Enable/disable auto-detection
+detection_mode: suggest         # suggest | inject | disabled
+annoyance_threshold: medium     # low | medium | high
 ```
-
-## Usage
-
-### Basic Development Workflow
-
-```bash
-/reactree-dev "Add payment processing with Stripe"
-```
-
-**What happens**:
-1. **Skill Discovery**: Finds your Rails skills (activerecord-patterns, service-object-patterns, etc.)
-2. **Codebase Inspection**: Analyzes patterns, writes to working memory
-3. **Intelligent Planning**: Creates dependency graph for parallel execution
-4. **Parallel Implementation**: Runs independent phases concurrently
-   - Group 1: Database migrations
-   - Group 2: Models
-   - Group 3: Services + Components + Model Tests (parallel!)
-   - Group 4: Controllers + Jobs (parallel!)
-   - Group 5: Views
-   - Group 6: Integration tests
-5. **Memory Learning**: Records successful execution for future reference
-
-### Feature-Driven Development
-
-```bash
-/reactree-feature "User Story: As an admin, I want to export payments to CSV"
-```
-
-**Includes**:
-- User story parsing
-- Acceptance criteria generation
-- Test-driven implementation
-
-### Debugging Workflow
-
-```bash
-/reactree-debug "Fix: Payment emails not being sent"
-```
-
-**Systematic debugging**:
-1. Error reproduction
-2. Root cause analysis
-3. Fix implementation
-4. Regression test creation
 
 ## Architecture
 
