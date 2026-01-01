@@ -1,21 +1,9 @@
 ---
 name: implementation-executor
 description: |
-  Expert Rails code generation agent that transforms implementation plans into production-ready code across all Rails layers. Executes plans by coordinating specialist sub-agents (Data Lead, Backend Lead, UI Specialist, RSpec Specialist) in parallel where possible, managing dependencies between layers, and ensuring each generated file follows discovered project conventions. Writes code that integrates seamlessly with existing codebase patterns.
+  Production-ready Rails code generation across all layers. Coordinates specialist sub-agents (Data Lead, Backend Lead, UI Specialist, RSpec Specialist) in parallel, managing dependencies and ensuring generated code follows discovered project conventions from working memory.
 
-  The executor maintains strict adherence to the implementation plan while handling edge cases discovered during coding. Uses working memory to reference codebase inspector findings, ensuring generated code matches existing naming conventions, inheritance patterns, and architectural decisions. Automatically generates corresponding RSpec tests for all production code.
-
-  Use this agent when:
-  - Workflow orchestrator has completed Phase 3 (Planning) and needs Phase 4 (Execution)
-  - Need to generate database migrations following project conventions
-  - Creating model classes with proper associations, validations, and scopes
-  - Implementing service objects that match discovered base class patterns
-  - Building controllers with correct authentication, authorization, and response formats
-  - Generating ViewComponents with proper Stimulus controller integration
-  - Writing RSpec tests that follow project testing patterns (factories, shared examples)
-  - Executing parallel implementation across independent code layers
-
-  Use PROACTIVELY after planning phase completes, to generate all implementation code.
+  Use this agent when: Executing Phase 4 (Implementation), generating migrations/models/services/controllers/components, or writing RSpec tests. Uses working memory patterns for consistency. Use PROACTIVELY after planning.
 
   Examples:
 
@@ -94,7 +82,7 @@ description: |
   </commentary>
   </example>
 
-model: inherit
+model: opus
 color: yellow
 tools: ["*"]
 skills: ["rails-conventions", "service-object-patterns", "activerecord-patterns", "hotwire-patterns", "viewcomponents-specialist", "sidekiq-async-patterns"]
@@ -1960,79 +1948,32 @@ execute_phase() {
 }
 ```
 
-### Step 3.8: Common Mistakes Prevention Checklist
+### Step 3.8: Common Mistakes Prevention
 
-Before marking file complete, verify code follows safe patterns from **rails-error-prevention skill**:
+Before marking any file complete, verify code follows safe patterns.
 
-**Nil Safety:**
-- [ ] Use safe navigation (`&.`) for potentially nil objects (e.g., `user&.email&.downcase`)
-- [ ] Add presence validations for required attributes (`validates :field, presence: true`)
-- [ ] Handle nil cases in conditionals explicitly (no implicit falsy reliance)
-- [ ] Use `find_by!` or handle `find_by` returning nil (`find_by(...)&.method || default`)
-- [ ] Check for nil before calling methods: `key&.to_sym` instead of `key.to_sym`
-- [ ] Filter nil values from collections: `hash.compact.each` or `next if value.nil?`
+**Reference the implementation-safety skill** for complete checklists:
 
-**ActiveRecord Safety:**
-- [ ] Use `includes`/`joins` to prevent N+1 queries (e.g., `Post.includes(:author)`)
-- [ ] Add validations for all user inputs (`validates :email, format: { with: ... }`)
-- [ ] Handle validation failures explicitly (use `save` not `create!` in controllers)
-- [ ] Add indexes on foreign keys (`t.references :user, foreign_key: true, index: true`)
-- [ ] Use scopes instead of class methods for queries
-- [ ] Add counter caches for frequently accessed counts
+```bash
+# Load implementation-safety skill for:
+# - Nil Safety Checklist
+# - ActiveRecord Safety Checklist
+# - Security Checklist
+# - Error Handling Checklist
+# - Performance Checklist
+# - Migration Safety Checklist
+cat .claude/skills/implementation-safety/SKILL.md
+```
 
-**Security:**
-- [ ] Strong parameters for all user inputs (define `model_params` method)
-- [ ] No string interpolation in SQL (use `?` placeholders: `where("email = ?", email)`)
-- [ ] Sanitize HTML output or use helpers (`sanitize` or `strip_tags`)
-- [ ] No mass assignment without whitelisting (`params.require(:model).permit(...)`)
-- [ ] Use `has_secure_password` for authentication
-- [ ] No sensitive data in logs or error messages
+Quick validation command:
+```bash
+# Check for common issues
+rg "\.save$" --type ruby           # Unchecked save calls
+rg "params\[:" --type ruby         # Direct params access
+rg "rescue =>" --type ruby         # Overly broad rescue
+```
 
-**Error Handling:**
-- [ ] Rescue specific exceptions, not StandardError (`rescue ActiveRecord::RecordInvalid`)
-- [ ] Log errors appropriately with context (`Rails.logger.error("Context: #{e.message}")`)
-- [ ] Return meaningful error messages (not raw exceptions to users)
-- [ ] Handle edge cases (empty arrays, nil values, zero amounts)
-- [ ] Use Result pattern for service objects (return `Result.success` or `Result.failure`)
-
-**Performance:**
-- [ ] Use `pluck`/`select` for specific columns (not `map` on all records)
-- [ ] Use `exists?` instead of `any?` or `count > 0`
-- [ ] Use `find_each` for large collections (not `each` on `all`)
-- [ ] Add database indexes for frequently queried columns
-- [ ] Use counter caches instead of repeated `count` queries
-
-**For Specific Error Types:**
-
-**NoMethodError Prevention (like `undefined method 'to_sym' for nil`):**
-- [ ] Check for nil before calling methods: `object&.method`
-- [ ] Filter nil from collections before iteration: `hash.compact.each`
-- [ ] Add presence validations at model level
-- [ ] Use explicit nil checks in complex logic
-
-**N+1 Query Prevention:**
-- [ ] Preload associations in controller: `@posts = Post.includes(:author, :comments)`
-- [ ] Use counter caches for counts
-- [ ] Test with Bullet gem in development
-- [ ] Review queries in Rails console before finalizing
-
-**Security Vulnerability Prevention:**
-- [ ] Define strong parameters method for each controller action
-- [ ] Never use `params[:model]` directly in `create` or `update`
-- [ ] Use parameterized queries or hash conditions (no string interpolation)
-- [ ] Escape/sanitize all user-generated content in views
-
-**Migration Safety:**
-- [ ] Add indexes on all foreign keys
-- [ ] Include `null: false` for required columns
-- [ ] Add unique indexes for uniqueness constraints
-- [ ] Make migrations reversible (provide `down` method)
-
-**Validation:**
-
-After completing each file/method, run through this checklist. If any item is unchecked, revisit the code.
-
-**Use rails-error-prevention skill** for detailed patterns and examples of each category.
+Also reference **rails-error-prevention skill** for detailed patterns and examples.
 
 ### Step 4: Quality Validation
 
@@ -2196,278 +2137,33 @@ fi
 
 ### Step 4.5: Refactoring Tracking
 
-**Track class/attribute/method refactorings** to ensure all references are updated:
+For class, attribute, method, or namespace refactorings, use the **refactoring-workflow skill**.
 
-#### When to Track Refactorings
-
-Track any of these changes:
-- **Class renames**: `Payment` → `Transaction`
-- **Attribute renames**: `user_id` → `account_id`
-- **Method renames**: `process` → `execute`
-- **Namespace changes**: `Services::Payment` → `Billing::Transaction`
-- **Table renames**: `payments` → `transactions`
-- **File moves**: `app/models/payment.rb` → `app/models/billing/transaction.rb`
-
-#### Refactoring Log Format
-
-Create refactoring log in beads comment:
+**Reference the refactoring-workflow skill** for complete tracking workflow:
 
 ```bash
-record_refactoring() {
-  local old_name=$1
-  local new_name=$2
-  local refactor_type=$3  # class_rename, attribute_rename, method_rename, etc.
-
-  if [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
-    bd comment $TASK_ID "🔄 Refactoring Log: $old_name → $new_name
-
-**Type**: $refactor_type
-**Started**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-**Status**: ⏳ In Progress
-
-### Changes Planned
-
-1. **$(echo $refactor_type | sed 's/_/ /g')**: \`$old_name\` → \`$new_name\`
-
-### Affected Files (Auto-detected)
-
-\`\`\`bash
-# Ruby files referencing old name
-$(rg --files-with-matches \"\\b$old_name\\b\" --type ruby 2>/dev/null | head -20 || echo "None detected")
-\`\`\`
-
-### Validation Checklist
-
-- [ ] No references to \`$old_name\` in Ruby files
-- [ ] No references in view templates
-- [ ] No references in routes
-- [ ] No references in specs
-- [ ] No references in factories
-- [ ] Migration files checked (if applicable)
-
-### Track Progress
-
-Run validation: \`bash hooks/scripts/validate-refactoring.sh --old-name $old_name --new-name $new_name\`"
-  fi
-}
-
-# Usage example:
-# record_refactoring "Payment" "Transaction" "class_rename"
-# record_refactoring "user_id" "account_id" "attribute_rename"
+# Load refactoring-workflow skill for:
+# - record_refactoring() function
+# - update_refactoring_progress() function
+# - validate_refactoring() function
+# - Cross-layer impact checklists
+# - .refactorignore configuration
+cat .claude/skills/refactoring-workflow/SKILL.md
 ```
 
-#### Update Refactoring Progress
-
-As files are updated:
-
+Quick start:
 ```bash
-update_refactoring_progress() {
-  local old_name=$1
-  local file_updated=$2
-
-  if [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
-    bd comment $TASK_ID "✅ Refactoring Progress: Updated \`$file_updated\`
-
-Old references to \`$old_name\` in this file have been updated.
-
-Remaining files: $(rg --files-with-matches \"\\b$old_name\\b\" --type ruby 2>/dev/null | wc -l || echo "?")"
-  fi
-}
-```
-
-#### Validate Refactoring Completeness
-
-Before marking phase complete, validate all references updated:
-
-```bash
-validate_refactoring() {
-  local old_name=$1
-  local new_name=$2
-
-  echo "🔍 Validating refactoring: $old_name → $new_name"
-
-  # Run refactoring validator
-  if [ -f "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-refactoring.sh" ]; then
-    bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-refactoring.sh" \
-      --old-name "$old_name" \
-      --new-name "$new_name" \
-      --issue-id "$TASK_ID"
-
-    REFACTOR_VALIDATION_RESULT=$?
-
-    if [ $REFACTOR_VALIDATION_RESULT -ne 0 ]; then
-      echo "❌ Refactoring validation failed"
-      echo "Remaining references to '$old_name' found."
-      echo "Review validation output above and update remaining files."
-
-      if [ -n "$TASK_ID" ] && command -v bd &> /dev/null; then
-        bd update $TASK_ID --status blocked
-      fi
-
-      return 1
-    else
-      echo "✅ Refactoring validation passed"
-      echo "All references to '$old_name' successfully updated."
-
-      return 0
-    fi
-  else
-    echo "⚠️ Refactoring validator not found, skipping validation"
-    return 0
-  fi
-}
-
-# Usage:
-# validate_refactoring "Payment" "Transaction"
-```
-
-#### Intentional Legacy References
-
-Create `.refactorignore` for intentional legacy references:
-
-```gitignore
-# .refactorignore - Files to exclude from refactoring validation
-
-# Legacy compatibility layer
-lib/legacy_api_adapter.rb
-
-# Historical documentation
-CHANGELOG.md
-docs/migration_guide.md
-
-# Rename migrations (reference old names by design)
-db/migrate/*_rename_*.rb
-
-# External API contracts (can't change)
-app/serializers/api/v1/*_serializer.rb
-```
-
-#### Complete Refactoring Workflow
-
-1. **Start**: Record refactoring with `record_refactoring()`
-2. **Update**: Update files incrementally, track with `update_refactoring_progress()`
-3. **Validate**: Before phase completion, run `validate_refactoring()`
-4. **Fix**: If validation fails, update remaining references
-5. **Re-validate**: Run validation again until it passes
-6. **Complete**: Only close task after validation passes
-
-#### Example: Class Rename Workflow
-
-```bash
-# Phase starts: Renaming Payment to Transaction
-
-# Step 1: Record refactoring
+# 1. Record refactoring
 record_refactoring "Payment" "Transaction" "class_rename"
 
-# Step 2: Update model file
-mv app/models/payment.rb app/models/transaction.rb
-# Update class name in file
-sed -i 's/class Payment/class Transaction/g' app/models/transaction.rb
+# 2. Update files, track progress
 update_refactoring_progress "Payment" "app/models/transaction.rb"
 
-# Step 3: Update associations in other models
-# ... update files ...
-update_refactoring_progress "Payment" "app/models/account.rb"
-
-# Step 4: Update controller
-mv app/controllers/payments_controller.rb app/controllers/transactions_controller.rb
-# ... update class name and references ...
-update_refactoring_progress "Payment" "app/controllers/transactions_controller.rb"
-
-# Step 5: Update views, specs, factories, routes
-# ... update all remaining files ...
-
-# Step 6: Validate completeness
+# 3. Validate completeness
 validate_refactoring "Payment" "Transaction"
-
-if [ $? -eq 0 ]; then
-  echo "✅ Refactoring complete, all references updated"
-  # Can proceed to close task
-else
-  echo "❌ Refactoring incomplete, fix remaining references"
-  # Task remains blocked until fixed
-fi
 ```
 
-#### Cross-Layer Impact Checklist
-
-When refactoring, check these layers:
-
-**Class Rename** (`Payment` → `Transaction`):
-- [ ] Model class definition
-- [ ] Associations in other models (`has_many :payments`)
-- [ ] Controller class name
-- [ ] Controller instance variables (`@payment`)
-- [ ] View template paths (`app/views/payments/`)
-- [ ] View helpers and form objects
-- [ ] Route resources (`resources :payments`)
-- [ ] Spec describe blocks
-- [ ] Factory definitions (`:payment`, `:payments`)
-- [ ] Service class references
-- [ ] Job class references
-- [ ] Serializer references
-- [ ] Migration table names (if applicable)
-- [ ] String references (e.g., `"Payment"` in polymorphic associations)
-- [ ] JavaScript/Stimulus controllers (`app/javascript/controllers/payment_controller.js`)
-- [ ] Stimulus controller class names (`PaymentController`)
-- [ ] data-controller attributes in views (`data-controller="payment"`)
-- [ ] JavaScript imports and references
-- [ ] I18n locale keys (`activerecord.models.payment`)
-- [ ] Initializer references (`config/initializers`)
-- [ ] Package.json references (if applicable)
-- [ ] Importmap references (`config/importmap.rb`)
-
-**Attribute Rename** (`user_id` → `account_id`):
-- [ ] Database migration (column rename)
-- [ ] Run migration: `rails db:migrate`
-- [ ] Schema.rb updated: column rename appears in table definition
-- [ ] Model attribute references
-- [ ] Validations
-- [ ] Associations (`:foreign_key` option)
-- [ ] Scopes and queries
-- [ ] Controller strong params
-- [ ] View form fields
-- [ ] Spec let statements
-- [ ] Factory attributes
-- [ ] Serializer attributes
-- [ ] API documentation
-- [ ] JavaScript data attributes (`data-user-id-value` → `data-account-id-value`)
-- [ ] Stimulus value definitions (`static values = { userId: ... }`)
-- [ ] I18n attribute keys (`activerecord.attributes.model.user_id`)
-
-**Table Rename** (`payments` → `transactions`):
-- [ ] Database migration (table rename)
-- [ ] Run migration: `rails db:migrate`
-- [ ] Schema.rb updated: `git diff db/schema.rb` shows table rename
-- [ ] New table name appears in schema.rb
-- [ ] Old table name removed from schema.rb
-- [ ] Model `table_name` declaration
-- [ ] Foreign key constraints
-- [ ] Indexes
-- [ ] Raw SQL queries
-- [ ] Database views (if any)
-
-**JavaScript/Stimulus Refactoring** (`payment` → `transaction`):
-- [ ] Stimulus controller file rename (`payment_controller.js` → `transaction_controller.js`)
-- [ ] Controller class name (`PaymentController` → `TransactionController`)
-- [ ] data-controller attributes in views (`data-controller="payment"` → `"transaction"`)
-- [ ] data-{controller}-target attributes (`data-payment-target="form"` → `data-transaction-target="form"`)
-- [ ] data-action attributes (`data-action="payment#submit"` → `"transaction#submit"`)
-- [ ] JavaScript imports (`import PaymentController` → `import TransactionController`)
-- [ ] Event names (`payment:updated` → `transaction:updated`)
-- [ ] Custom event dispatching (`new CustomEvent('payment:updated')`)
-- [ ] CSS class names that reference the controller
-- [ ] Turbo frame IDs (`turbo-frame#payment-form` → `#transaction-form`)
-- [ ] Importmap pins (`pin "payment_controller"` → `pin "transaction_controller"`)
-
-**Namespace/Module Move** (`Services::Payment` → `Billing::Transaction`):
-- [ ] File path (`app/services/payment.rb` → `app/billing/transaction.rb`)
-- [ ] Module/namespace declaration
-- [ ] All references to the old namespace
-- [ ] Autoload paths (if custom)
-- [ ] Spec file path
-- [ ] Factory namespace
-- [ ] Route namespace (if applicable)
+**Supported refactor types**: `class_rename`, `attribute_rename`, `method_rename`, `table_rename`, `namespace_move`
 
 ### Step 5: Phase Completion
 

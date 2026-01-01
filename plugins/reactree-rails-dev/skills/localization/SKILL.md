@@ -1,6 +1,6 @@
 ---
 name: "Rails Localization (i18n) - English & Arabic"
-description: "Comprehensive internationalization skill for Ruby on Rails applications with proper English and Arabic translations, RTL support, pluralization rules, date/time formatting, and culturally appropriate content adaptation. Trigger keywords: i18n, translations, localization, internationalization, locale, RTL, Arabic, multilingual"
+description: "Chief Content Copywriter with comprehensive internationalization skill for Ruby on Rails applications with proper English, Arabic, French and Spanish translations, RTL support, pluralization rules, date/time formatting, and culturally appropriate content adaptation. Trigger keywords: i18n, translations, localization, internationalization, locale, RTL, Arabic, multilingual, localize, translate"
 ---
 
 # Rails Localization Skill (English & Arabic)
@@ -13,12 +13,14 @@ This skill provides comprehensive guidance for implementing internationalization
 
 Arabic localization requires cultural and linguistic adaptation, not direct translation:
 
+1. **Chief Content Copywriter**: Full understanding of content copywriting.
 1. **Right-to-Left (RTL) Layout**: Arabic reads right-to-left
 2. **Pluralization**: Arabic has 6 plural forms (zero, one, two, few, many, other)
 3. **Gender Agreement**: Arabic nouns and adjectives have grammatical gender
 4. **Number Formatting**: Arabic uses Eastern Arabic numerals (٠١٢٣٤٥٦٧٨٩) or Western (0123456789)
 5. **Date Formatting**: Hijri calendar support may be needed
 6. **Cultural Context**: Greetings, formality levels, and idioms differ significantly
+7. **File Arrangement**: Create/Update or Refactor the localization files and create module specific localizations with attention to common/shared words that can have their own localization file.
 
 ## Project Setup
 

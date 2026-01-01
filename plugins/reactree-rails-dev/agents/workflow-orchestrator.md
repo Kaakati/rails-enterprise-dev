@@ -1,20 +1,9 @@
 ---
 name: workflow-orchestrator
 description: |
-  Master orchestration agent that coordinates the complete ReAcTree-based Rails development workflow across 6 distinct phases. Manages agent delegation, skill discovery, working memory persistence, episodic learning, parallel execution optimization, and beads issue tracking integration. Acts as the central nervous system for all feature development, ensuring proper sequencing, quality gates, and cross-agent communication through FEEDBACK edges.
+  Master coordination for 6-phase ReAcTree Rails workflows. Manages agent delegation, skill discovery, working memory, episodic learning, parallel execution, quality gates, and beads tracking. Coordinates FEEDBACK edges for self-correcting development cycles.
 
-  This agent understands the full ReAcTree architecture including: hierarchical agent spawning for parallel subtasks, working memory for cross-agent fact sharing, episodic memory for learning from past sessions, LOOP nodes for iterative refinement, CONDITIONAL nodes for branching logic, and FEEDBACK edges for backwards error propagation and self-correction.
-
-  Use this agent when:
-  - Starting a new feature development workflow requiring multi-phase coordination
-  - Need to orchestrate multiple specialist agents (codebase-inspector, rails-planner, implementation-executor)
-  - Implementing complex features that span models, services, controllers, and UI components
-  - Require beads issue tracking for multi-session work with dependencies
-  - Managing workflows that need quality gates between phases
-  - Coordinating parallel agent execution for performance optimization
-  - Recovering from failed phases using FEEDBACK edge error propagation
-
-  Use PROACTIVELY when user requests feature implementation, complex refactoring, or multi-component development.
+  Use this agent when: Starting multi-phase feature development, orchestrating specialist agents, managing quality gates, or tracking multi-session work. Use PROACTIVELY for feature implementation or complex refactoring.
 
   Examples:
 
@@ -174,6 +163,50 @@ cleanup_memory() {
   mv "$temp_file" "$MEMORY_FILE"
 
   echo "✓ Memory cleaned up (removed expired entries)" >&2
+}
+
+# TTL-based caching API (24-hour default)
+write_memory_cached() {
+  local agent=$1
+  local type=$2
+  local key=$3
+  local value=$4
+  local ttl_hours=${5:-24}  # Default: 24 hours
+
+  # Calculate expiration time
+  local expires_at
+  if [[ "$(uname)" == "Darwin" ]]; then
+    expires_at=$(date -u -v+${ttl_hours}H +%Y-%m-%dT%H:%M:%SZ)
+  else
+    expires_at=$(date -u -d "+${ttl_hours} hours" +%Y-%m-%dT%H:%M:%SZ)
+  fi
+
+  write_memory "$agent" "$type" "$key" "$value" "verified" "\"$expires_at\""
+  echo "✓ Cached $key (expires in ${ttl_hours}h)" >&2
+}
+
+check_cache() {
+  local key=$1
+
+  if [[ ! -f "$MEMORY_FILE" ]]; then
+    return 1
+  fi
+
+  local now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+  # Get last entry for key that hasn't expired
+  local cached=$(cat "$MEMORY_FILE" | \
+    jq -r "select(.key == \"$key\") | select(.expires_at == null or .expires_at > \"$now\") | .value" | \
+    tail -1)
+
+  if [[ -n "$cached" && "$cached" != "null" ]]; then
+    echo "✓ Cache hit: $key" >&2
+    echo "$cached"
+    return 0
+  fi
+
+  echo "✗ Cache miss: $key" >&2
+  return 1
 }
 
 # Initialize memory

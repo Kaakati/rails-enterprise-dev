@@ -603,6 +603,33 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### v2.5.0 (2026-01-01) - Multi-Agent Optimization
+
+**Token Efficiency Improvements**:
+- 📉 **implementation-executor.md** - Reduced from 2,718 to 2,413 lines (11% smaller)
+- 📉 **Description compression** - All 4 main agents reduced by 50-57%
+- 📉 **Content extraction** - Moved reusable patterns to new skills
+
+**Model Selection Optimization**:
+- 🎯 **Opus for architectural agents** - implementation-executor, codebase-inspector, rails-planner
+- 🎯 **Haiku for mechanical agents** - control-flow-manager (faster, cheaper)
+- 🎯 **Tool scoping** - Reduced `tools: ["*"]` to specific lists for 3 agents
+
+**New Skills (Extracted from implementation-executor)**:
+- ✨ **implementation-safety** - Nil safety, ActiveRecord, security, error handling, performance checklists
+- ✨ **refactoring-workflow** - Complete refactoring tracking with cross-layer impact checklists
+
+**24-Hour TTL Caching API**:
+- 🔄 **write_memory_cached()** - New function with configurable TTL (default: 24h)
+- 🔄 **check_cache()** - Check cache with automatic expiration handling
+- 🔄 **codebase-inspector** - Now caches service patterns, UI framework, auth helpers
+- 🔄 **Estimated 70% cache hit rate** - Eliminates redundant codebase analysis
+
+**Caching Points Added**:
+- Service pattern discovery (24h TTL)
+- UI framework detection (24h TTL)
+- Authentication helper discovery (24h TTL)
+
 ### v2.4.0 (2025-12-30) - Enhanced Commands with Color Coding & Skill References
 
 **Command Enhancements (All 4 Workflow Commands)**:

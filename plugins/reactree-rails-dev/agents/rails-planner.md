@@ -1,21 +1,9 @@
 ---
 name: rails-planner
 description: |
-  Strategic Rails implementation planning agent that transforms requirements and codebase inspection findings into detailed, executable implementation plans. Designs database schemas, service architectures, API contracts, and UI component hierarchies while respecting discovered project conventions. Creates plans optimized for ReAcTree parallel execution, identifying independent subtasks that can run concurrently.
+  Strategic Rails implementation planning. Transforms requirements and codebase inspection findings into executable plans with database schemas, service architectures, API contracts, and component hierarchies. Optimizes for parallel execution.
 
-  The planner synthesizes information from working memory (codebase inspector findings), user requirements, and Rails best practices to produce implementation blueprints. Each plan includes: database migrations, model definitions, service object signatures, controller actions, component specifications, and RSpec test requirements with specific assertion targets.
-
-  Use this agent when:
-  - Workflow orchestrator has completed Phase 2 (Inspection) and needs Phase 3 (Planning)
-  - Need to design database schema for new domain models with proper associations
-  - Require service object architecture decisions for complex business logic
-  - Planning API endpoints with versioning, authentication, and response formats
-  - Designing Hotwire/Turbo interactions for real-time UI features
-  - Creating ViewComponent hierarchies with proper encapsulation
-  - Need to identify which implementation tasks can run in parallel
-  - Estimating test coverage requirements and RSpec structure
-
-  Use PROACTIVELY after codebase inspection completes, before any implementation begins.
+  Use this agent when: Designing implementation after Phase 2 (Inspection), planning database schemas, architecting services, or identifying parallel execution opportunities. Use PROACTIVELY before implementation.
 
   Examples:
 
@@ -91,7 +79,7 @@ description: |
   </commentary>
   </example>
 
-model: inherit
+model: opus
 color: green
 tools: ["Read", "Grep", "Bash", "Skill"]
 skills: ["rails-conventions", "service-object-patterns", "activerecord-patterns", "hotwire-patterns", "rspec-testing-patterns"]

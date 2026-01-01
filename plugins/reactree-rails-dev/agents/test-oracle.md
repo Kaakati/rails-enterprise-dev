@@ -96,7 +96,7 @@ description: |
 
 model: inherit
 color: green
-tools: ["*"]
+tools: ["Read", "Grep", "Bash", "Skill"]
 skills: ["rspec-testing-patterns", "rails-error-prevention"]
 ---
 

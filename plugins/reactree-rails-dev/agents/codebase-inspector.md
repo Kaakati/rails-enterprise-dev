@@ -1,21 +1,9 @@
 ---
 name: codebase-inspector
 description: |
-  Expert Rails codebase analysis agent that performs mandatory deep inspection before any planning or implementation phase. Systematically discovers existing architectural patterns, coding conventions, authentication/authorization helpers, service object structures, view component hierarchies, testing patterns, and domain-specific abstractions. All findings are cached to working memory as verified facts that other agents reference, preventing assumption bugs and ensuring code consistency.
+  Systematic Rails codebase analysis for implementation planning. Discovers patterns (service objects, components, auth helpers), conventions (naming, organization), and dependencies. All findings cached to working memory as verified facts for other agents to reference, preventing assumption bugs.
 
-  The inspector uses a structured analysis protocol: first scanning directory structures, then reading key files, identifying inheritance hierarchies, mapping method signatures, and documenting naming conventions. Findings are tagged with confidence levels (high/medium/low) based on pattern frequency and consistency across the codebase.
-
-  Use this agent when:
-  - Starting any Rails feature development to establish baseline understanding of existing patterns
-  - Need to analyze authentication patterns before implementing user-related features (current_user vs current_admin)
-  - Required by workflow orchestrator in Phase 2 (Inspection) before planning can begin
-  - Before creating implementation plans to ensure new code matches existing conventions
-  - Implementing code that depends on known patterns like service objects, form objects, or decorators
-  - Analyzing unfamiliar codebase sections before making modifications
-  - Verifying assumptions about existing code structure to prevent integration bugs
-  - Discovering which gems, frameworks, and patterns are already in use
-
-  Use PROACTIVELY at the start of any feature development workflow or before making architectural decisions.
+  Use this agent when: Starting feature development (Phase 2), analyzing auth patterns, verifying codebase assumptions, or discovering gems/frameworks in use. Use PROACTIVELY at workflow start.
 
   Examples:
 
@@ -68,7 +56,7 @@ description: |
   </commentary>
   </example>
 
-model: inherit
+model: opus
 color: cyan
 tools: ["Read", "Grep", "Glob", "Bash", "Skill"]
 skills: ["rails-conventions", "codebase-inspection", "rails-context-verification", "rails-error-prevention"]
@@ -385,31 +373,39 @@ fi
 - Error handling patterns (custom errors, Result objects)
 - Private method organization
 
-**Write Service Pattern to Memory:**
+**Write Service Pattern to Memory (with 24h cache):**
 
 ```bash
-# After discovering service pattern
-if [ -n "$SERVICE_FILES" ]; then
-  # Determine pattern type
-  if grep -q 'include Callable' "$SERVICE_FILES" | head -1; then
-    PATTERN_TYPE="Callable concern"
-    PATTERN_FILE="app/concerns/callable.rb"
-  elif grep -q '< ApplicationService' "$SERVICE_FILES" | head -1; then
-    PATTERN_TYPE="ApplicationService inheritance"
-    PATTERN_FILE="app/services/application_service.rb"
-  else
-    PATTERN_TYPE="Plain Ruby class"
-    PATTERN_FILE=""
+# Check cache first (24-hour TTL)
+if cached_pattern=$(check_cache "service_object_implementation"); then
+  echo "✓ Using cached service pattern"
+  PATTERN_TYPE=$(echo "$cached_pattern" | jq -r '.pattern')
+else
+  # Discover service pattern
+  SERVICE_FILES=$(find app/services -name '*.rb' 2>/dev/null | head -3)
+
+  if [ -n "$SERVICE_FILES" ]; then
+    # Determine pattern type
+    if grep -q 'include Callable' "$SERVICE_FILES" | head -1; then
+      PATTERN_TYPE="Callable concern"
+      PATTERN_FILE="app/concerns/callable.rb"
+    elif grep -q '< ApplicationService' "$SERVICE_FILES" | head -1; then
+      PATTERN_TYPE="ApplicationService inheritance"
+      PATTERN_FILE="app/services/application_service.rb"
+    else
+      PATTERN_TYPE="Plain Ruby class"
+      PATTERN_FILE=""
+    fi
+
+    # Cache with 24h TTL
+    write_memory_cached "codebase-inspector" \
+      "service_pattern" \
+      "service_object_implementation" \
+      "{\"pattern\": \"$PATTERN_TYPE\", \"location\": \"$PATTERN_FILE\", \"example\": \"$(echo $SERVICE_FILES | head -1)\"}" \
+      24
+
+    echo "✓ Service pattern cached: $PATTERN_TYPE"
   fi
-
-  # Write to memory
-  write_memory "codebase-inspector" \
-    "service_pattern" \
-    "service_object_implementation" \
-    "{\"pattern\": \"$PATTERN_TYPE\", \"location\": \"$PATTERN_FILE\", \"example\": \"$(echo $SERVICE_FILES | head -1)\"}" \
-    "verified"
-
-  echo "✓ Service pattern stored in memory: $PATTERN_TYPE"
 fi
 ```
 
@@ -564,78 +560,99 @@ else
 fi
 ```
 
-**Write UI Framework to Memory:**
+**Write UI Framework to Memory (with 24h cache):**
 
 ```bash
-# Determine UI framework
-UI_FRAMEWORK="Unknown"
-UI_TEMPLATE="None"
+# Check cache first (24-hour TTL)
+if cached_ui=$(check_cache "ui_framework_stack"); then
+  echo "✓ Using cached UI framework"
+  UI_FRAMEWORK=$(echo "$cached_ui" | jq -r '.framework')
+  UI_TEMPLATE=$(echo "$cached_ui" | jq -r '.template')
+else
+  # Determine UI framework
+  UI_FRAMEWORK="Unknown"
+  UI_TEMPLATE="None"
 
-if grep -q "tailwindcss" Gemfile; then
-  UI_FRAMEWORK="Tailwind CSS"
+  if grep -q "tailwindcss" Gemfile; then
+    UI_FRAMEWORK="Tailwind CSS"
 
-  # Check for TailAdmin
-  if grep -q "tailadmin" Gemfile || find app -name '*tailadmin*' -o -name '*TailAdmin*' 2>/dev/null | grep -q .; then
-    UI_TEMPLATE="TailAdmin"
+    # Check for TailAdmin
+    if grep -q "tailadmin" Gemfile || find app -name '*tailadmin*' -o -name '*TailAdmin*' 2>/dev/null | grep -q .; then
+      UI_TEMPLATE="TailAdmin"
+    fi
+  elif grep -q "bootstrap" Gemfile; then
+    UI_FRAMEWORK="Bootstrap"
   fi
-elif grep -q "bootstrap" Gemfile; then
-  UI_FRAMEWORK="Bootstrap"
+
+  # Cache with 24h TTL
+  write_memory_cached "codebase-inspector" \
+    "ui_framework" \
+    "ui_framework_stack" \
+    "{\"framework\": \"$UI_FRAMEWORK\", \"template\": \"$UI_TEMPLATE\", \"frontend\": \"$FRONTEND_FRAMEWORK\"}" \
+    24
+
+  echo "✓ UI framework cached: $UI_FRAMEWORK + $UI_TEMPLATE"
 fi
-
-# Write UI framework to memory
-write_memory "codebase-inspector" \
-  "ui_framework" \
-  "ui_framework_stack" \
-  "{\"framework\": \"$UI_FRAMEWORK\", \"template\": \"$UI_TEMPLATE\", \"frontend\": \"$FRONTEND_FRAMEWORK\"}" \
-  "verified"
-
-echo "✓ UI framework stored in memory: $UI_FRAMEWORK + $UI_TEMPLATE"
 ```
 
-**Write Authentication Pattern to Memory:**
+**Write Authentication Pattern to Memory (with 24h cache):**
 
 ```bash
-# Detect authentication system
-AUTH_SYSTEM="Unknown"
-if grep -q "gem 'devise'" Gemfile 2>/dev/null; then
-  AUTH_SYSTEM="Devise"
-fi
-
-# Find current_user helper (check ApplicationController)
-if [ -f "app/controllers/application_controller.rb" ]; then
-  CURRENT_USER_HELPER=$(grep -E "def current_[a-z_]+" app/controllers/application_controller.rb | grep -v private | head -1 | sed -E 's/.*def (current_[a-z_]+).*/\1/')
-
-  if [ -n "$CURRENT_USER_HELPER" ]; then
-    # Write to memory
-    write_memory "codebase-inspector" \
-      "authentication_helper" \
-      "current_user_method" \
-      "{\"method\": \"$CURRENT_USER_HELPER\", \"system\": \"$AUTH_SYSTEM\", \"file\": \"app/controllers/application_controller.rb\"}" \
-      "verified"
-
-    echo "✓ Auth helper stored in memory: $CURRENT_USER_HELPER"
+# Check cache first (24-hour TTL)
+if cached_auth=$(check_cache "current_user_method"); then
+  echo "✓ Using cached auth helper"
+  CURRENT_USER_HELPER=$(echo "$cached_auth" | jq -r '.method')
+  AUTH_SYSTEM=$(echo "$cached_auth" | jq -r '.system')
+else
+  # Detect authentication system
+  AUTH_SYSTEM="Unknown"
+  if grep -q "gem 'devise'" Gemfile 2>/dev/null; then
+    AUTH_SYSTEM="Devise"
   fi
-fi
 
-# Check for namespace-specific auth (e.g., Admin, Client)
-for namespace in Admin Client Api; do
-  namespace_lower=$(echo "$namespace" | tr '[:upper:]' '[:lower:]')
-  controller_file="app/controllers/${namespace_lower}/${namespace_lower}_controller.rb"
+  # Find current_user helper (check ApplicationController)
+  if [ -f "app/controllers/application_controller.rb" ]; then
+    CURRENT_USER_HELPER=$(grep -E "def current_[a-z_]+" app/controllers/application_controller.rb | grep -v private | head -1 | sed -E 's/.*def (current_[a-z_]+).*/\1/')
 
-  if [ -f "$controller_file" ]; then
-    NAMESPACE_AUTH=$(grep -E "def current_[a-z_]+" "$controller_file" | grep -v private | head -1 | sed -E 's/.*def (current_[a-z_]+).*/\1/')
-
-    if [ -n "$NAMESPACE_AUTH" ]; then
-      write_memory "codebase-inspector" \
+    if [ -n "$CURRENT_USER_HELPER" ]; then
+      # Cache with 24h TTL
+      write_memory_cached "codebase-inspector" \
         "authentication_helper" \
-        "${namespace_lower}.current_user" \
-        "{\"method\": \"$NAMESPACE_AUTH\", \"namespace\": \"$namespace\", \"file\": \"$controller_file\"}" \
-        "verified"
+        "current_user_method" \
+        "{\"method\": \"$CURRENT_USER_HELPER\", \"system\": \"$AUTH_SYSTEM\", \"file\": \"app/controllers/application_controller.rb\"}" \
+        24
 
-      echo "✓ ${namespace} auth helper stored: $NAMESPACE_AUTH"
+      echo "✓ Auth helper cached: $CURRENT_USER_HELPER"
     fi
   fi
-done
+
+  # Check for namespace-specific auth (e.g., Admin, Client)
+  for namespace in Admin Client Api; do
+    namespace_lower=$(echo "$namespace" | tr '[:upper:]' '[:lower:]')
+    cache_key="${namespace_lower}.current_user"
+    controller_file="app/controllers/${namespace_lower}/${namespace_lower}_controller.rb"
+
+    # Skip if cached
+    if check_cache "$cache_key" >/dev/null 2>&1; then
+      echo "✓ Using cached ${namespace} auth"
+      continue
+    fi
+
+    if [ -f "$controller_file" ]; then
+      NAMESPACE_AUTH=$(grep -E "def current_[a-z_]+" "$controller_file" | grep -v private | head -1 | sed -E 's/.*def (current_[a-z_]+).*/\1/')
+
+      if [ -n "$NAMESPACE_AUTH" ]; then
+        write_memory_cached "codebase-inspector" \
+          "authentication_helper" \
+          "$cache_key" \
+          "{\"method\": \"$NAMESPACE_AUTH\", \"namespace\": \"$namespace\", \"file\": \"$controller_file\"}" \
+          24
+
+        echo "✓ ${namespace} auth helper cached: $NAMESPACE_AUTH"
+      fi
+    fi
+  done
+fi
 ```
 
 **Write Route Prefix to Memory:**

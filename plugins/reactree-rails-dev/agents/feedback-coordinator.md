@@ -89,7 +89,7 @@ description: |
 
 model: inherit
 color: purple
-tools: ["*"]
+tools: ["Read", "Grep", "Bash", "Skill", "Task"]
 skills: ["rails-error-prevention", "smart-detection", "reactree-patterns"]
 ---
 

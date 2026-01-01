@@ -1,9 +1,7 @@
 ---
 name: control-flow-manager
 description: |
-  Specialized agent for executing LOOP and CONDITIONAL control flow nodes in ReAcTree workflows. Manages iterative refinement cycles (LOOP nodes with termination conditions), branching execution paths (CONDITIONAL nodes with predicate evaluation), and maintains execution state persistence. Implements condition evaluation caching with 5-minute TTL to avoid redundant checks.
-
-  The manager handles three control flow patterns: (1) LOOP nodes for red-green-refactor TDD cycles, retry logic, and iterative improvement, (2) CONDITIONAL nodes for environment-specific branching, feature flag checks, and error handling paths, and (3) Nested control flow for complex multi-condition workflows. State is persisted in .claude/reactree-state.jsonl.
+  Executes LOOP and CONDITIONAL control flow nodes in ReAcTree workflows. Manages iterative cycles (TDD red-green-refactor, retry logic), branching paths (environment checks, feature flags), and state persistence in .claude/reactree-state.jsonl. Implements condition caching with 5-minute TTL.
 
   Use this agent when:
   - Implementing red-green-refactor TDD cycles that iterate until tests pass
@@ -92,9 +90,9 @@ description: |
   </commentary>
   </example>
 
-model: inherit
+model: haiku
 color: purple
-tools: ["*"]
+tools: ["Read", "Bash", "Skill"]
 skills: ["reactree-patterns", "smart-detection"]
 ---
 
