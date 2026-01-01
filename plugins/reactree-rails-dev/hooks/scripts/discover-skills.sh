@@ -100,7 +100,7 @@ for skill_dir in "$SKILLS_DIR"/*; do
       category="service" ;;
     *sidekiq*|*async*|*job*|*queue*)
       category="async" ;;
-    *component*|*view*|*hotwire*|*turbo*|*stimulus*|*tailadmin*|*ui*|*frontend*)
+    *component*|*view*|*hotwire*|*turbo*|*stimulus*|*tailadmin*|*ui*|*frontend*|*accessibility*|*user-experience*)
       category="ui" ;;
     *i18n*|*localization*|*translation*)
       category="i18n" ;;

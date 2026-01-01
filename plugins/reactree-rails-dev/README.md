@@ -198,9 +198,10 @@ add, implement, build, create, develop, integrate, set up, configure
 1. **Phase 0: Setup** - Discovers skills, initializes working memory
 2. **Phase 2: Inspection** - Analyzes codebase patterns with `codebase-inspector`
 3. **Phase 3: Planning** - Creates parallel execution plan with `rails-planner`
-4. **Phase 4: Implementation** - Generates code with `implementation-executor`
-5. **Phase 5: Review** - Validates with `test-oracle`
-6. **Phase 6: Completion** - Records to episodic memory
+4. **Phase 3.5: Context Compilation** - Extracts interfaces with `context-compiler` (if cclsp available)
+5. **Phase 4: Implementation** - Generates code with `implementation-executor` + Guardian validation
+6. **Phase 5: Review** - Validates with `test-oracle`
+7. **Phase 6: Completion** - Records to episodic memory
 
 ---
 
@@ -544,6 +545,7 @@ plugins/reactree-rails-dev/
 │   ├── workflow-orchestrator.md # Master workflow coordinator
 │   ├── codebase-inspector.md    # Pattern analysis agent
 │   ├── rails-planner.md         # Implementation planning
+│   ├── context-compiler.md      # LSP-powered context extraction (haiku)
 │   ├── implementation-executor.md # Code generation coordinator
 │   ├── test-oracle.md           # TDD/test validation agent
 │   ├── feedback-coordinator.md  # FEEDBACK edge management
@@ -560,10 +562,11 @@ plugins/reactree-rails-dev/
 ├── skills/
 │   ├── reactree-patterns/       # ReAcTree coordination patterns
 │   ├── smart-detection/         # Intent detection and routing
+│   ├── context-compilation/     # cclsp + Sorbet integration (NEW)
 │   ├── skill-discovery/         # Skill discovery system
 │   ├── workflow-orchestration/  # Agent coordination
 │   ├── beads-integration/       # Task tracking integration
-│   └── ... (18 total skills)
+│   └── ... (19 total skills)
 ├── hooks/
 │   ├── hooks.json               # Hook configuration
 │   └── scripts/                 # Automation scripts
@@ -602,6 +605,127 @@ MIT License - see LICENSE file for details
 - **Email**: hello@kaakati.me
 
 ## Changelog
+
+### v2.7.0 (2026-01-01) - Context Compilation & Guardian Validation
+
+**New Phase**:
+- ✨ **Phase 3.5: Context Compilation** - LSP-powered context extraction (conditional):
+  - Uses cclsp MCP tools (Solargraph) for interface extraction
+  - Integrates Sorbet for static type checking
+  - Per-task vocabulary building from project symbols
+  - Graceful degradation when tools unavailable
+  - Runs automatically after Planning, before Implementation
+
+**New Agent**:
+- ✨ **context-compiler** (haiku, cyan) - Extracts interfaces using cclsp:
+  - `mcp__cclsp__find_definition` for symbol lookup
+  - `mcp__cclsp__find_references` for usage discovery
+  - `mcp__cclsp__get_diagnostics` for error detection
+  - Vocabulary building from models, services, patterns
+  - Stores compiled context in working memory for implementation-executor
+
+**Guardian Validation Cycle**:
+- ✨ **Generate-Validate-Execute-Verify cycle** in implementation-executor:
+  - **GENERATE**: Write code based on compiled context
+  - **VALIDATE**: cclsp diagnostics + Sorbet type checking (Guardian)
+  - **EXECUTE**: Run tests
+  - **VERIFY**: Final validation
+- ✨ **Automatic fix cycles** when Guardian finds errors (max 3 attempts)
+- ✨ **Step 0.5: Load Compiled Context** - Reads cclsp-compiled interfaces/vocabulary
+- ✨ **Step 3.55: Guardian Validation** - Full validation before test execution
+
+**Tool Stack**:
+| Tool | Purpose | Integration |
+|------|---------|-------------|
+| cclsp MCP | LSP bridge for Claude Code | `mcp__cclsp__*` tools |
+| Solargraph | Ruby language server | Via cclsp |
+| Sorbet | Static type checking | Via `srb tc` command |
+| parser gem | AST analysis | Optional enhancement |
+| ripper | Built-in Ruby parser | Fallback |
+
+**Init Enhancements**:
+- ✨ **Phase 2.5: Ruby Analysis Tools Setup** in `/reactree-init`:
+  - Checks for Solargraph, Sorbet, parser gem availability
+  - Interactive installation prompts (all tools, Solargraph only, or skip)
+  - Auto-creates `.solargraph.yml` configuration
+  - Auto-creates `.claude/cclsp.json` for LSP integration
+  - Offers Sorbet initialization (`srb init`) for typed projects
+  - Displays final tool availability status
+
+**New Skill**:
+- ✨ **context-compilation** (~500 lines) - cclsp + Sorbet integration patterns:
+  - Tool Stack Overview (Solargraph, Sorbet, parser, ripper)
+  - cclsp Tool Reference (all available MCP tools)
+  - Interface Extraction Patterns (classes, methods, modules)
+  - Vocabulary Building Patterns (models, services, patterns)
+  - Guardian Validation Patterns (diagnostics + type checking)
+  - Sorbet Integration (type sigils, signatures, annotations)
+  - Graceful Degradation (fallback to grep when tools unavailable)
+
+**Working Memory Keys**:
+| Key | Written By | Read By |
+|-----|------------|---------|
+| `tools.cclsp` | workflow-orchestrator | All agents |
+| `interface.{task}.{symbol}` | context-compiler | implementation-executor |
+| `project.vocabulary` | context-compiler | implementation-executor |
+| `task.{id}.context` | context-compiler | implementation-executor |
+| `guardian.{file}` | implementation-executor | implementation-executor |
+
+**Benefits**:
+- Type-safe code generation (LSP + Sorbet validation)
+- Reduced runtime errors (catch undefined methods early)
+- Consistent naming (vocabulary enforcement)
+- Faster implementation (pre-compiled interfaces)
+- Automatic fix cycles (Guardian catches errors before tests)
+
+### v2.6.0 (2026-01-01) - UX Engineer Agent & Accessibility Patterns
+
+**New Agent**:
+- ✨ **ux-engineer** - Chief UX Engineer agent for full UX lifecycle guidance:
+  - Accessibility (WCAG 2.2 Level AA compliance)
+  - Responsive design (mobile-first, touch targets)
+  - Animations and transitions (with reduced motion support)
+  - Dark mode implementation (TailAdmin patterns)
+  - Performance optimization (lazy loading, Core Web Vitals)
+  - Runs **in parallel with UI Specialist** during Phase 5
+
+**New Skills**:
+- ✨ **accessibility-patterns** (~650 lines) - WCAG 2.2 Level AA compliance patterns:
+  - ARIA roles, states, and properties
+  - Keyboard navigation patterns
+  - Focus management (visible indicators, skip links)
+  - Screen reader considerations
+  - Color contrast requirements
+  - Rails/ViewComponent accessible patterns
+
+- ✨ **user-experience-design** (~750 lines) - Comprehensive UX patterns:
+  - Mobile-first responsive design (Tailwind breakpoints)
+  - Animation and transition patterns (timing, easing)
+  - Dark mode implementation (TailAdmin classes)
+  - Loading states (skeletons, progress, optimistic UI)
+  - Form UX patterns (multi-step, auto-save, validation)
+  - Toast notifications and feedback systems
+  - Performance optimization (lazy loading, CLS prevention)
+
+**Parallel UI/UX Execution**:
+- 🔄 **Phase 5 Enhancement** - UX Engineer runs alongside UI Specialist
+- 🔄 **Working memory coordination** - UX writes requirements for UI to consume:
+  - `ux.accessibility.<component>` - WCAG requirements
+  - `ux.responsive.<component>` - Mobile breakpoints
+  - `ux.animation.<component>` - Transition patterns
+  - `ux.darkmode.<component>` - Dark mode classes
+  - `ux.performance.<component>` - Loading optimizations
+
+**Agent Updates**:
+- 📝 **implementation-executor.md** - Added UX phase skills and parallel UX Engineer delegation
+- 📝 **workflow-orchestrator.md** - Added Phase 5 UI/UX parallel execution documentation
+
+**Benefits**:
+- Real-time UX feedback during UI implementation
+- WCAG 2.2 Level AA compliance built-in
+- Consistent responsive behavior across components
+- Dark mode support from the start
+- Reduced rework from accessibility fixes
 
 ### v2.5.0 (2026-01-01) - Multi-Agent Optimization
 

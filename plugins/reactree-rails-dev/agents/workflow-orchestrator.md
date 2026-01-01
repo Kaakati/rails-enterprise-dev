@@ -42,7 +42,7 @@ description: |
 model: inherit
 color: blue
 tools: ["*"]
-skills: ["skill-discovery", "workflow-orchestration", "beads-integration", "smart-detection", "reactree-patterns"]
+skills: ["skill-discovery", "workflow-orchestration", "beads-integration", "smart-detection", "reactree-patterns", "accessibility-patterns", "user-experience-design"]
 ---
 
 You are the **Workflow Orchestrator** for Rails enterprise development.
@@ -78,7 +78,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/discover-skills.sh
 - **data**: activerecord-patterns, *model*, *database*
 - **service**: service-object-patterns, api-development-patterns
 - **async**: sidekiq-async-patterns, *job*, *async*
-- **ui**: viewcomponents-specialist, hotwire-patterns, tailadmin-patterns, *ui*
+- **ui**: viewcomponents-specialist, hotwire-patterns, tailadmin-patterns, accessibility-patterns, user-experience-design, *ui*
 - **i18n**: localization, *translation*
 - **testing**: rspec-testing-patterns, *spec*, *test*
 - **domain**: Project-specific skills (manifest-project-context, etc.)
@@ -470,6 +470,135 @@ fi
 # Update workflow phase
 sed -i 's/workflow_phase: planning/workflow_phase: implementation/' .claude/rails-enterprise-dev.local.md
 ```
+
+### Phase 3.5: CONTEXT COMPILATION (Conditional - cclsp + Sorbet)
+
+**LSP-powered context extraction phase** that runs ONLY when cclsp MCP tools are available.
+
+This phase extracts interfaces and builds vocabulary using LSP tools to guide type-safe code generation.
+
+**Prerequisites Check:**
+
+```bash
+# Check if cclsp MCP tools are available
+check_cclsp_available() {
+  # Try to get diagnostics for a known file
+  local test
+  test=$(mcp__cclsp__get_diagnostics --file_path "Gemfile" 2>&1)
+
+  if echo "$test" | grep -qE "error|unavailable|not found|failed"; then
+    echo "cclsp: unavailable"
+    return 1
+  fi
+  echo "cclsp: available"
+  return 0
+}
+
+# Check if Sorbet is available
+check_sorbet_available() {
+  if command -v srb &> /dev/null; then
+    echo "sorbet: available (global)"
+    return 0
+  fi
+
+  if bundle exec srb --version &>/dev/null 2>&1; then
+    echo "sorbet: available (bundler)"
+    return 0
+  fi
+
+  echo "sorbet: unavailable"
+  return 1
+}
+
+# Check if Solargraph is available
+check_solargraph_available() {
+  if gem list solargraph -i &>/dev/null; then
+    echo "solargraph: available"
+    return 0
+  fi
+  echo "solargraph: unavailable"
+  return 1
+}
+
+# Store tool availability in working memory
+CCLSP_AVAILABLE=$(check_cclsp_available && echo "true" || echo "false")
+SORBET_AVAILABLE=$(check_sorbet_available && echo "true" || echo "false")
+SOLARGRAPH_AVAILABLE=$(check_solargraph_available && echo "true" || echo "false")
+
+write_memory "workflow-orchestrator" "tool_availability" "tools.cclsp" \
+  "{\"cclsp\": $CCLSP_AVAILABLE, \"sorbet\": $SORBET_AVAILABLE, \"solargraph\": $SOLARGRAPH_AVAILABLE}" "verified"
+
+echo "Tool availability:"
+echo "  cclsp: $CCLSP_AVAILABLE"
+echo "  Sorbet: $SORBET_AVAILABLE"
+echo "  Solargraph: $SOLARGRAPH_AVAILABLE"
+```
+
+**Execute if tools available:**
+
+```bash
+if [ "$CCLSP_AVAILABLE" = "true" ]; then
+  echo "Phase 3.5: CONTEXT COMPILATION"
+  echo "LSP-powered context extraction enabled"
+
+  # Read implementation plan from memory
+  IMPL_PLAN=$(read_memory "rails-planner.implementation_plan")
+
+  # Delegate to context-compiler agent
+  use_task "context-compiler" "Compile LSP context for implementation" <<EOF
+Extract interfaces and build vocabulary using cclsp tools.
+
+**Implementation Plan:**
+$IMPL_PLAN
+
+**Tools Available:**
+- cclsp: $CCLSP_AVAILABLE
+- Sorbet: $SORBET_AVAILABLE
+- Solargraph: $SOLARGRAPH_AVAILABLE
+
+**Tasks:**
+1. Parse implementation plan to identify target files and dependencies
+2. Extract interfaces from dependency files using find_definition/find_references
+3. Build project vocabulary (models, services, patterns)
+4. Extract Sorbet type signatures if available
+5. Store compiled context for implementation-executor
+
+**Deliverable:**
+Compiled context stored in working memory with:
+- interfaces: Array of class/method definitions with signatures
+- vocabulary: Project symbols organized by category
+- type_info: Sorbet signatures (if available)
+- patterns: Common patterns detected
+
+Store results in working memory key: task.<task_id>.context
+EOF
+
+  echo "✓ Context compilation complete"
+  echo "Implementation-executor will use compiled context for type-safe generation"
+
+  # Update workflow state
+  write_memory "workflow-orchestrator" "phase_status" "phase.3_5.status" \
+    "{\"completed\": true, \"cclsp_enhanced\": true}" "verified"
+else
+  echo "Phase 3.5: SKIPPED (cclsp not available)"
+  echo "Proceeding with standard implementation (no LSP context)"
+
+  # Record skip in working memory
+  write_memory "workflow-orchestrator" "phase_status" "phase.3_5.status" \
+    "{\"skipped\": true, \"reason\": \"cclsp not available\"}" "verified"
+fi
+```
+
+**Context Compiler Benefits (when available):**
+- **Interface Extraction**: Know exact method signatures before generating code
+- **Vocabulary Building**: Use consistent naming patterns from codebase
+- **Type Safety**: Sorbet signatures guide correct types in generated code
+- **Fewer Errors**: Guardian validation catches issues early in implementation
+
+**Tool Installation (via /reactree-init):**
+- Solargraph: `gem install solargraph`
+- Sorbet: `gem install sorbet sorbet-runtime`
+- parser gem: `gem install parser`
 
 ### Phase 4: IMPLEMENTATION (Delegate to implementation-executor)
 
@@ -878,6 +1007,9 @@ independent_phases:
   - group_2:
       - api_documentation
       - database_migration_review
+  - group_3:  # UI/UX Parallel Execution (v2.6.0)
+      - ui_specialist_implementation
+      - ux_engineer_guidance
 
 # Sequential dependencies (must wait):
 dependencies:
@@ -886,6 +1018,53 @@ dependencies:
   controllers: [services]      # Controllers need services
   views: [components, controllers]  # Views need both
 ```
+
+### Phase 5 UI/UX Parallel Groups (v2.6.0)
+
+**UX Engineer runs in parallel with UI Specialist** for real-time guidance:
+
+```bash
+# Execute UI and UX in parallel
+execute_parallel_group "UI_UX" \
+  "ui_specialist" \
+  "ux_engineer"
+```
+
+**Coordination via Working Memory:**
+
+UX Engineer writes requirements before/during UI Specialist work:
+- `ux.accessibility.<component>` - WCAG 2.2 requirements
+- `ux.responsive.<component>` - Mobile-first breakpoints
+- `ux.animation.<component>` - Transition patterns
+- `ux.darkmode.<component>` - TailAdmin dark mode classes
+- `ux.performance.<component>` - Lazy loading, CLS prevention
+
+UI Specialist reads these before implementing each component.
+
+**Parallel Execution Flow:**
+
+```
+Phase 5: View/UI Layer
+├── UX Engineer (parallel) [opus - complex UX decisions]
+│   ├── Analyze component requirements
+│   ├── Invoke accessibility-patterns skill
+│   ├── Invoke user-experience-design skill
+│   ├── Write UX requirements to working memory
+│   └── Validate implementation against WCAG 2.2
+│
+└── UI Specialist (parallel)
+    ├── Read UX requirements from working memory
+    ├── Implement ViewComponents with accessibility
+    ├── Apply responsive Tailwind/TailAdmin styles
+    └── Write Stimulus controllers with keyboard support
+```
+
+**Benefits:**
+- Real-time UX feedback during implementation
+- WCAG 2.2 Level AA compliance built-in
+- Consistent responsive behavior across components
+- Dark mode support from the start
+- Reduced rework from accessibility fixes
 
 **Implementation Strategy:**
 

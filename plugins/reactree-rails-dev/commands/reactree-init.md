@@ -142,6 +142,131 @@ for skill_dir in "$PLUGIN_ROOT/skills/"*/; do
 done
 ```
 
+## Phase 2.5: Ruby Analysis Tools Setup
+
+Automatically install missing Ruby analysis tools for enhanced context compilation and Guardian validation:
+
+```bash
+echo "=== Ruby Analysis Tools Setup ==="
+echo ""
+
+# Track what gets installed
+GEMS_INSTALLED=""
+
+# Install Solargraph if missing (Ruby LSP)
+if ! gem list solargraph -i &>/dev/null; then
+  echo "Installing solargraph (Ruby LSP)..."
+  gem install solargraph && GEMS_INSTALLED="$GEMS_INSTALLED solargraph"
+fi
+
+# Install Sorbet if missing (Type Checker)
+if ! gem list sorbet -i &>/dev/null; then
+  echo "Installing sorbet + sorbet-runtime (Type Checker)..."
+  gem install sorbet sorbet-runtime && GEMS_INSTALLED="$GEMS_INSTALLED sorbet"
+fi
+
+# Install parser gem if missing (AST Analysis)
+if ! gem list parser -i &>/dev/null; then
+  echo "Installing parser (AST Analysis)..."
+  gem install parser && GEMS_INSTALLED="$GEMS_INSTALLED parser"
+fi
+
+if [ -z "$GEMS_INSTALLED" ]; then
+  echo "All required gems already installed"
+else
+  echo ""
+  echo "Installed:$GEMS_INSTALLED"
+fi
+```
+
+**Create .solargraph.yml configuration:**
+
+```bash
+# Configure Solargraph for project if no config exists
+if [ ! -f ".solargraph.yml" ]; then
+  echo "Creating .solargraph.yml..."
+  cat > .solargraph.yml <<'SOLARGRAPH'
+include:
+  - "**/*.rb"
+exclude:
+  - spec/**/*
+  - test/**/*
+  - vendor/**/*
+  - node_modules/**/*
+reporters:
+  - rubocop
+  - require_not_found
+max_files: 5000
+SOLARGRAPH
+  echo "Created .solargraph.yml"
+else
+  echo ".solargraph.yml already exists"
+fi
+```
+
+**Configure cclsp MCP server:**
+
+```bash
+# Create .mcp.json for cclsp MCP server (correct location for Claude Code)
+if [ ! -f ".mcp.json" ]; then
+  cat > .mcp.json <<'MCP'
+{
+  "mcpServers": {
+    "cclsp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "cclsp"]
+    }
+  }
+}
+MCP
+  echo "Created .mcp.json with cclsp MCP server"
+else
+  # Check if cclsp is already configured
+  if grep -q '"cclsp"' .mcp.json 2>/dev/null; then
+    echo "cclsp already configured in .mcp.json"
+  else
+    echo ""
+    echo "WARNING: .mcp.json exists but cclsp not configured"
+    echo "Add manually with: claude mcp add --transport stdio cclsp -- npx -y cclsp"
+  fi
+fi
+```
+
+**Display final tool status:**
+
+```bash
+echo ""
+echo "Tool availability for Phase 3.5 (Context Compilation):"
+echo ""
+
+if gem list solargraph -i &>/dev/null; then
+  echo "  Solargraph: Available"
+  echo "    - LSP diagnostics via cclsp"
+  echo "    - Interface extraction"
+  echo "    - Method signature lookup"
+else
+  echo "  Solargraph: Not available"
+fi
+
+if gem list sorbet -i &>/dev/null || command -v srb &>/dev/null; then
+  echo "  Sorbet: Available"
+  echo "    - Static type checking"
+  echo "    - Guardian validation"
+else
+  echo "  Sorbet: Not available"
+fi
+
+if gem list parser -i &>/dev/null; then
+  echo "  parser: Available"
+  echo "    - AST analysis"
+else
+  echo "  parser: Not available (using ripper fallback)"
+fi
+
+echo ""
+```
+
 ## Phase 3: Generate Configuration File
 
 Create or update `.claude/reactree-rails-dev.local.md`:
@@ -244,6 +369,17 @@ Configuration:
   ✅ Config file: .claude/reactree-rails-dev.local.md
   📊 Smart Detection: ENABLED (suggest mode)
   🎚️ Annoyance Threshold: medium
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MCP Servers:
+  ✅ cclsp: Configured in .mcp.json
+  📝 Note: First use requires approval (project-scoped MCP servers)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ruby Analysis Tools:
+  [Shows Solargraph/Sorbet/parser status from Phase 2.5]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

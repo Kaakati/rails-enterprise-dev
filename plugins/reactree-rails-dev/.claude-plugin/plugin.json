@@ -1,7 +1,7 @@
 {
   "name": "reactree-rails-dev",
-  "version": "2.5.0",
-  "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, dual memory systems with 24h TTL caching, iterative control flow (LOOP, CONDITIONAL), backwards communication (FEEDBACK edges), smart intent detection, utility agents, optimized model selection (Opus/Haiku), and extracted implementation-safety/refactoring-workflow skills",
+  "version": "2.7.1",
+  "description": "ReAcTree-based hierarchical agent orchestration for Rails development with cclsp-powered Context Compilation (Phase 3.5), Sorbet type checking, Guardian validation cycle, parallel execution, dual memory systems with 24h TTL caching, iterative control flow (LOOP, CONDITIONAL), backwards communication (FEEDBACK edges), smart intent detection, utility agents, UX Engineer agent for accessibility and responsive design, optimized model selection (Opus/Haiku), and comprehensive skills library",
   "author": {
     "name": "Mohamad Kaakati",
     "email": "hello@kaakati.me"

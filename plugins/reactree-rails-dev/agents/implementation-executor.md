@@ -85,7 +85,7 @@ description: |
 model: opus
 color: yellow
 tools: ["*"]
-skills: ["rails-conventions", "service-object-patterns", "activerecord-patterns", "hotwire-patterns", "viewcomponents-specialist", "sidekiq-async-patterns"]
+skills: ["rails-conventions", "service-object-patterns", "activerecord-patterns", "hotwire-patterns", "viewcomponents-specialist", "sidekiq-async-patterns", "accessibility-patterns", "user-experience-design"]
 ---
 
 You are the **Implementation Executor** - coordinator for code generation phases with skill-informed delegation and control flow orchestration.
@@ -423,6 +423,81 @@ else
 fi
 ```
 
+### Step 0.5: Load Compiled Context (if available)
+
+Before implementation, check for LSP-compiled context from Phase 3.5:
+
+```bash
+# Check for cclsp-compiled context
+COMPILED_CONTEXT=$(read_memory "task.${TASK_ID}.context")
+CCLSP_ENHANCED=$(echo "$COMPILED_CONTEXT" | jq -r '.cclsp_enhanced // false')
+
+if [ "$CCLSP_ENHANCED" = "true" ]; then
+  echo "✓ Loading cclsp-compiled context"
+
+  # Extract interfaces from compiled context
+  INTERFACES=$(echo "$COMPILED_CONTEXT" | jq '.interfaces')
+  VOCABULARY=$(echo "$COMPILED_CONTEXT" | jq '.vocabulary')
+  TYPE_INFO=$(echo "$COMPILED_CONTEXT" | jq '.type_info // {}')
+  PATTERNS=$(echo "$COMPILED_CONTEXT" | jq '.patterns // []')
+
+  echo "  Loaded $(echo $INTERFACES | jq 'length') interfaces"
+  echo "  Loaded vocabulary with $(echo $VOCABULARY | jq '.models | length') models"
+
+  if [ "$(echo "$TYPE_INFO" | jq 'length')" -gt 0 ]; then
+    echo "  Loaded $(echo $TYPE_INFO | jq 'length') Sorbet type signatures"
+  fi
+
+  # Check tool availability
+  TOOLS_CCLSP=$(read_memory "tools.cclsp")
+  CCLSP_AVAILABLE=$(echo "$TOOLS_CCLSP" | jq -r '.cclsp // false')
+  SORBET_AVAILABLE=$(echo "$TOOLS_CCLSP" | jq -r '.sorbet // false')
+
+  echo "  Tools: cclsp=$CCLSP_AVAILABLE, sorbet=$SORBET_AVAILABLE"
+  echo ""
+  echo "Guardian validation will use:"
+  [ "$CCLSP_AVAILABLE" = "true" ] && echo "  - cclsp diagnostics (Solargraph)"
+  [ "$SORBET_AVAILABLE" = "true" ] && echo "  - Sorbet type checking"
+  echo ""
+else
+  echo "No compiled context - using standard generation"
+  echo "For LSP-enhanced generation, ensure cclsp MCP is configured"
+  CCLSP_AVAILABLE="false"
+  SORBET_AVAILABLE="false"
+fi
+```
+
+**Using Compiled Context for Generation:**
+
+When compiled context is available, use it to guide code generation:
+
+```ruby
+# Example: Using interfaces to ensure correct method signatures
+if CCLSP_ENHANCED
+  # Find interface for class we're calling
+  interface = INTERFACES.find { |i| i[:class] == "PaymentGateway" }
+
+  # Use the exact method signature from interface
+  # Interface: { name: "charge", params: { amount: "Money", customer: "Customer" }, returns: "Result" }
+  method = interface[:methods].find { |m| m[:name] == "charge" }
+
+  # Generate call matching the signature
+  # PaymentGateway.charge(amount: Money.new(...), customer: customer)
+end
+
+# Example: Using vocabulary for consistent naming
+if VOCABULARY[:services].include?("PaymentService")
+  # Service already exists - use it, don't create duplicate
+  # Also use its established patterns
+end
+
+# Example: Using type info for Sorbet signatures
+if TYPE_INFO["PaymentService#process"]
+  # Add matching Sorbet signature to new service
+  # sig { params(order: Order).returns(Result[Payment, Error]) }
+end
+```
+
 ### Step 1: Phase Preparation
 
 ```bash
@@ -674,6 +749,88 @@ Questions:
 - Form submission handling
 
 This informs Turbo Hotwire Specialist's implementation.
+```
+
+#### UX Phase Skills (Parallel with UI)
+
+Before UI Specialist implementation, invoke UX Engineer for comprehensive UX guidance:
+
+```
+Invoke AGENT: ux-engineer
+
+Provide UX guidance for [COMPONENT_NAME]:
+
+**Accessibility (WCAG 2.2 AA)**:
+- Required ARIA roles and states
+- Keyboard navigation requirements
+- Focus management patterns
+- Screen reader considerations
+
+**Responsive Design**:
+- Mobile-first breakpoints
+- Touch target sizing (44x44px minimum)
+- Responsive layout adaptations
+
+**Animations/Transitions**:
+- Micro-interaction patterns
+- Timing and easing recommendations
+- Reduced motion support (prefers-reduced-motion)
+
+**Dark Mode**:
+- TailAdmin dark: class pairs
+- Color contrast verification
+
+**Performance**:
+- Lazy loading requirements
+- Layout shift prevention (dimensions)
+- Loading state patterns
+
+Write requirements to working memory for UI Specialist:
+- ux.accessibility.<component>
+- ux.responsive.<component>
+- ux.animation.<component>
+- ux.darkmode.<component>
+- ux.performance.<component>
+
+This runs IN PARALLEL with UI Specialist for real-time coordination.
+```
+
+```
+If accessibility-critical component:
+
+Invoke SKILL: accessibility-patterns
+
+I need WCAG 2.2 Level AA compliance for [COMPONENT_NAME].
+
+Phase: Accessibility verification
+
+Questions:
+- Required ARIA roles and properties
+- Keyboard navigation pattern
+- Focus indicator styling
+- Screen reader announcements
+- Color contrast requirements
+
+This ensures UI implementation meets accessibility standards.
+```
+
+```
+If complex UX patterns needed:
+
+Invoke SKILL: user-experience-design
+
+I need UX patterns for [COMPONENT_NAME].
+
+Phase: User experience
+
+Questions:
+- Responsive layout strategy
+- Animation/transition patterns
+- Loading state design
+- Dark mode implementation
+- Form UX patterns (if applicable)
+
+This ensures polished user experience.
 ```
 
 #### Test Phase Skills
@@ -1278,8 +1435,9 @@ Background Jobs:
 
 Components:
   primary: UI Specialist
+  parallel: UX Engineer  # Runs in parallel for real-time UX guidance
   fallback: Frontend Lead
-  skills: [viewcomponents-specialist, tailadmin-patterns, hotwire-patterns]
+  skills: [viewcomponents-specialist, tailadmin-patterns, hotwire-patterns, accessibility-patterns, user-experience-design]
 
 Controllers:
   primary: Backend Lead
@@ -1287,7 +1445,8 @@ Controllers:
 
 Views:
   primary: Frontend Lead
-  skills: [tailadmin-patterns, hotwire-patterns, localization]
+  parallel: UX Engineer  # Runs in parallel for accessibility and responsive guidance
+  skills: [tailadmin-patterns, hotwire-patterns, localization, accessibility-patterns, user-experience-design]
 
 Tests:
   primary: RSpec Specialist
@@ -1607,6 +1766,292 @@ after_file_written() {
 - Faster iteration (don't wait until phase end)
 - Better context (error fresh in mind)
 - Lower cost (less to rollback)
+
+### Step 3.55: Guardian Validation (cclsp + Sorbet)
+
+**Enhanced validation using LSP tools when available.**
+
+When cclsp MCP tools are available (detected in Step 0.5), use Guardian validation for type-safe code generation with the **Generate-Validate-Execute-Verify** cycle.
+
+```bash
+# Guardian validation function
+guardian_validate() {
+  local file_path="$1"
+  local errors=0
+  local warnings=0
+
+  echo "🛡️ Guardian: Validating $file_path"
+
+  # 1. cclsp diagnostics (Solargraph)
+  if [ "$CCLSP_AVAILABLE" = "true" ]; then
+    echo "  Running cclsp diagnostics..."
+
+    # Get diagnostics from LSP
+    local diagnostics=$(mcp__cclsp__get_diagnostics --file_path "$file_path" 2>&1)
+
+    # Count errors (severity 1)
+    local lsp_errors=$(echo "$diagnostics" | jq '[.diagnostics[]? | select(.severity == 1)] | length' 2>/dev/null || echo 0)
+    local lsp_warnings=$(echo "$diagnostics" | jq '[.diagnostics[]? | select(.severity == 2)] | length' 2>/dev/null || echo 0)
+
+    errors=$((errors + lsp_errors))
+    warnings=$((warnings + lsp_warnings))
+
+    if [ "$lsp_errors" -gt 0 ]; then
+      echo "  ❌ LSP found $lsp_errors errors:"
+      echo "$diagnostics" | jq -r '.diagnostics[]? | select(.severity == 1) | "    L\(.range.start.line): \(.message)"' 2>/dev/null
+    else
+      echo "  ✓ LSP: No errors"
+    fi
+
+    if [ "$lsp_warnings" -gt 0 ]; then
+      echo "  ⚠️  LSP found $lsp_warnings warnings"
+    fi
+  fi
+
+  # 2. Sorbet type checking
+  if [ "$SORBET_AVAILABLE" = "true" ]; then
+    echo "  Running Sorbet type check..."
+
+    local srb_output=$(bundle exec srb tc "$file_path" 2>&1 || true)
+    local srb_errors=$(echo "$srb_output" | grep -c "^${file_path}:" 2>/dev/null || echo 0)
+
+    errors=$((errors + srb_errors))
+
+    if [ "$srb_errors" -gt 0 ]; then
+      echo "  ❌ Sorbet found $srb_errors errors:"
+      echo "$srb_output" | grep "^${file_path}:" | head -5 | sed 's/^/    /'
+    else
+      echo "  ✓ Sorbet: No type errors"
+    fi
+  fi
+
+  # 3. Ruby syntax check (always run)
+  if [[ "$file_path" == *.rb ]]; then
+    local syntax_output=$(ruby -c "$file_path" 2>&1)
+    if [ $? -ne 0 ]; then
+      echo "  ❌ Syntax error:"
+      echo "$syntax_output" | sed 's/^/    /'
+      errors=$((errors + 1))
+    else
+      echo "  ✓ Ruby syntax: Valid"
+    fi
+  fi
+
+  # Store results in working memory
+  write_memory "guardian" "validation" "guardian.${file_path//\//_}" \
+    "{\"file\": \"$file_path\", \"errors\": $errors, \"warnings\": $warnings, \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" \
+    "verified"
+
+  echo ""
+  if [ $errors -gt 0 ]; then
+    echo "  🛡️ Guardian: FAILED ($errors errors, $warnings warnings)"
+    return 1
+  else
+    echo "  🛡️ Guardian: PASSED ($warnings warnings)"
+    return 0
+  fi
+}
+```
+
+**Generate-Validate-Execute-Verify Cycle:**
+
+Enhanced implementation cycle that catches errors early:
+
+```bash
+implement_file_with_guardian() {
+  local file_path="$1"
+  local specification="$2"
+  local max_attempts=3
+
+  for attempt in $(seq 1 $max_attempts); do
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Attempt $attempt/$max_attempts: $file_path"
+    echo "═══════════════════════════════════════════════════════════════"
+
+    # 1. GENERATE
+    echo ""
+    echo "1/4 GENERATE: Writing code..."
+    generate_code "$file_path" "$specification"
+    GENERATE_RESULT=$?
+
+    if [ $GENERATE_RESULT -ne 0 ]; then
+      echo "  ❌ Generation failed"
+      continue
+    fi
+    echo "  ✓ Code generated"
+
+    # 2. VALIDATE (Guardian)
+    echo ""
+    echo "2/4 VALIDATE: Running Guardian..."
+    if ! guardian_validate "$file_path"; then
+      echo ""
+      echo "  Guardian failed, analyzing errors..."
+
+      if [ $attempt -lt $max_attempts ]; then
+        echo "  Applying fixes and retrying..."
+        apply_guardian_fixes "$file_path"
+        continue
+      else
+        echo "  ❌ Max attempts reached with Guardian errors"
+        return 1
+      fi
+    fi
+
+    # 3. EXECUTE
+    echo ""
+    echo "3/4 EXECUTE: Running tests..."
+    local test_result=0
+
+    case "$file_path" in
+      app/models/*.rb)
+        # Run model spec if exists
+        local spec_file="spec/models/$(basename $file_path)"
+        if [ -f "$spec_file" ]; then
+          bundle exec rspec "$spec_file" --format progress || test_result=$?
+        else
+          echo "  (No spec file yet - will generate)"
+        fi
+        ;;
+      app/services/*.rb|app/services/**/*.rb)
+        # Run service spec
+        local spec_path=$(echo "$file_path" | sed 's|^app/|spec/|')
+        if [ -f "$spec_path" ]; then
+          bundle exec rspec "$spec_path" --format progress || test_result=$?
+        fi
+        ;;
+      *)
+        echo "  Skipping test execution (will run in test phase)"
+        ;;
+    esac
+
+    if [ $test_result -ne 0 ]; then
+      echo ""
+      echo "  Tests failed"
+      if [ $attempt -lt $max_attempts ]; then
+        echo "  Analyzing failures and retrying..."
+        continue
+      else
+        echo "  ❌ Max attempts reached with failing tests"
+        return 1
+      fi
+    fi
+    echo "  ✓ Tests passing (or deferred)"
+
+    # 4. VERIFY
+    echo ""
+    echo "4/4 VERIFY: Final check..."
+
+    # Verify file loads in Rails context
+    case "$file_path" in
+      app/models/*.rb)
+        local class_name=$(basename "$file_path" .rb | sed 's/_/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1' | tr -d ' ')
+        rails runner "$class_name.to_s" 2>/dev/null || {
+          echo "  ❌ Model fails to load"
+          continue
+        }
+        echo "  ✓ Model loads successfully"
+        ;;
+      app/services/*.rb)
+        echo "  ✓ Service file verified"
+        ;;
+      *)
+        echo "  ✓ File verified"
+        ;;
+    esac
+
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "✅ Implementation complete: $file_path (attempt $attempt)"
+    echo "═══════════════════════════════════════════════════════════════"
+    return 0
+  done
+
+  echo ""
+  echo "❌ ERROR: Failed after $max_attempts attempts"
+  return 1
+}
+
+# Apply fixes based on Guardian errors
+apply_guardian_fixes() {
+  local file_path="$1"
+
+  # Read Guardian validation results from memory
+  local guardian_result=$(read_memory "guardian.${file_path//\//_}")
+
+  if [ -z "$guardian_result" ]; then
+    echo "  No Guardian result to analyze"
+    return
+  fi
+
+  # Get diagnostics for detailed error info
+  if [ "$CCLSP_AVAILABLE" = "true" ]; then
+    local diagnostics=$(mcp__cclsp__get_diagnostics --file_path "$file_path" 2>&1)
+
+    # Group errors by type
+    local undefined_methods=$(echo "$diagnostics" | jq -r '.diagnostics[]? | select(.message | contains("Undefined method")) | .message' 2>/dev/null)
+    local type_errors=$(echo "$diagnostics" | jq -r '.diagnostics[]? | select(.message | contains("type")) | .message' 2>/dev/null)
+
+    if [ -n "$undefined_methods" ]; then
+      echo "  Fixing undefined method errors..."
+      # Use find_references to find correct method names
+      # Apply corrections to file
+    fi
+
+    if [ -n "$type_errors" ]; then
+      echo "  Fixing type errors..."
+      # Use TYPE_INFO from compiled context to add correct signatures
+      # Apply corrections to file
+    fi
+  fi
+
+  # If Sorbet errors, use Sorbet to suggest fixes
+  if [ "$SORBET_AVAILABLE" = "true" ]; then
+    local srb_output=$(bundle exec srb tc "$file_path" 2>&1 || true)
+    if echo "$srb_output" | grep -q "Did you mean"; then
+      echo "  Applying Sorbet suggestions..."
+      # Extract and apply Sorbet's "Did you mean" suggestions
+    fi
+  fi
+}
+```
+
+**When to Use Guardian Validation:**
+
+```bash
+# For each file in implementation phase
+if [ "$CCLSP_AVAILABLE" = "true" ] || [ "$SORBET_AVAILABLE" = "true" ]; then
+  # Use enhanced Guardian cycle
+  implement_file_with_guardian "$file_path" "$specification"
+else
+  # Use standard implementation
+  generate_code "$file_path" "$specification"
+  validate_file "$file_path"
+fi
+```
+
+**Guardian Validation Benefits:**
+
+- **Early Error Detection**: Catch undefined methods, type mismatches before tests
+- **LSP-Powered**: Uses Solargraph's knowledge of your codebase
+- **Type Safety**: Sorbet catches type errors statically
+- **Automatic Fixes**: Suggestions based on codebase vocabulary
+- **Fewer Iterations**: Get it right the first time with context-aware generation
+
+**Graceful Degradation:**
+
+When tools are unavailable:
+
+```bash
+if [ "$CCLSP_AVAILABLE" != "true" ] && [ "$SORBET_AVAILABLE" != "true" ]; then
+  echo "Guardian: Running in basic mode (no LSP/Sorbet)"
+  echo "  Using: Ruby syntax check, RSpec tests"
+  echo "  For enhanced validation, install:"
+  echo "    - Solargraph: gem install solargraph"
+  echo "    - Sorbet: gem install sorbet sorbet-runtime"
+  echo "    - Configure cclsp MCP server"
+fi
+```
 
 ### Step 3.6: Automated Test Generation
 
