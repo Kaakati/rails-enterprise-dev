@@ -345,12 +345,13 @@ EOF
 
 ### Phase 2: INSPECTION (Delegate to codebase-inspector)
 
-Invoke the codebase inspector agent to analyze the project:
+**CRITICAL**: Use the Task tool to delegate to the codebase-inspector agent.
 
-**Handoff to codebase-inspector:**
-
-```
-I need you to perform a comprehensive codebase inspection for implementing: [FEATURE_NAME]
+```xml
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:codebase-inspector</parameter>
+<parameter name="description">Analyze codebase for [FEATURE_NAME] implementation</parameter>
+<parameter name="prompt">Perform comprehensive codebase inspection for implementing: [FEATURE_NAME]
 
 **Context**:
 - Feature request: [USER_REQUEST]
@@ -376,10 +377,12 @@ Inspection report with:
 - Dependencies identified
 - Recommendations for implementation
 
-When complete, I'll create inspection beads subtask and mark it done.
+Write findings to working memory for use by planning phase.
+</parameter>
+</invoke>
 ```
 
-**Create inspection subtask** (if beads available):
+**After codebase-inspector completes**, create inspection subtask (if beads available):
 
 ```bash
 if [ -n "$FEATURE_ID" ]; then
@@ -389,15 +392,7 @@ if [ -n "$FEATURE_ID" ]; then
     --description "Document patterns, conventions, existing implementations" \
     --deps $FEATURE_ID)
 
-  bd update $INSPECT_ID --status in_progress
-fi
-```
-
-**Wait for codebase-inspector completion**, then:
-
-```bash
-if [ -n "$INSPECT_ID" ]; then
-  bd close $INSPECT_ID --reason "Inspection completed"
+  bd close $INSPECT_ID --reason "Inspection completed by codebase-inspector"
 fi
 
 # Update workflow phase in settings
@@ -408,10 +403,13 @@ sed -i 's/workflow_phase: inspection/workflow_phase: planning/' .claude/rails-en
 
 Invoke the rails planner agent with inspection findings:
 
-**Handoff to rails-planner:**
+**CRITICAL**: Use the Task tool to delegate to the rails-planner agent.
 
-```
-I need you to create a detailed implementation plan for: [FEATURE_NAME]
+```xml
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:rails-planner</parameter>
+<parameter name="description">Create implementation plan for [FEATURE_NAME]</parameter>
+<parameter name="prompt">Create a detailed implementation plan for: [FEATURE_NAME]
 
 **Context**:
 - Feature request: [USER_REQUEST]
@@ -443,10 +441,12 @@ Implementation plan with:
 - Skill references for each phase
 - Quality criteria
 
-When complete, I'll create planning beads subtask and mark it done.
+Write plan to working memory for use by implementation phase.
+</parameter>
+</invoke>
 ```
 
-**Create planning subtask** (if beads available):
+**After rails-planner completes**, create planning subtask (if beads available):
 
 ```bash
 if [ -n "$FEATURE_ID" ]; then
@@ -456,14 +456,6 @@ if [ -n "$FEATURE_ID" ]; then
     --description "Create implementation plan with specialist assignments" \
     --deps $INSPECT_ID)
 
-  bd update $PLAN_ID --status in_progress
-fi
-```
-
-**After planner completes**:
-
-```bash
-if [ -n "$PLAN_ID" ]; then
   bd close $PLAN_ID --reason "Plan approved"
 fi
 
@@ -724,10 +716,15 @@ fi
 
 **Note**: Replace `[PASTE_PLAN_METADATA_HERE_FROM_PLANNER_OUTPUT]` with the actual metadata from the planner's output.
 
-**For each implementation layer**, invoke implementation-executor:
+**For each implementation layer**, use the Task tool to delegate to implementation-executor:
 
-```
-I need you to execute the [LAYER_NAME] implementation phase.
+**CRITICAL**: Use the Task tool to delegate to the implementation-executor agent.
+
+```xml
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:implementation-executor</parameter>
+<parameter name="description">Execute [LAYER_NAME] implementation phase</parameter>
+<parameter name="prompt">Execute the [LAYER_NAME] implementation phase.
 
 **Context**:
 - Feature: [FEATURE_NAME]
@@ -749,7 +746,9 @@ I need you to execute the [LAYER_NAME] implementation phase.
 - Tests passing
 - Quality gates passed
 
-When layer complete, I'll close the beads subtask.
+Write implementation results to working memory for verification by test oracle.
+</parameter>
+</invoke>
 ```
 
 **After each layer completes**:
@@ -985,10 +984,13 @@ if [ -n "$FEATURE_ID" ]; then
 fi
 ```
 
-**Handoff to Chief Reviewer** (from project agents):
+**CRITICAL**: Use the Task tool to delegate to the test-oracle agent for final review.
 
-```
-I need you to perform final review of: [FEATURE_NAME]
+```xml
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:test-oracle</parameter>
+<parameter name="description">Final review of [FEATURE_NAME] implementation</parameter>
+<parameter name="prompt">Perform final review and validation of: [FEATURE_NAME]
 
 **Context**:
 - Feature: [FEATURE_NAME]
@@ -1006,15 +1008,25 @@ I need you to perform final review of: [FEATURE_NAME]
 6. Rails conventions followed
 7. Ready for production
 
+**Your tasks**:
+1. Run full test suite and verify all tests pass
+2. Check test coverage meets threshold (default 90%)
+3. Validate quality gates passed
+4. Review code against discovered patterns and conventions
+5. Verify acceptance criteria met
+
 **Deliverable**:
 - Approval or change requests
 - List of any issues found
 - Recommendations
+- Test results summary
 
-If approved, I'll close the feature. If changes needed, I'll coordinate fixes.
+Write review results to working memory for final completion.
+</parameter>
+</invoke>
 ```
 
-**After review**:
+**After test-oracle completes**, finalize review:
 
 ```bash
 if [ -n "$REVIEW_ID" ]; then

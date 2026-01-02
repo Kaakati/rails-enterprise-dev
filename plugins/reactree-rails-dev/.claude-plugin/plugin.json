@@ -1,6 +1,6 @@
 {
   "name": "reactree-rails-dev",
-  "version": "2.8.1",
+  "version": "2.8.2",
   "description": "ReAcTree Rails development with multi-agent orchestration, LSP-powered context compilation, Guardian validation cycle for type safety, Solargraph/Sorbet/Rubocop integration with blocking quality gates, requirements translation (user stories to beads tasks), Pre/Post edit validation hooks, parallel execution, dual memory systems with 24h TTL caching, iterative control flow (LOOP, CONDITIONAL), backwards communication (FEEDBACK edges), smart intent detection, utility agents, UX Engineer, optimized model selection, and comprehensive skills library for A+ type-safe code",
   "author": {
     "name": "Mohamad Kaakati",
