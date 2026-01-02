@@ -1453,67 +1453,183 @@ Tests:
   skills: [rspec-testing-patterns]
 ```
 
-**Delegation Message Format:**
+**CRITICAL**: Use the Task tool to delegate to specialist agents.
 
-```
-I need you to implement the [PHASE_NAME] layer for [FEATURE_NAME].
+**Delegation Pattern (Explicit Task Tool Invocation):**
+
+For each phase, use the appropriate specialist agent with explicit Task tool XML:
+
+```xml
+<!-- Database/Models Phase -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:data-lead</parameter>
+<parameter name="description">Implement database layer for [FEATURE_NAME]</parameter>
+<parameter name="prompt">Create database migration and model for [FEATURE_NAME].
 
 **Context**:
 - Feature: [FEATURE_DESCRIPTION]
-- Phase: [PHASE_NAME] (step X of Y)
-- Implementation plan section: [RELEVANT_PLAN_EXCERPT]
+- Phase: Database/Models (step X of Y)
+- Implementation plan: [RELEVANT_PLAN_EXCERPT]
 - Beads task: [TASK_ID if available]
 
 **Skill Guidance**:
-Based on [SKILL_NAMES] skills:
+Based on activerecord-patterns skill:
 - [Pattern 1 from skill]
 - [Pattern 2 from skill]
 - [Convention 3 from skill]
 
+**Requirements**:
+1. [Requirement 1 - e.g., "Create migration with user_id, account_id, amount, status"]
+2. [Requirement 2 - e.g., "Add indexes on foreign keys and status"]
+3. [Requirement 3 - e.g., "Model validates amount > 0, status enum"]
+
+**Files to Create**:
+- `db/migrate/[timestamp]_[migration_name].rb` - Database migration
+- `app/models/[model_name].rb` - ActiveRecord model with validations
+- `spec/factories/[table_name].rb` - FactoryBot factory
+- `spec/models/[model_name]_spec.rb` - RSpec model tests
+
+**Deliverable**: All 4 files created using Write tool, following project conventions.
+</parameter>
+</invoke>
+
+<!-- Services Phase -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:backend-lead</parameter>
+<parameter name="description">Implement service layer for [FEATURE_NAME]</parameter>
+<parameter name="prompt">Create service object for [FEATURE_NAME].
+
+**Context**:
+- Feature: [FEATURE_DESCRIPTION]
+- Phase: Services (step X of Y)
+- Implementation plan: [RELEVANT_PLAN_EXCERPT]
+- Beads task: [TASK_ID if available]
+
+**Skill Guidance**:
+Based on service-object-patterns skill:
+- [Pattern 1 from skill - e.g., "Use callable pattern with .call class method"]
+- [Pattern 2 from skill - e.g., "Return Result object for success/failure"]
+- [Pattern 3 from skill - e.g., "Use transactions for multi-record operations"]
+
 **Code Safety Requirements**:
 Follow safe coding patterns from rails-error-prevention skill:
-- Use safe navigation (`&.`) for all potentially nil attributes (e.g., `user&.email&.downcase`)
-- Add presence validations for required fields (`validates :field, presence: true`)
-- Use strong parameters in controllers (never use `params[:model]` directly)
-- Handle validation failures explicitly (use `save` not `create!` in controllers)
-- Use `includes`/`joins` to prevent N+1 queries (e.g., `Post.includes(:author)`)
-- Rescue specific exceptions, not StandardError (e.g., `rescue ActiveRecord::RecordInvalid`)
-- Check for nil before calling methods: `key&.to_sym` instead of `key.to_sym`
-- Use parameterized queries (no string interpolation in SQL)
+- Use safe navigation (`&.`) for all potentially nil attributes
+- Add presence validations for required fields
+- Handle validation failures explicitly
+- Use transactions for multi-record operations
+- Rescue specific exceptions
+- Check for nil before calling methods
 
-Refer to rails-error-prevention skill for detailed patterns and examples.
-
-**Requirements from Plan**:
+**Requirements**:
 1. [Requirement 1]
 2. [Requirement 2]
 3. [Requirement 3]
 
-**Files to Create/Modify**:
-- `[file_path_1]` - [Purpose]
-- `[file_path_2]` - [Purpose]
+**Files to Create**:
+- `app/services/[namespace]/[action].rb` - Service object with callable pattern
+- `spec/services/[namespace]/[action]_spec.rb` - RSpec service tests
 
-**Code Example from Plan**:
+**Deliverable**: Service and spec files created using Write tool, following project patterns.
+</parameter>
+</invoke>
+
+<!-- Components/UI Phase -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:ui-specialist</parameter>
+<parameter name="description">Implement UI component for [FEATURE_NAME]</parameter>
+<parameter name="prompt">Create ViewComponent for [FEATURE_NAME].
+
+**Context**:
+- Feature: [FEATURE_DESCRIPTION]
+- Phase: Components (step X of Y)
+- Implementation plan: [RELEVANT_PLAN_EXCERPT]
+- Beads task: [TASK_ID if available]
+
+**Skill Guidance**:
+Based on viewcomponents-specialist and tailadmin-patterns skills:
+- [Pattern 1 - e.g., "All methods called by template must be public"]
+- [Pattern 2 - e.g., "Use TailAdmin card layout with shadow and border"]
+- [Pattern 3 - e.g., "Status badge colors: green (success), red (error), yellow (warning)"]
+
+**UX Requirements** (from ux-engineer):
+- [Accessibility requirement - e.g., "Add ARIA labels for screen readers"]
+- [Responsive requirement - e.g., "Stack vertically on mobile, horizontal on desktop"]
+- [Visual requirement - e.g., "Dark mode support with bg-gray-800"]
+
+**Requirements**:
+1. [Requirement 1]
+2. [Requirement 2]
+3. [Requirement 3]
+
+**Files to Create**:
+- `app/components/[namespace]/[name]_component.rb` - Component class
+- `app/components/[namespace]/[name]_component.html.erb` - Component template
+- `spec/components/previews/[namespace]/[name]_component_preview.rb` - Component preview
+- `spec/components/[namespace]/[name]_component_spec.rb` - Component specs
+
+**Deliverable**: All 4 files created using Write tool, following TailAdmin patterns.
+</parameter>
+</invoke>
+
+<!-- Tests Phase (if needed separately) -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:rspec-specialist</parameter>
+<parameter name="description">Add test coverage for [FEATURE_NAME]</parameter>
+<parameter name="prompt">Create comprehensive RSpec tests for [CLASS_NAME].
+
+**Context**:
+- Feature: [FEATURE_DESCRIPTION]
+- Class to test: [CLASS_NAME]
+- Implementation details: [ASSOCIATIONS, VALIDATIONS, METHODS]
+- Beads task: [TASK_ID if available]
+
+**Skill Guidance**:
+Based on rspec-testing-patterns skill:
+- [Pattern 1 - e.g., "Use shoulda-matchers for associations and validations"]
+- [Pattern 2 - e.g., "Test both success and failure paths"]
+- [Pattern 3 - e.g., "Use factories, not hard-coded data"]
+
+**Requirements**:
+1. Test all associations
+2. Test all validations
+3. Test all public methods
+4. Test both success and failure paths
+5. Test edge cases (nil, empty, boundaries)
+
+**Files to Create**:
+- `spec/[type]/[path]_spec.rb` - RSpec test file
+
+**Deliverable**: Spec file created using Write tool with 100% coverage of class behavior.
+</parameter>
+</invoke>
+```
+
+**Agent Selection by Phase:**
+
 ```ruby
-[Code template from implementation plan]
+def select_specialist(phase)
+  case phase
+  when 'database', 'models'
+    'reactree-rails-dev:data-lead'
+  when 'services', 'controllers'
+    'reactree-rails-dev:backend-lead'
+  when 'components', 'views'
+    'reactree-rails-dev:ui-specialist'
+  when 'tests'
+    'reactree-rails-dev:rspec-specialist'
+  else
+    'reactree-rails-dev:backend-lead'  # default fallback
+  end
+end
 ```
 
-**Quality Criteria**:
-- [ ] [Criterion 1]
-- [ ] [Criterion 2]
-- [ ] [Criterion 3]
+**Key Points:**
 
-**Deliverable**:
-- All specified files created/modified
-- Code follows skill patterns
-- Conventions from inspection report adhered to
-- Tests included (if applicable)
-- Ready for quality validation
-
-Please confirm when complete:
-- Files created/modified: [list]
-- Patterns followed: [list]
-- Any issues encountered: [description]
-```
+1. **Always use Task tool XML format** - Never use plain text delegation
+2. **Pass skill patterns explicitly** - Specialists need context from skills
+3. **Include all requirements** - Clear, specific instructions
+4. **Specify files to create** - Exact paths and purposes
+5. **Wait for completion** - Task tool is blocking, specialist will complete before returning
 
 ### Step 3.4: File-Level Progress Tracking (Optional)
 
