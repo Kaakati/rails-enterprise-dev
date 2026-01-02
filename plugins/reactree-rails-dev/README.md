@@ -44,6 +44,125 @@ This plugin implements research from ["ReAcTree: Hierarchical LLM Agent Trees wi
 | **Skill Reuse** | Own skills | **Reuses rails-enterprise-dev skills** |
 | **Approach** | Fixed workflow | **Adaptive hierarchy** |
 
+---
+
+## What's New in v2.8.0
+
+### 🛡️ Guardian Validation Cycle
+- **Automatic type safety validation** after Phase 4 implementation
+- **Iterative fix-validate cycle** (max 3 iterations) with Sorbet
+- **Blocks progression** if type errors remain unresolved
+- **Auto-logs violations** to `.claude/guardian-fixes.log`
+- **Graceful degradation** if Sorbet not available
+
+### 🔍 Comprehensive Quality Gates
+- **Solargraph**: LSP diagnostics via cclsp MCP (undefined methods, constants)
+- **Sorbet**: Static type checking with gradual adoption (`# typed: false/true/strict`)
+- **Rubocop**: Style enforcement with auto-fix suggestions
+- **Blocking validation**: Exit 1 prevents progress until violations fixed
+- **Phase 4 integration**: Validates after each implementation layer
+
+### 📋 Requirements Translation
+- **User story extraction**: "As a... I want... So that..." format
+- **Automatic acceptance criteria parsing**: Given/When/Then BDD format
+- **Component detection**: Identifies technical components from prompts
+- **Beads task breakdown**: Auto-creates epic and subtasks
+- **Smart routing**: Routes to appropriate workflow based on intent
+
+### 🔗 Real-time Validation Hooks
+- **PreToolUse**: Syntax validation **before** edits (prevents breaking changes)
+- **PostToolUse**: Immediate feedback **after** writes (syntax, rubocop, sorbet)
+- **File-specific**: Only validates Ruby files (`*.rb`)
+- **Non-blocking**: Post-write validation informs but doesn't block
+
+### ⚙️ Configuration
+
+Create `.claude/reactree-rails-dev.local.md`:
+
+```yaml
+---
+enabled: true
+quality_gates_enabled: true
+guardian_enabled: true
+validation_level: blocking  # blocking, warning, advisory
+test_coverage_threshold: 90
+smart_detection_enabled: true
+detection_mode: suggest
+requirements_extraction_enabled: true
+auto_create_beads_tasks: true
+guardian_max_iterations: 3
+---
+```
+
+**Validation Levels**:
+- `blocking`: Exit 1 - prevent commits/edits with violations (default)
+- `warning`: Exit 2 - alert but allow with violations
+- `advisory`: Exit 0 - display results only
+
+### 📚 New Skills
+
+**code-quality-gates** (`skills/code-quality-gates/`):
+- Comprehensive guide to Solargraph, Sorbet, and Rubocop
+- Integration patterns for quality gates
+- Auto-fix strategies and troubleshooting
+
+**requirements-engineering** (`skills/requirements-engineering/`):
+- User story format detection and extraction
+- Task breakdown strategies
+- Beads integration patterns
+- Intent classification algorithms
+
+### 🚀 Workflow Enhancements
+
+**Phase 4.7: Guardian Validation Cycle** (new phase):
+- Runs automatically after Phase 4 implementation
+- Comprehensive Sorbet type checking on all modified files
+- Iterative fix-validate workflow
+- Blocks feature until type safety confirmed
+
+**Enhanced Phase 4 Quality Gates**:
+- Calls `validate-implementation.sh` after each layer
+- Validates with Solargraph, Sorbet, and Rubocop
+- Exit codes control workflow progression
+
+### 🎯 Usage Example
+
+```bash
+# 1. User provides natural language requirement
+User: "As a developer I want JWT authentication with refresh tokens so that users can securely log in"
+
+# 2. Smart detection extracts requirements
+📝 User story detected, extracting requirements...
+✅ Requirements extracted to .claude/extracted-requirements.md
+
+# 3. Beads tasks auto-created (if enabled)
+📋 Creating beads tasks from requirements...
+✅ Created epic: AUTH-001
+  ✅ Created task: AUTH-002 - Add User authentication columns
+  ✅ Created task: AUTH-003 - Implement JWT token generation
+  ✅ Created task: AUTH-004 - Create AuthService for login/refresh
+  ✅ Created task: AUTH-005 - Add login endpoint
+  ✅ Created task: AUTH-006 - Add RSpec tests
+🎯 Epic AUTH-001 created with subtasks
+
+# 4. Run workflow
+/reactree-dev
+
+# 5. Quality gates validate each layer
+🔍 Phase Models Quality Gate
+✅ Solargraph validation passed
+✅ Sorbet type checking passed
+✅ Rubocop validation passed
+✅ All validations passed
+
+# 6. Guardian validates after implementation
+🛡️  Guardian Validation Cycle
+✅ Guardian validation passed - type safety confirmed
+Type-safe code ready for review.
+```
+
+---
+
 ## Installation
 
 ### Prerequisites

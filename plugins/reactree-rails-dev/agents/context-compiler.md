@@ -490,3 +490,234 @@ def batch_find_references(symbols)
   results
 end
 ```
+
+---
+
+## Guardian Validation Cycle
+
+After Phase 4 implementation, the context-compiler agent coordinates the Guardian validation cycle for comprehensive type safety validation.
+
+### Workflow
+
+**1. Collect Modified Files**
+
+```bash
+# Extract files from beads feature
+FILES=$(bd show $FEATURE_ID | grep -oE "app/[a-z_/]+\.rb" | sort -u)
+
+# Or use git diff as fallback
+FILES=$(git diff --name-only --cached | grep '\.rb$')
+```
+
+**2. Run Sorbet Type Check**
+
+```bash
+bundle exec srb tc $FILES
+```
+
+**3. Detect Type Errors**
+
+Extract error information from Sorbet output:
+
+- Missing type signatures
+- Type mismatches
+- Undefined method calls on typed values
+- T.untyped usage violations
+
+**4. Attempt Auto-Fix**
+
+For simple errors, generate fixes:
+
+```ruby
+# Add missing signature
+sig { returns(T.untyped) }
+def method_name
+  # ...
+end
+
+# Add parameter types
+sig { params(name: String, age: Integer).returns(User) }
+def create_user(name, age)
+  # ...
+end
+
+# Generate RBI files for gems
+bundle exec tapioca gems
+```
+
+**5. Re-validate**
+
+Run srb tc again after fixes:
+
+- Max 3 iterations
+- Block if still failing after max iterations
+- Requires manual intervention
+
+### Guardian Agent Invocation
+
+The workflow-orchestrator delegates to guardian-validation.sh script:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/guardian-validation.sh "$FEATURE_ID" 3
+
+if [ $? -eq 0 ]; then
+  echo "✅ Guardian validation passed - type safety confirmed"
+  bd comment "$FEATURE_ID" "🛡️ Guardian validation passed"
+else
+  echo "❌ Guardian validation failed - manual fixes required"
+  bd update "$FEATURE_ID" --status blocked
+  exit 1
+fi
+```
+
+### Error Analysis
+
+When Guardian detects type errors, analyze them for patterns:
+
+```ruby
+def analyze_sorbet_errors(sorbet_output)
+  errors = {
+    missing_signatures: [],
+    type_mismatches: [],
+    undefined_methods: [],
+    untyped_violations: []
+  }
+
+  sorbet_output.each_line do |line|
+    case line
+    when /Method .* does not have a `sig`/
+      errors[:missing_signatures] << extract_method(line)
+
+    when /Expected .* but found/
+      errors[:type_mismatches] << extract_types(line)
+
+    when /Method .* does not exist/
+      errors[:undefined_methods] << extract_method_call(line)
+
+    when /T.untyped not allowed/
+      errors[:untyped_violations] << extract_location(line)
+    end
+  end
+
+  errors
+end
+```
+
+### Auto-Fix Strategies
+
+**Missing Signatures**:
+
+```ruby
+# Before
+def calculate_total(items)
+  items.sum(&:price)
+end
+
+# After (Guardian auto-fix)
+sig { params(items: T::Array[Item]).returns(Float) }
+def calculate_total(items)
+  items.sum(&:price)
+end
+```
+
+**Type Mismatches** (requires manual fix):
+
+```ruby
+# Error: Expected String but found Integer
+# Manual fix needed - Guardian logs location
+```
+
+**Undefined Methods** (requires context):
+
+```ruby
+# Error: Method `email` does not exist on `T.untyped`
+# Fix: Add type annotation
+sig { params(user: User).void }
+def send_notification(user)
+  Mailer.deliver(user.email)  # Now type-safe
+end
+```
+
+### Storing Violations in Memory
+
+Log violations for tracking and analysis:
+
+```ruby
+def store_guardian_violation(file, error_type, details)
+  entry = {
+    timestamp: Time.now.utc.iso8601,
+    agent: "guardian",
+    knowledge_type: "type_error",
+    key: "guardian.violation",
+    value: {
+      file: file,
+      error_type: error_type,
+      details: details,
+      iteration: current_iteration
+    },
+    confidence: "verified"
+  }
+
+  File.open(".claude/reactree-memory.jsonl", "a") do |f|
+    f.puts(entry.to_json)
+  end
+end
+```
+
+### Integration with Implementation-Executor
+
+When Guardian cannot auto-fix, delegate to implementation-executor:
+
+```ruby
+# Store violation context
+store_guardian_violation(file, error_type, sorbet_output)
+
+# Request fix from implementation-executor
+Task(
+  subagent_type: "implementation-executor",
+  prompt: "Fix Sorbet type errors in #{file} based on Guardian analysis",
+  description: "Fix type safety violations"
+)
+```
+
+### Guardian Success Criteria
+
+Guardian validation passes when:
+
+1. All files pass `bundle exec srb tc`
+2. No type errors in Sorbet output
+3. All method signatures present (if file is `# typed: strict`)
+4. No T.untyped usage (if configured)
+
+### Guardian Configuration
+
+Configure Guardian behavior in `.claude/reactree-rails-dev.local.md`:
+
+```yaml
+---
+guardian_enabled: true
+guardian_max_iterations: 3
+guardian_strict_mode: false  # Require typed: strict
+guardian_allow_untyped: true  # Allow T.untyped fallback
+---
+```
+
+### Performance Optimization
+
+Guardian validates only changed files:
+
+- Extract files from beads feature
+- Filter to only .rb files with type annotations
+- Skip files with `# typed: ignore` or `# typed: false`
+- Batch validation for speed
+
+```ruby
+# Filter to only typed files
+typed_files = files.select do |file|
+  content = Read(file)
+  content.lines.first(5).any? { |line| line =~ /# typed: (true|strict)/ }
+end
+
+# Run validation on batch
+bundle exec srb tc typed_files.join(" ")
+```

@@ -879,6 +879,96 @@ Ready to proceed to final review."
 fi
 ```
 
+### Phase 4.7: GUARDIAN VALIDATION CYCLE
+
+**AUTOMATIC GUARDIAN**: Run comprehensive type safety validation after implementation.
+
+**Purpose**: Ensure Sorbet type safety compliance before final review.
+
+```bash
+echo ""
+echo "═══════════════════════════════════════════════════════"
+echo "🛡️  Guardian Validation Cycle"
+echo "═══════════════════════════════════════════════════════"
+
+# Check if Guardian enabled
+GUARDIAN_ENABLED=$(grep '^guardian_enabled:' .claude/reactree-rails-dev.local.md 2>/dev/null | sed 's/.*: *//' | tr -d ' \n')
+GUARDIAN_ENABLED=${GUARDIAN_ENABLED:-true}  # Default: enabled
+
+if [ "$GUARDIAN_ENABLED" = "true" ]; then
+  echo "Guardian validation is ENABLED"
+  echo ""
+
+  # Run Guardian validation script
+  bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/guardian-validation.sh "$FEATURE_ID" 3
+
+  GUARDIAN_EXIT_CODE=$?
+
+  if [ $GUARDIAN_EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "✅ Guardian validation passed - type safety confirmed"
+    echo ""
+
+    # Add success comment to feature
+    if [ -n "$FEATURE_ID" ] && command -v bd &>/dev/null; then
+      bd comment "$FEATURE_ID" "🛡️ Guardian Validation: PASSED
+
+**Type Safety**: ✅ Confirmed
+**Sorbet Check**: All files passed type checking
+**Iterations**: Completed successfully
+
+Type-safe code ready for review."
+    fi
+  else
+    echo ""
+    echo "❌ Guardian validation failed - manual fixes required"
+    echo ""
+
+    # Block feature and log failure
+    if [ -n "$FEATURE_ID" ] && command -v bd &>/dev/null; then
+      bd update "$FEATURE_ID" --status blocked 2>/dev/null || true
+      bd comment "$FEATURE_ID" "🛡️ Guardian Validation: FAILED
+
+**Type Safety**: ❌ Type errors detected
+**Sorbet Check**: Failed
+**Action Required**: Review .claude/guardian-fixes.log
+
+**Common Fixes**:
+1. Add missing type signatures: sig { returns(T.untyped) }
+2. Fix type mismatches: Check parameter types
+3. Add type annotations to method calls
+4. Generate RBI files: bundle exec tapioca gems
+
+**Manual Steps**:
+1. Review errors in .claude/guardian-fixes.log
+2. Fix type errors
+3. Run: bundle exec srb tc [files]
+4. Re-run guardian: bash hooks/scripts/guardian-validation.sh $FEATURE_ID
+
+Cannot proceed to review until Guardian validation passes."
+    fi
+
+    echo "🛑 BLOCKED: Type safety validation failed"
+    echo "See .claude/guardian-fixes.log for details"
+    echo "═══════════════════════════════════════════════════════"
+    exit 1
+  fi
+else
+  echo "Guardian validation is DISABLED (skipped)"
+  echo ""
+  echo "ℹ️  To enable Guardian validation:"
+  echo "  1. Add to .claude/reactree-rails-dev.local.md:"
+  echo "     guardian_enabled: true"
+  echo "  2. Install Sorbet: gem 'sorbet' and gem 'sorbet-runtime'"
+  echo "  3. Run: bundle exec srb init"
+  echo ""
+fi
+
+echo "═══════════════════════════════════════════════════════"
+```
+
+**Continue to Phase 5 only if Guardian passes or is disabled.**
+
 ### Phase 5: REVIEW (Delegate to Chief Reviewer)
 
 Final quality validation:

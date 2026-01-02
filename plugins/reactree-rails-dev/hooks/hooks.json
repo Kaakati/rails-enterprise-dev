@@ -26,6 +26,39 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "tool:Edit && args.file_path:*.rb",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-edit-validation.sh",
+            "timeout": 10,
+            "description": "Pre-edit Ruby file validation: syntax check before edits",
+            "env": {
+              "FILE_PATH": "${args.file_path}",
+              "NEW_CONTENT": "${args.new_string}"
+            }
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "tool:Write && args.file_path:*.rb",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-write-validation.sh",
+            "timeout": 15,
+            "description": "Post-write Ruby file validation: syntax, rubocop, sorbet checks",
+            "env": {
+              "FILE_PATH": "${args.file_path}"
+            }
+          }
+        ]
+      }
     ]
   }
 }
