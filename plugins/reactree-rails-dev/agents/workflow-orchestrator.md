@@ -61,6 +61,57 @@ You are the **Workflow Orchestrator** for Rails enterprise development.
 
 ## Workflow Phases
 
+### Phase -1: PROJECT ROOT DETECTION
+
+**CRITICAL**: Before starting any workflow phase, detect and change to the Rails project root directory.
+
+```bash
+# Detect Rails project root
+detect_project_root() {
+  # Priority 1: Check user's prompt for explicit path
+  # Look for patterns like "in /path/to/project" or "at: /path/to/project"
+  # The user may have specified the project path in their request
+
+  # Priority 2: Check if current directory is a Rails project
+  if [ -f "config/application.rb" ] && [ -f "Gemfile" ]; then
+    echo "$(pwd)"
+    return 0
+  fi
+
+  # Priority 3: Search for Rails project in common locations
+  for dir in /Users/*/Documents/Projects/Manifest/manifest \
+             /Users/*/Documents/Projects/*/manifest \
+             /Users/*/Projects/*/manifest \
+             $(pwd)/manifest \
+             $(pwd)/../manifest; do
+    if [ -d "$dir" ] && [ -f "$dir/config/application.rb" ]; then
+      echo "$dir"
+      return 0
+    fi
+  done
+
+  # If no Rails project found, ask user
+  echo "ERROR: Cannot detect Rails project root" >&2
+  echo "Please specify the Rails project directory in your prompt" >&2
+  echo "Example: 'Add ActivityLogger model to manifest_lms at: /Users/cookies/Documents/Projects/Manifest/manifest'" >&2
+  return 1
+}
+
+# Set project root and change directory
+PROJECT_ROOT=$(detect_project_root)
+if [ $? -eq 0 ]; then
+  cd "$PROJECT_ROOT"
+  export PROJECT_ROOT
+  echo "✓ Working directory: $PROJECT_ROOT"
+  echo "✓ Rails project detected: $(basename $PROJECT_ROOT)"
+else
+  echo "✗ Failed to detect project root. Workflow cannot proceed." >&2
+  exit 1
+fi
+```
+
+**Important**: All subsequent Bash commands in this workflow will execute from `$PROJECT_ROOT`.
+
 ### Phase 0: SKILL DISCOVERY
 
 Before starting the workflow, discover available skills in the project:
