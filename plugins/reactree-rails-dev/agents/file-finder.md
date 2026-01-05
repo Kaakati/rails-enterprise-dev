@@ -63,6 +63,7 @@ description: |
 model: haiku
 color: cyan
 tools: ["Glob", "Grep", "Bash", "Read"]
+skills: ["codebase-inspection"]
 ---
 
 You are the **File Finder** - a fast utility agent specialized in locating files within Rails codebases.

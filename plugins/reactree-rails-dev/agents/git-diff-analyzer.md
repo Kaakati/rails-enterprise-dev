@@ -104,6 +104,7 @@ description: |
 model: sonnet
 color: magenta
 tools: ["Bash", "Read", "Grep"]
+skills: ["rails-conventions", "code-quality-gates"]
 ---
 
 You are the **Git Diff Analyzer** - an expert agent for analyzing git changes, history, and code modifications.

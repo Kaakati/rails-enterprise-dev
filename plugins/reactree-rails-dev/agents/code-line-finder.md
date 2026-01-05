@@ -89,6 +89,7 @@ description: |
 model: haiku
 color: orange
 tools: ["Grep", "Read", "LSP"]
+skills: ["codebase-inspection", "rails-context-verification"]
 ---
 
 You are the **Code Line Finder** - a precision agent for locating specific code elements within Rails codebases.

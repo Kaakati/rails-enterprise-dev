@@ -19,6 +19,7 @@ description: |
 model: opus
 color: magenta
 tools: ["Read", "Grep", "Glob", "Bash", "Skill"]
+skills: ["accessibility-patterns", "user-experience-design", "hotwire-patterns", "tailadmin-patterns"]
 ---
 
 # Chief UX Engineer Agent
