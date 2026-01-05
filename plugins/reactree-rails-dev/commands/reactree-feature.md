@@ -188,49 +188,498 @@ If validation fails:
 
 ## Activation
 
+**User Request:**
 ```
 {{TASK_REQUEST}}
+```
 
-Please activate the ReAcTree Feature Development workflow for the request above.
+---
 
-Follow this process:
-1. **Feature Definition**
-   - If requirements-writing skill available, use it for structure
-   - Define clear user story (As a [role] I can [action] so that [benefit])
-   - List specific acceptance criteria
-   - Identify edge cases
+**IMMEDIATE ACTION REQUIRED**: You must now invoke the workflow-orchestrator agent to execute this feature development request with TDD emphasis.
 
-2. **Skill Discovery**
-   - Discover available skills in .claude/skills/
-   - Initialize working memory with feature context
-   - Create beads epic for tracking
+**Use the Task tool with these exact parameters:**
 
-3. **Codebase Inspection**
-   - Use codebase-inspector to understand existing patterns
-   - Identify integration points
-   - Map data requirements
+- **subagent_type**: `reactree-rails-dev:workflow-orchestrator`
+- **description**: `Execute feature-driven development workflow with TDD`
+- **prompt**: (Use the prompt template below)
 
-4. **TDD Planning**
-   - Design acceptance tests with test-oracle
-   - Plan unit tests for each component
-   - Establish coverage targets
+---
 
-5. **Implementation**
-   - Execute with parallel phases where possible
-   - Run tests after each component
-   - Use FEEDBACK edges for failures
+## Workflow-Orchestrator Agent Prompt Template
 
-6. **Acceptance Validation**
-   - Verify ALL acceptance criteria met
-   - Run full test suite
-   - Check edge cases
+```
+User Request: {{TASK_REQUEST}}
 
-7. **Completion**
-   - Close beads issue
-   - Record successful episode to memory
-   - Provide summary
+You are the **workflow-orchestrator** agent coordinating a **feature-driven Rails development workflow** with strong TDD emphasis using the ReAcTree architecture.
 
-Start with Feature Definition phase.
+## Your Mission
+
+Execute the feature development workflow with:
+- **TDD-first approach**: Tests before implementation
+- **Clear user stories**: As a [role], I want [feature], so that [benefit]
+- **Acceptance criteria**: Given/When/Then scenarios
+- **Requirements-driven**: Use requirements-writing skill if available
+- **Quality gates**: All acceptance criteria must be met
+
+## Your Responsibilities
+
+As the master coordinator for feature development, you must:
+
+1. ✅ **Define feature clearly** using user story format
+2. ✅ **Design acceptance tests FIRST** before any implementation
+3. ✅ **Delegate to specialist agents** using Task tool with `reactree-rails-dev:agent-name` format
+4. ✅ **Validate acceptance criteria** at the end (not just test coverage)
+5. ✅ **Track progress** in beads and memory systems
+6. ✅ **Handle failures** via FEEDBACK edges
+
+---
+
+## Phase 1: Feature Definition & Requirements
+
+**Actions** (you handle directly):
+
+**1. Parse User Request into User Story**:
+
+If request contains "As a... I want... So that..." format:
+- Extract role, action, benefit
+- Validate structure is complete
+
+If request is NOT in user story format:
+- Use **requirements-writing skill** if available
+- Transform into proper user story:
+  ```
+  As a [identify role from context]
+  I want [extract core feature]
+  So that [infer benefit/value]
+  ```
+
+**2. Extract/Define Acceptance Criteria**:
+
+If request contains "Given... When... Then..." scenarios:
+- Extract all scenarios
+- Validate they're testable
+
+If NOT in Gherkin format:
+- Create acceptance criteria from description
+- Format as Given/When/Then for each key behavior
+- Example:
+  ```
+  Scenario: User successfully logs in
+    Given I am on the login page
+    When I enter valid credentials
+    Then I should be redirected to the dashboard
+    And I should see a welcome message
+  ```
+
+**3. Identify Edge Cases**:
+- What happens if data is invalid?
+- What happens if user lacks permissions?
+- What happens on concurrent access?
+- What happens if external services fail?
+
+**4. Create Beads Epic**:
+- Use `mcp__plugin_beads_beads__create`
+- Title: Feature name from user story
+- Type: "epic"
+- Description: Full user story + acceptance criteria
+- Create subtasks for:
+  - Acceptance test creation
+  - Each acceptance criterion
+  - Edge case handling
+
+**Output**: Structured feature definition with user story, acceptance criteria, edge cases, and beads epic ID
+
+---
+
+## Phase 2: Skill Discovery & Context
+
+**Actions** (you handle directly):
+
+1. **Discover available skills** from `.claude/skills/`
+2. **Initialize working memory** with feature context:
+   ```json
+   {
+     "type": "feature_context",
+     "user_story": "...",
+     "acceptance_criteria": ["..."],
+     "edge_cases": ["..."],
+     "epic_id": "...",
+     "timestamp": "..."
+   }
+   ```
+3. **Load episodic memory** for similar features (check `.claude/reactree-episodes.jsonl`)
+
+---
+
+## Phase 3: Codebase Inspection
+
+**DELEGATE to codebase-inspector agent** (same as main workflow):
+
+**Invoke Task tool with:**
+- `subagent_type`: `reactree-rails-dev:codebase-inspector`
+- `description`: `Analyze existing patterns for feature integration`
+- `prompt`:
+
+```
+Analyze the Rails codebase to understand how to integrate: {{FEATURE_FROM_USER_STORY}}
+
+Focus on:
+- Authentication patterns (for user-facing features)
+- Authorization patterns (for permission-based features)
+- Similar existing features (how were they built?)
+- Integration points (where does this feature hook into existing code?)
+
+Cache findings to working memory.
+
+**Skills to use**: codebase-inspection, rails-context-verification
+```
+
+**Wait for completion.**
+
+---
+
+## Phase 4: TDD Planning with Test-Oracle
+
+**DELEGATE to test-oracle agent**:
+
+**Invoke Task tool with:**
+- `subagent_type`: `reactree-rails-dev:test-oracle`
+- `description`: `Design acceptance tests and test plan`
+- `prompt`:
+
+```
+Design comprehensive test plan for: {{FEATURE_FROM_USER_STORY}}
+
+## Available Context
+
+**User Story**: {{USER_STORY}}
+**Acceptance Criteria**: {{ACCEPTANCE_CRITERIA_LIST}}
+**Edge Cases**: {{EDGE_CASES_LIST}}
+
+## Test Planning Requirements
+
+**1. Acceptance Tests** (System/Feature Specs):
+For EACH acceptance criterion, design a test:
+- Test file path (e.g., `spec/system/user_login_spec.rb`)
+- Test description matching Given/When/Then
+- Setup requirements (factories, data)
+- Actions to perform
+- Expected outcomes
+
+**2. Integration Tests** (Request Specs):
+For API endpoints or controller actions:
+- Test authentication required
+- Test authorization rules
+- Test happy path
+- Test validation failures
+
+**3. Unit Tests**:
+For EACH component (models, services, etc.):
+- Model validations and associations
+- Service business logic (success, failure, edge cases)
+- Component rendering and method exposure
+
+**4. Edge Case Tests**:
+For EACH identified edge case:
+- Test file and location
+- Setup that triggers edge case
+- Expected behavior
+
+**5. Test Pyramid Validation**:
+- Ensure 70% unit, 20% integration, 10% system
+- Set coverage target: 90%+ for new code
+
+## Deliverable
+
+Provide structured test plan:
+
+**Acceptance Tests** (write these FIRST):
+1. Test: spec/system/{{feature}}_spec.rb
+   - Scenario: {{acceptance_criterion_1}}
+   - Given: ...
+   - When: ...
+   - Then: ...
+
+**Integration Tests**:
+1. Test: spec/requests/{{resource}}_spec.rb
+   - Context: {{integration_scenario}}
+   - It: {{expected_behavior}}
+
+**Unit Tests**:
+1. Test: spec/models/{{model}}_spec.rb
+   - Validations: ...
+   - Associations: ...
+2. Test: spec/services/{{service}}_spec.rb
+   - Success case: ...
+   - Failure case: ...
+
+**Coverage Target**: 90%+
+
+**Skills to use**: rspec-testing-patterns, rails-conventions
+```
+
+**Wait for test-oracle to complete.** Review test plan before implementation.
+
+---
+
+## Phase 5: Implementation Planning
+
+**DELEGATE to rails-planner** (similar to main workflow but guided by tests):
+
+**Invoke Task tool with:**
+- `subagent_type`: `reactree-rails-dev:rails-planner`
+- `description`: `Design implementation to satisfy acceptance tests`
+- `prompt`:
+
+```
+Design implementation for: {{FEATURE_FROM_USER_STORY}}
+
+## Available Context
+
+**Test Plan**: Complete test plan from test-oracle
+**Codebase Patterns**: From codebase-inspector
+**Acceptance Criteria**: Must be met
+
+## Planning Strategy
+
+**Design implementation to make tests pass**:
+1. What database changes are needed? (migrations)
+2. What models are needed? (to satisfy model specs)
+3. What services are needed? (to satisfy service specs)
+4. What UI components are needed? (to satisfy system specs)
+5. What controllers/routes are needed? (to satisfy request specs)
+
+Follow TDD: Implementation should be **minimal code to make tests pass**.
+
+**Skills to use**: rails-conventions, activerecord-patterns, service-object-patterns, hotwire-patterns
+```
+
+**Wait for rails-planner to complete.**
+
+---
+
+## Phase 6: Test-First Implementation
+
+**DELEGATE to implementation-executor**:
+
+**Invoke Task tool with:**
+- `subagent_type`: `reactree-rails-dev:implementation-executor`
+- `description`: `Implement feature using TDD approach`
+- `prompt`:
+
+```
+Implement feature using TDD: {{FEATURE_FROM_USER_STORY}}
+
+## TDD Workflow (Red-Green-Refactor)
+
+**For EACH component**:
+
+1. **Red**: Write the test FIRST (it should fail)
+   - Create spec file
+   - Write failing test based on test plan
+   - Run test (should fail with clear message)
+
+2. **Green**: Write minimal code to pass
+   - Implement just enough to make test pass
+   - No gold-plating, no extra features
+   - Run test (should now pass)
+
+3. **Refactor**: Clean up if needed
+   - Extract methods, improve names
+   - Remove duplication
+   - Run test (should still pass)
+
+## Implementation Order (Test-Driven)
+
+**Phase 6.1: Acceptance Tests First**:
+- Write system/feature specs for each acceptance criterion
+- These should fail initially (no implementation yet)
+
+**Phase 6.2: Database Layer (TDD)**:
+- Write migration tests (if needed)
+- Create migrations
+- Validate migrations work
+
+**Phase 6.3: Models Layer (TDD)**:
+- Write model specs (validations, associations)
+- Implement models to pass specs
+- Run model specs (should pass)
+
+**Phase 6.4: Services Layer (TDD)**:
+- Write service specs (business logic)
+- Implement services to pass specs
+- Run service specs (should pass)
+
+**Phase 6.5: UI Layer (TDD)**:
+- Write component specs
+- Implement ViewComponents
+- Run component specs (should pass)
+
+**Phase 6.6: Integration (TDD)**:
+- Write request specs (controllers, routes)
+- Implement controllers/routes
+- Run request specs (should pass)
+
+**Phase 6.7: Acceptance Validation**:
+- Run system/feature specs (should now pass)
+- All acceptance criteria should be met
+
+## Quality Gates (TDD-Specific)
+
+- ✅ Each test written BEFORE implementation
+- ✅ Each test fails initially (Red)
+- ✅ Minimal code written to pass (Green)
+- ✅ All tests pass after each phase
+- ✅ Acceptance tests pass at the end
+
+**Skills to use**: All implementation skills + rspec-testing-patterns, rails-error-prevention
+```
+
+**Wait for implementation-executor to complete all TDD cycles.**
+
+---
+
+## Phase 7: Acceptance Validation
+
+**DELEGATE to test-oracle** (validation mode):
+
+**Invoke Task tool with:**
+- `subagent_type`: `reactree-rails-dev:test-oracle`
+- `description`: `Validate all acceptance criteria met`
+- `prompt`:
+
+```
+Validate feature implementation: {{FEATURE_FROM_USER_STORY}}
+
+## Validation Checklist
+
+**1. Acceptance Criteria Validation**:
+For EACH acceptance criterion from Phase 1:
+- ✅ Acceptance test exists
+- ✅ Acceptance test passes
+- ✅ Manual verification (if needed)
+
+**2. Edge Case Coverage**:
+For EACH edge case:
+- ✅ Test exists
+- ✅ Test passes
+- ✅ Behavior is correct
+
+**3. Test Suite Health**:
+- ✅ All tests pass (100% pass rate)
+- ✅ Coverage > 90% for new code
+- ✅ Test pyramid balanced
+- ✅ No pending tests
+
+**4. Quality Gates**:
+- ✅ User story fully implemented
+- ✅ All Given/When/Then scenarios pass
+- ✅ No regressions in existing tests
+
+## Output Format
+
+```
+✅ Acceptance Validation Complete
+
+**User Story**: {{USER_STORY}}
+
+**Acceptance Criteria**:
+1. ✅ {{CRITERION_1}} - Test: spec/system/... (PASSING)
+2. ✅ {{CRITERION_2}} - Test: spec/system/... (PASSING)
+...
+
+**Edge Cases**:
+1. ✅ {{EDGE_CASE_1}} - Test: spec/... (PASSING)
+...
+
+**Test Results**:
+- Total: {{TOTAL}} tests
+- Passing: {{PASSING}}
+- Coverage: {{COVERAGE}}%
+
+**Quality**: All acceptance criteria met ✅
+```
+
+**Skills to use**: rspec-testing-patterns
+```
+
+**Wait for test-oracle validation.**
+
+---
+
+## Phase 8: Completion & Summary
+
+**Actions** (you handle directly):
+
+**1. Close Beads Epic**:
+- Use `mcp__plugin_beads_beads__close`
+- Epic ID: {{EPIC_ID_FROM_PHASE_1}}
+- Summary: Feature complete, all acceptance criteria met
+
+**2. Record to Episodic Memory**:
+- Append to `.claude/reactree-episodes.jsonl`
+- Include: user story, acceptance criteria, test plan, implementation approach
+
+**3. Provide Feature Summary**:
+
+```
+✅ Feature Complete: {{FEATURE_NAME}}
+
+## User Story
+
+**As a** {{ROLE}}
+**I want** {{ACTION}}
+**So that** {{BENEFIT}}
+
+## Acceptance Criteria (All Met ✅)
+
+1. ✅ {{CRITERION_1}}
+2. ✅ {{CRITERION_2}}
+...
+
+## Implementation Summary
+
+**Files Created**:
+- {{X}} migrations
+- {{Y}} models ({{Y}} specs)
+- {{Z}} services ({{Z}} specs)
+- {{W}} components ({{W}} specs)
+- {{V}} system specs (acceptance tests)
+
+**Test Results**:
+- {{TOTAL}} tests passing
+- {{COVERAGE}}% coverage
+- All acceptance criteria validated
+
+## Next Steps
+
+1. **Review acceptance tests**:
+   - Run: `bundle exec rspec spec/system/{{feature}}_spec.rb`
+   - Verify all scenarios pass
+
+2. **Manual testing** (optional):
+   - {{MANUAL_TEST_STEPS}}
+
+3. **Deploy** (if ready):
+   - Create PR with user story in description
+   - Link to beads epic: {{EPIC_ID}}
+```
+
+---
+
+## Critical Reminders for Feature Development
+
+- **Tests FIRST**: Write acceptance tests before any implementation
+- **User story driven**: Implementation must satisfy user story and acceptance criteria
+- **TDD cycle**: Red → Green → Refactor for each component
+- **Acceptance validation**: ALL criteria must be met, not just test coverage
+- **Edge cases**: Don't forget to test and handle edge cases
+
+---
+
+**BEGIN EXECUTION NOW**
+
+Start with Phase 1: Feature Definition & Requirements.
 ```
 
 ## Specialist Agents Used
