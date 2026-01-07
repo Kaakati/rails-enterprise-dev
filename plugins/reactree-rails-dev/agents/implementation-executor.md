@@ -2024,7 +2024,7 @@ implement_file_with_guardian() {
         # Run model spec if exists
         local spec_file="spec/models/$(basename $file_path)"
         if [ -f "$spec_file" ]; then
-          bundle exec rspec "$spec_file" --format progress || test_result=$?
+          RAILS_ENV=test bundle exec rspec "$spec_file" --format progress || test_result=$?
         else
           echo "  (No spec file yet - will generate)"
         fi
@@ -2033,7 +2033,7 @@ implement_file_with_guardian() {
         # Run service spec
         local spec_path=$(echo "$file_path" | sed 's|^app/|spec/|')
         if [ -f "$spec_path" ]; then
-          bundle exec rspec "$spec_path" --format progress || test_result=$?
+          RAILS_ENV=test bundle exec rspec "$spec_path" --format progress || test_result=$?
         fi
         ;;
       *)

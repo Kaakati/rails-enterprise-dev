@@ -452,7 +452,7 @@ analyze_coverage() {
   echo "📊 Analyzing test coverage..."
 
   # Run tests with coverage
-  COVERAGE=true bundle exec rspec
+  RAILS_ENV=test COVERAGE=true bundle exec rspec
 
   # Parse coverage report
   local COVERAGE_FILE="coverage/.resultset.json"
@@ -588,7 +588,7 @@ orchestrate_tdd_cycle() {
 
   # 3. Verify tests fail (RED confirmation)
   echo "🔴 RED: Running tests (should fail)..."
-  bundle exec rspec
+  RAILS_ENV=test bundle exec rspec
   local red_status=$?
 
   if [ $red_status -eq 0 ]; then
@@ -611,7 +611,7 @@ orchestrate_tdd_cycle() {
 
     # Run tests
     echo "🧪 Running tests..."
-    bundle exec rspec
+    RAILS_ENV=test bundle exec rspec
     local test_status=$?
 
     if [ $test_status -eq 0 ]; then
@@ -648,7 +648,7 @@ analyze_test_failures() {
   echo "🔍 Analyzing test failures..."
 
   # Extract failure messages
-  local failures=$(bundle exec rspec --format json | \
+  local failures=$(RAILS_ENV=test bundle exec rspec --format json | \
     jq -r '.examples[] | select(.status == "failed") |
       {file: .file_path, line: .line_number, message: .exception.message}')
 

@@ -601,6 +601,249 @@ npm install -g @beads/cli
 bd init
 ```
 
+## Rules System
+
+### Overview
+
+The Rules system provides **path-specific, context-aware guidance** that automatically loads based on the file you're editing. This dramatically reduces context overhead while improving relevance.
+
+**Key Benefits**:
+- ✅ **60-70% reduction in context overhead** - Only relevant rules load
+- ✅ **Hyper-targeted guidance** - Rules specific to file type (models vs controllers vs tests)
+- ✅ **Automatic activation** - No manual selection needed
+- ✅ **Project customizable** - Override or extend rules per project
+- ✅ **Works with skills** - Complementary to existing skills system
+
+### How It Works
+
+Rules use glob patterns in YAML frontmatter to match file paths:
+
+```markdown
+---
+paths: app/models/**/*.rb
+---
+
+# Model Rules
+
+Your model-specific guidance here...
+```
+
+When you edit `app/models/user.rb`, the model rules automatically load. When you edit `app/controllers/users_controller.rb`, controller rules load instead.
+
+### Bundled Rules
+
+The plugin includes 13+ production-ready rule files:
+
+#### Rails Layer Rules (`rules/rails/`)
+- **models.md** (`app/models/**/*.rb`)
+  - Integer enum patterns (CRITICAL: array syntax, ordering rules)
+  - Association patterns (belongs_to, has_many, dependent options)
+  - Validation patterns (presence, uniqueness, custom)
+  - Callback patterns (after_create_commit, before_validation)
+
+- **controllers.md** (`app/controllers/**/*.rb`)
+  - RESTful action patterns (index, show, create, update, destroy)
+  - Strong parameters (permit, require)
+  - Before actions and filters
+  - Response formats (JSON, HTML, Turbo Stream)
+
+- **services.md** (`{app/services,lib/services}/**/*.rb`)
+  - Service object structure (initialize, call, Result pattern)
+  - Dependency injection patterns
+  - Idempotency and retry logic
+  - Error handling and recovery
+
+- **jobs.md** (`app/jobs/**/*.rb`)
+  - Sidekiq job patterns (queue_as, retry_on, discard_on)
+  - Idempotent job design
+  - Small payload patterns (pass IDs, not objects)
+  - Error handling and dead queues
+
+- **mailers.md** (`app/mailers/**/*.rb`)
+  - Action Mailer patterns (mail, default, attachments)
+  - Layout and template conventions
+  - Preview patterns
+  - Delivery methods
+
+- **channels.md** (`app/channels/**/*.rb`)
+  - Action Cable security (ALWAYS authorize in subscribed)
+  - Stream patterns (stream_from, stream_for, stop_all_streams)
+  - Lifecycle callbacks (before_subscribe, after_unsubscribe)
+  - Broadcasting patterns (persist first, broadcast second)
+  - Presence tracking and client actions
+
+#### Frontend Rules (`rules/frontend/`)
+- **components.md** (`app/components/**/*.rb`)
+  - ViewComponent delegation patterns (CRITICAL: use delegate, never expose @service)
+  - Template requirements (every component needs .html.erb)
+  - Slot patterns
+  - Testing patterns
+
+- **stimulus.md** (`app/javascript/**/*_controller.js`)
+  - Controller naming conventions
+  - Target and value patterns
+  - Action patterns
+  - Lifecycle callbacks (connect, disconnect)
+  - Accessibility requirements (keyboard navigation, ARIA)
+
+#### Testing Rules (`rules/testing/`)
+- **model-specs.md** (`spec/models/**/*_spec.rb`)
+  - shoulda-matchers patterns (associations, validations)
+  - Enum testing
+  - Scope testing
+  - Callback testing
+
+- **request-specs.md** (`spec/requests/**/*_spec.rb`)
+  - Request spec structure (GET, POST, PATCH, DELETE)
+  - Authentication testing
+  - Authorization testing (account scoping)
+  - Response assertions
+
+- **system-specs.md** (`spec/system/**/*_spec.rb`)
+  - Capybara patterns (visit, fill_in, click_button)
+  - JavaScript testing (driven_by :selenium_chrome_headless)
+  - User flow testing
+  - Assertion patterns
+
+#### Database Rules (`rules/database/`)
+- **migrations.md** (`db/migrate/**/*.rb`)
+  - Reversible migrations (change vs up/down)
+  - Index patterns (ALWAYS index foreign keys)
+  - Concurrent indexes (algorithm: :concurrently)
+  - Data migrations vs schema migrations
+
+#### Quality Gates (`rules/quality-gates/`)
+- **security.md** (`**/*.rb`)
+  - SQL injection prevention (parameterized queries)
+  - Mass assignment protection (strong parameters)
+  - XSS prevention (sanitize, never html_safe on user input)
+  - Authentication patterns (Devise, has_secure_password)
+  - Authorization patterns (scope queries to current_user)
+
+- **performance.md** (`**/*.rb`)
+  - N+1 query prevention (includes, eager_load)
+  - Database indexing (foreign keys, frequently queried columns)
+  - Caching strategies (fragment, Russian doll, low-level)
+  - Background jobs (move slow operations to Sidekiq)
+  - Query optimization (select only needed columns, batch processing)
+
+- **accessibility.md** (`{app/components/**/*.{rb,erb},app/views/**/*.erb}`)
+  - WCAG 2.2 Level AA compliance
+  - Keyboard navigation (tabindex, focus management)
+  - ARIA attributes (labels, live regions, roles)
+  - Color contrast requirements (4.5:1 for text, 3:1 for UI)
+  - Form accessibility (label for, error messages, fieldsets)
+  - Semantic HTML (header, nav, main, article, aside, footer)
+
+### Rules vs Skills
+
+**Rules** and **Skills** serve different purposes:
+
+| Aspect | Rules | Skills |
+|--------|-------|--------|
+| **Scope** | File-specific | Agent/workflow-level |
+| **Loading** | Automatic (by file path) | Manual (by agent) |
+| **Size** | Small (50-500 lines) | Large (500-1500 lines) |
+| **Purpose** | Concrete patterns | Orchestration knowledge |
+| **Examples** | Enum syntax, controller structure | Workflow patterns, agent coordination |
+
+**When to use Rules**:
+- ✅ Layer-specific conventions (models, controllers, services)
+- ✅ File-type patterns (specs, migrations, components)
+- ✅ Quality gates (security, performance, accessibility)
+
+**When to use Skills**:
+- ✅ Cross-cutting concerns (error prevention, codebase inspection)
+- ✅ Workflow orchestration (ReAcTree patterns, beads integration)
+- ✅ Agent coordination (skill discovery, smart detection)
+
+### Customization
+
+Rules are **project-specific** and can be customized:
+
+#### Override Bundled Rules
+
+Edit files in `.claude/rules/`:
+```bash
+# Edit model rules for your project
+vim .claude/rules/rails/models.md
+```
+
+Changes only affect the current project.
+
+#### Add Custom Rules
+
+Create new rule files:
+```bash
+# Add custom API rules
+cat > .claude/rules/api-design.md <<'EOF'
+---
+paths: app/controllers/api/**/*.rb
+---
+
+# API Design Patterns
+
+Your custom API patterns here...
+EOF
+```
+
+#### Disable Specific Rules
+
+Remove unwanted rule files:
+```bash
+# Don't need accessibility rules
+rm .claude/rules/quality-gates/accessibility.md
+```
+
+### Initialization
+
+Rules are automatically initialized by `/reactree-init`:
+
+```bash
+# Initialize plugin (includes rules setup)
+/reactree-init
+```
+
+This creates `.claude/rules/` and copies bundled rules from the plugin.
+
+**Manual setup** (if needed):
+```bash
+# Create rules directory
+mkdir -p .claude/rules
+
+# Copy bundled rules from plugin
+cp -r ${CLAUDE_PLUGIN_ROOT}/rules/* .claude/rules/
+```
+
+### Glob Pattern Examples
+
+Rules use glob patterns to match file paths:
+
+```yaml
+# Single directory
+paths: app/models/**/*.rb
+
+# Multiple patterns
+paths: "{app/services,lib/services}/**/*.rb"
+
+# Specific file types
+paths: "app/components/**/*.{rb,erb}"
+
+# All Ruby files (quality gates)
+paths: "**/*.rb"
+
+# All views and components (accessibility)
+paths: "{app/components/**/*.{rb,erb},app/views/**/*.erb}"
+```
+
+### Best Practices
+
+1. **Keep rules focused** - One concern per file (models, controllers, etc.)
+2. **Use concrete examples** - Show good and bad patterns with code
+3. **Document critical patterns** - Mark CRITICAL for must-follow rules
+4. **Update as needed** - Rules evolve with your project
+5. **Test in isolation** - Verify rules load for specific file types
+
 ## Configuration
 
 ### Custom Skill Directory

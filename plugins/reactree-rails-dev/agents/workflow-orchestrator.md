@@ -1562,7 +1562,7 @@ fi
 ```bash
 echo "Phase 5: TESTING & REVIEW"
 # Run tests
-bundle exec rspec
+RAILS_ENV=test bundle exec rspec
 
 # Check for test feedback
 if ! check_feedback_queue; then
@@ -1571,7 +1571,7 @@ if ! check_feedback_queue; then
 
   # Re-run tests to verify fixes
   echo "Re-running tests after feedback fixes..."
-  bundle exec rspec
+  RAILS_ENV=test bundle exec rspec
 fi
 ```
 

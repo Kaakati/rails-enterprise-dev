@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "enterprise-rails-marketplace",
+  "name": "manifest-marketplace",
   "version": "1.0.0",
   "description": "Ruby and Rails related Claude Code Skills, Commands and Plugins",
   "owner": {
@@ -23,7 +23,7 @@
     {
       "name": "reactree-rails-dev",
       "source": "./plugins/reactree-rails-dev",
-      "version": "2.8.6",
+      "version": "2.9.0",
       "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, 24h TTL memory caching, smart intent detection, UX Engineer agent for accessibility and responsive design, optimized model selection (Opus/Haiku), and comprehensive skills library",
       "author": {
         "name": "Mohamad Kaakati",
