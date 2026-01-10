@@ -1,0 +1,22 @@
+{
+  "name": "reactree-flutter-dev",
+  "version": "1.0.0",
+  "description": "Flutter development with GetX state management, Clean Architecture, multi-agent orchestration, quality gates, and comprehensive testing patterns",
+  "author": {
+    "name": "Mohamad Kaakati",
+    "email": "hello@kaakati.me"
+  },
+  "homepage": "https://github.com/kaakati/flutter-enterprise-dev",
+  "repository": "https://github.com/kaakati/flutter-enterprise-dev",
+  "license": "MIT",
+  "keywords": [
+    "flutter",
+    "getx",
+    "clean-architecture",
+    "multi-agent",
+    "quality-gates",
+    "testing",
+    "http",
+    "get-storage"
+  ]
+}
