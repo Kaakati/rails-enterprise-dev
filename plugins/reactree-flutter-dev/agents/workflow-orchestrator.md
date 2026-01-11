@@ -104,27 +104,137 @@ if [ ! -d "lib" ]; then
 fi
 ```
 
-### Phase 0: SKILL DISCOVERY
+### Phase 0: SKILL DISCOVERY & PROJECT STRUCTURE VALIDATION
 
-**Discover available skills** from the project's `.claude/skills/` directory.
+**Step 1: Detect Project Structure**
+
+Before discovering skills, verify the project has been initialized with ReactTree Flutter Dev patterns:
+
+```bash
+# Check for .claude/ directory
+if [ ! -d ".claude" ]; then
+  echo "⚠️  WARNING: .claude/ directory not found."
+  echo "   This project hasn't been initialized with ReactTree Flutter Dev patterns."
+  echo "   Run: /flutter-init to set up the project structure."
+  echo ""
+  echo "   Continuing with plugin defaults..."
+fi
+
+# Scan for project components
+CLAUDE_DIR=".claude"
+PROJECT_SKILLS_DIR="$CLAUDE_DIR/skills"
+PROJECT_AGENTS_DIR="$CLAUDE_DIR/agents"
+PROJECT_RULES_DIR="$CLAUDE_DIR/rules"
+PROJECT_CONFIG="$CLAUDE_DIR/config.json"
+
+echo "🔍 Project Structure:"
+[ -d "$PROJECT_SKILLS_DIR" ] && echo "  ✓ Skills directory found" || echo "  ✗ Skills directory missing"
+[ -d "$PROJECT_AGENTS_DIR" ] && echo "  ✓ Agents directory found" || echo "  ✗ Agents directory missing (using plugin defaults)"
+[ -d "$PROJECT_RULES_DIR" ] && echo "  ✓ Rules directory found" || echo "  ✗ Rules directory missing"
+[ -f "$PROJECT_CONFIG" ] && echo "  ✓ Config file found" || echo "  ✗ Config file missing"
+```
+
+**Step 2: Discover Available Skills**
+
+Scan the project's `.claude/skills/` directory for project-specific patterns:
 
 ```bash
 # Skill discovery
-SKILLS_DIR=".claude/skills"
-if [ -d "$SKILLS_DIR" ]; then
-  echo "📚 Discovered Skills:"
-  find "$SKILLS_DIR" -name "SKILL.md" -type f | while read skill_file; do
+if [ -d "$PROJECT_SKILLS_DIR" ]; then
+  echo ""
+  echo "📚 Discovered Project Skills:"
+  find "$PROJECT_SKILLS_DIR" -name "SKILL.md" -type f | while read skill_file; do
     skill_name=$(basename $(dirname "$skill_file"))
     echo "  - $skill_name"
   done
+else
+  echo "⚠️  No project skills found. Using plugin defaults only."
 fi
 ```
 
-**Categorize skills**:
-- **Domain layer**: `*-entity*`, `*-usecase*`, `*-domain*`
-- **Data layer**: `*-model*`, `*-repository*`, `*-datasource*`, `*-api*`
-- **Presentation layer**: `*-controller*`, `*-widget*`, `*-ui*`, `*getx*`
-- **General**: All other skills
+**Step 3: Categorize Skills with Enhanced Patterns**
+
+Organize discovered skills by their purpose for optimal agent assignment:
+
+**Core Layer Skills**:
+- Patterns: `*-core`, `core-*`, `*-base`, `*-config*`, `*-error*`, `*-util*`
+- Purpose: Base classes, errors, configuration, utilities
+- Examples: `core-layer-patterns`, `error-handling`
+
+**Domain Layer Skills**:
+- Patterns: `*-entity*`, `*-usecase*`, `*-domain*`, `*-business*`
+- Purpose: Business logic, entities, use cases
+- Examples: `model-patterns`, `clean-architecture-patterns`
+
+**Data Layer Skills**:
+- Patterns: `*-model*`, `*-repository*`, `*-datasource*`, `*-api*`, `*-database*`, `*-schema*`
+- Purpose: Data models, repositories, API clients, persistence
+- Examples: `repository-patterns`, `http-integration`, `get-storage-patterns`
+
+**Presentation Layer Skills**:
+- Patterns: `*-controller*`, `*-widget*`, `*-ui*`, `*-view*`, `*-component*`
+- Purpose: Controllers, UI widgets, pages
+- Examples: `getx-patterns`, `flutter-conventions`
+
+**Navigation Skills**:
+- Patterns: `*-routing*`, `*-navigation*`, `nav-*`, `*-route*`
+- Purpose: Route definitions, navigation guards, deep linking
+- Examples: `navigation-patterns`
+
+**State Management Skills**:
+- Patterns: `*-state*`, `*-getx*`, `*-provider*`, `*-bloc*`, `*-riverpod*`
+- Purpose: State management patterns and best practices
+- Examples: `getx-patterns`, `advanced-getx-patterns`
+
+**Internationalization Skills**:
+- Patterns: `*-i18n*`, `*-l10n*`, `*-translation*`, `*-locale*`
+- Purpose: Multi-language support, localization
+- Examples: `internationalization-patterns`
+
+**Testing Skills**:
+- Patterns: `*-test*`, `*-spec*`, `testing-*`
+- Purpose: Unit, widget, integration testing patterns
+- Examples: `testing-patterns`
+
+**Quality & Performance Skills**:
+- Patterns: `*-quality*`, `*-performance*`, `*-optimization*`, `*-accessibility*`
+- Purpose: Code quality, performance tuning, accessibility compliance
+- Examples: `code-quality-gates`, `performance-optimization`, `accessibility-patterns`
+
+**General Skills**:
+- All skills not matching above patterns
+- Examples: `flutter-conventions`, `project-context`
+
+**Step 4: Discover Project-Specific Agents**
+
+Check if the project has customized agents:
+
+```bash
+if [ -d "$PROJECT_AGENTS_DIR" ]; then
+  echo ""
+  echo "🤖 Project-Specific Agents:"
+  find "$PROJECT_AGENTS_DIR" -name "*.md" -type f | while read agent_file; do
+    agent_name=$(basename "$agent_file" .md)
+    echo "  - $agent_name"
+  done
+  echo "   Using project agents instead of plugin defaults."
+else
+  echo "   Using plugin default agents."
+fi
+```
+
+**Step 5: Load Custom Quality Gates**
+
+Check for project-specific quality gate configuration:
+
+```bash
+if [ -f "$PROJECT_CONFIG" ]; then
+  echo ""
+  echo "⚙️  Loading Custom Quality Gates from config.json"
+  # Parse quality gate thresholds from config
+  # Override default thresholds if specified
+fi
+```
 
 ### Phase 1: UNDERSTANDING & REQUIREMENTS
 

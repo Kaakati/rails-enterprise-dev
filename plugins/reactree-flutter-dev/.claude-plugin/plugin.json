@@ -1,7 +1,7 @@
 {
   "name": "reactree-flutter-dev",
-  "version": "1.0.0",
-  "description": "Flutter development with GetX state management, Clean Architecture, multi-agent orchestration, quality gates, and comprehensive testing patterns",
+  "version": "1.1.0",
+  "description": "Flutter development with GetX state management, Clean Architecture, multi-agent orchestration, quality gates, comprehensive testing patterns, navigation, i18n, performance optimization, and accessibility patterns",
   "author": {
     "name": "Mohamad Kaakati",
     "email": "hello@kaakati.me"
