@@ -144,69 +144,159 @@ done
 
 ## Phase 2.6: Rules System Setup
 
-Set up Claude Code Rules for path-specific guidance:
+Check if the project has rules and offer interactive setup:
 
 ```bash
-echo "=== Rules System Setup ==="
-echo ""
+# Check rules directory
+ls -la .claude/rules/ 2>/dev/null
 
-# Create .claude/rules directory if it doesn't exist
+# Count rule files
+rule_count=$(find .claude/rules -maxdepth 2 -name '*.md' -type f 2>/dev/null | wc -l)
+echo "Found $rule_count existing rule files"
+```
+
+### Case A: Rules Directory Exists WITH Rules
+
+If `.claude/rules/` exists and has rules, use AskUserQuestion to ask:
+
+```
+Found X existing rule files in .claude/rules/
+
+The plugin includes 15 bundled rules (may be newer versions).
+Would you like to update/replace them?
+
+Options:
+  [1] Replace all with bundled rules (Recommended)
+      - Overwrites existing rules with latest versions from plugin
+      - rails/models.md, rails/controllers.md, frontend/components.md, etc.
+
+  [2] Keep existing rules
+      - Don't modify .claude/rules/
+      - Continue with current rules
+
+  [3] Merge (add missing only)
+      - Keep existing rules
+      - Add any new rules not already present
+```
+
+### Case B: Rules Directory Empty or Missing
+
+If `.claude/rules/` is empty or missing, use AskUserQuestion to offer:
+
+```
+No rules found in .claude/rules/
+
+The plugin includes 15 bundled rules for path-specific guidance.
+Would you like to copy them to your project?
+
+Options:
+  [1] Copy all bundled rules (Recommended)
+      - Rails rules: models, controllers, services, channels, jobs, mailers
+      - Frontend rules: components, stimulus
+      - Testing rules: model-specs, request-specs, system-specs
+      - Database rules: migrations
+      - Quality gates: security, performance, accessibility
+
+  [2] Copy only core rules (3 rules)
+      - rails/models.md, rails/controllers.md, frontend/components.md
+
+  [3] Skip - I'll add rules manually later
+```
+
+### Copy/Replace Rules Based on User Choice
+
+**Important**: Use `$PLUGIN_ROOT` variable from Phase 1 (set via `${CLAUDE_PLUGIN_ROOT}`).
+
+**Replace all / Copy all bundled rules**:
+```bash
+echo "=== Copying All Bundled Rules ==="
+mkdir -p .claude/rules
+# Remove existing to ensure clean state
+rm -rf .claude/rules/*
+cp -r "$PLUGIN_ROOT/rules/"* .claude/rules/
+
+# Count copied rules
+rule_count=$(find .claude/rules -name '*.md' -type f | wc -l)
+echo "Copied $rule_count rule files to .claude/rules/"
+```
+
+**Copy only core rules**:
+```bash
+echo "=== Copying Core Rules ==="
+mkdir -p .claude/rules/rails
+mkdir -p .claude/rules/frontend
+
+cp "$PLUGIN_ROOT/rules/rails/models.md" .claude/rules/rails/
+cp "$PLUGIN_ROOT/rules/rails/controllers.md" .claude/rules/rails/
+cp "$PLUGIN_ROOT/rules/frontend/components.md" .claude/rules/frontend/
+
+echo "Copied 3 core rules to .claude/rules/"
+```
+
+**Merge (add missing only)**:
+```bash
+echo "=== Merging Rules ==="
 mkdir -p .claude/rules
 
-# Check if rules already exist
-if [ "$(ls -A .claude/rules 2>/dev/null | wc -l)" -gt 0 ]; then
-  echo ".claude/rules/ directory already has files"
-  echo "Skipping rules initialization (existing rules preserved)"
-else
-  echo "Creating .claude/rules/ directory structure..."
-  mkdir -p .claude/rules/rails
-  mkdir -p .claude/rules/frontend
-  mkdir -p .claude/rules/testing
-  mkdir -p .claude/rules/database
-  mkdir -p .claude/rules/quality-gates
+# Copy each directory structure, only adding missing files
+for category_dir in "$PLUGIN_ROOT/rules/"*/; do
+  category_name=$(basename "$category_dir")
+  mkdir -p ".claude/rules/$category_name"
 
-  # Copy bundled rules from plugin
-  if [ -d "$PLUGIN_ROOT/rules" ]; then
-    echo "Copying bundled rules from plugin..."
-    cp -r "$PLUGIN_ROOT/rules/"* .claude/rules/
+  for rule_file in "$category_dir"*.md; do
+    rule_name=$(basename "$rule_file")
+    dest_file=".claude/rules/$category_name/$rule_name"
 
-    # Count copied rules
-    rule_count=$(find .claude/rules -name '*.md' -type f | wc -l)
-    echo "Copied $rule_count rule files to .claude/rules/"
-  else
-    echo "Note: No bundled rules found in plugin (expected 13+ rule files)"
-    echo "Rules system is available but no default rules were installed"
-  fi
-fi
+    if [ ! -f "$dest_file" ]; then
+      cp "$rule_file" "$dest_file"
+      echo "Added missing rule: $category_name/$rule_name"
+    fi
+  done
+done
 
+rule_count=$(find .claude/rules -name '*.md' -type f | wc -l)
+echo "Total rules after merge: $rule_count"
+```
+
+**Display Rules Documentation**:
+
+```bash
 echo ""
 echo "Rules System:"
 echo "  - Path-specific rules automatically load based on file being edited"
-echo "  - Model files → rules/rails/models.md"
-echo "  - Controller files → rules/rails/controllers.md"
-echo "  - Component files → rules/frontend/components.md"
-echo "  - And more..."
+echo ""
+echo "  Rails Rules:"
+echo "    • app/models/**/*.rb → rules/rails/models.md"
+echo "    • app/controllers/**/*.rb → rules/rails/controllers.md"
+echo "    • app/services/**/*.rb → rules/rails/services.md"
+echo "    • app/channels/**/*.rb → rules/rails/channels.md"
+echo "    • app/jobs/**/*.rb → rules/rails/jobs.md"
+echo "    • app/mailers/**/*.rb → rules/rails/mailers.md"
+echo ""
+echo "  Frontend Rules:"
+echo "    • app/components/**/*.rb → rules/frontend/components.md"
+echo "    • app/javascript/**/*_controller.js → rules/frontend/stimulus.md"
+echo ""
+echo "  Testing Rules:"
+echo "    • spec/models/**/*_spec.rb → rules/testing/model-specs.md"
+echo "    • spec/requests/**/*_spec.rb → rules/testing/request-specs.md"
+echo "    • spec/system/**/*_spec.rb → rules/testing/system-specs.md"
+echo ""
+echo "  Database Rules:"
+echo "    • db/migrate/**/*.rb → rules/database/migrations.md"
+echo ""
+echo "  Quality Gates (apply to all files):"
+echo "    • **/*.rb, **/*.erb → rules/quality-gates/security.md"
+echo "    • **/*.rb, **/*.erb → rules/quality-gates/performance.md"
+echo "    • **/*.erb → rules/quality-gates/accessibility.md"
+echo ""
+echo "Benefits:"
+echo "  ✅ Only relevant rules load (60-70% reduction in context overhead)"
+echo "  ✅ Hyper-targeted guidance for the specific file type"
+echo "  ✅ Customizable per project (.claude/rules/ can be modified)"
+echo "  ✅ Works alongside existing skills system"
 echo ""
 ```
-
-**Rules Documentation**:
-
-The Rules system provides path-specific, context-aware guidance that automatically loads based on the file you're editing:
-
-- **Model rules** (`app/models/**/*.rb`) - Enum patterns, associations, validations
-- **Controller rules** (`app/controllers/**/*.rb`) - RESTful patterns, strong parameters
-- **Service rules** (`{app/services,lib/services}/**/*.rb`) - Service object patterns
-- **Component rules** (`app/components/**/*.rb`) - ViewComponent delegation patterns
-- **Channel rules** (`app/channels/**/*.rb`) - Action Cable security and streams
-- **Spec rules** (`spec/**/*_spec.rb`) - RSpec testing patterns by type
-- **Migration rules** (`db/migrate/**/*.rb`) - Migration best practices
-- **Quality gates** (`**/*.rb`, `**/*.erb`) - Security, performance, accessibility
-
-Benefits:
-- ✅ Only relevant rules load (60-70% reduction in context overhead)
-- ✅ Hyper-targeted guidance for the specific file type
-- ✅ Customizable per project (.claude/rules/ can be modified)
-- ✅ Works alongside existing skills system
 
 ## Phase 2.5: Ruby Analysis Tools Setup
 
