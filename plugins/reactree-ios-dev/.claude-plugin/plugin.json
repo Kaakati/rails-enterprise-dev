@@ -1,0 +1,26 @@
+{
+  "name": "reactree-ios-dev",
+  "version": "1.0.0",
+  "description": "iOS and tvOS development with SwiftUI, MVVM, Clean Architecture, multi-agent orchestration, quality gates, beads integration, and comprehensive testing patterns",
+  "author": {
+    "name": "Mohamad Kaakati",
+    "email": "hello@kaakati.me"
+  },
+  "homepage": "https://github.com/kaakati/ios-enterprise-dev",
+  "repository": "https://github.com/kaakati/ios-enterprise-dev",
+  "license": "MIT",
+  "keywords": [
+    "ios",
+    "tvos",
+    "swift",
+    "swiftui",
+    "mvvm",
+    "alamofire",
+    "clean-architecture",
+    "reactree",
+    "multi-agent",
+    "quality-gates",
+    "beads",
+    "xctest"
+  ]
+}
