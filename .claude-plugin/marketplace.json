@@ -31,6 +31,18 @@
       },
       "homepage": "https://github.com/kaakati/rails-enterprise-dev",
       "category": "development"
+    },
+    {
+      "name": "reactree-flutter-dev",
+      "source": "./plugins/reactree-flutter-dev",
+      "version": "1.1.0",
+      "description": "Flutter development with GetX state management, Clean Architecture, multi-agent orchestration, quality gates, comprehensive testing patterns, navigation, i18n, performance optimization, and accessibility patterns",
+      "author": {
+        "name": "Mohamad Kaakati",
+        "email": "hello@kaakati.me"
+      },
+      "homepage": "https://github.com/kaakati/flutter-enterprise-dev",
+      "category": "development"
     }
   ]
 }
