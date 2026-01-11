@@ -30,6 +30,90 @@ cd /path/to/your/flutter/project/.claude/plugins
 git clone https://github.com/kaakati/flutter-enterprise-dev.git reactree-flutter-dev
 ```
 
+## 🔧 Project Initialization
+
+Before using the plugin commands, initialize your Flutter project with recommended patterns:
+
+```
+/flutter-init
+```
+
+This interactive command will:
+1. ✅ Validate your Flutter project (pubspec.yaml exists)
+2. ✅ Create `.claude/` directory structure
+3. ✅ Copy recommended skills to your project
+4. ✅ Copy enforcement rules
+5. ✅ Set up Clean Architecture directory structure
+6. ✅ Create initial boilerplate files (Failures, Exceptions, main.dart)
+7. ✅ Add required dependencies to pubspec.yaml
+8. ✅ Configure quality gates
+
+### Initialization Options
+
+```bash
+/flutter-init              # Interactive mode (recommended)
+/flutter-init --full       # Copy all skills, rules, and agents
+/flutter-init --minimal    # Copy only essential patterns
+/flutter-init --custom     # Choose specific skills/rules
+```
+
+### What Gets Created
+
+**Directory Structure:**
+```
+.claude/
+├── skills/           # Project-specific patterns
+├── rules/            # Enforcement rules
+└── config.json       # Quality gate configuration
+
+lib/
+├── core/
+│   ├── errors/       # Failure & Exception classes
+│   ├── utils/        # Extensions & validators
+│   ├── config/       # App configuration
+│   └── di/           # Dependency injection
+├── domain/
+│   ├── entities/     # Business entities
+│   ├── repositories/ # Repository interfaces
+│   └── usecases/     # Business logic
+├── data/
+│   ├── models/       # Data models with JSON
+│   ├── repositories/ # Repository implementations
+│   └── datasources/  # Remote & local data sources
+└── presentation/
+    ├── controllers/  # GetX controllers
+    ├── bindings/     # Dependency injection
+    ├── pages/        # Screens
+    ├── widgets/      # Reusable UI components
+    └── routes/       # Navigation setup
+```
+
+**Dependencies Added:**
+```yaml
+dependencies:
+  get: ^4.6.6              # State management & DI
+  get_storage: ^2.1.1      # Local storage
+  http: ^1.1.0             # HTTP client
+  dartz: ^0.10.1           # Functional programming (Either)
+
+dev_dependencies:
+  mocktail: ^1.0.1         # Mocking for tests
+  build_runner: ^2.4.6     # Code generation
+  json_serializable: ^6.7.1 # JSON serialization
+```
+
+### After Initialization
+
+Run these commands to complete setup:
+
+```bash
+# Install dependencies
+flutter pub get
+
+# Start development
+/flutter-dev add your feature here
+```
+
 ## 🎯 Quick Start
 
 ### Basic Usage
@@ -486,6 +570,128 @@ dev_dependencies:
 - [Flutter Testing Documentation](https://docs.flutter.dev/testing)
 - [Widget Testing](https://docs.flutter.dev/cookbook/testing/widget/introduction)
 - [Integration Testing](https://docs.flutter.dev/testing/integration-tests)
+
+## 📚 Available Skills Reference
+
+The plugin provides 16 comprehensive skills organized by category:
+
+### Foundation (3 skills)
+
+**flutter-conventions**
+- Dart & Flutter best practices
+- Naming conventions and code style
+- Widget composition patterns
+- File organization standards
+
+**clean-architecture-patterns**
+- Layer separation (Domain → Data → Presentation)
+- Dependency rules and violations
+- Entity, use case, and repository patterns
+- Testing strategies per layer
+
+**core-layer-patterns** ⭐ *New in v1.1*
+- Base error classes (Failure & Exception)
+- Extension methods (String, DateTime, List, BuildContext)
+- Validators and app configuration
+- Dependency injection setup
+
+### State Management (2 skills)
+
+**getx-patterns**
+- Basic GetX reactive programming
+- Controllers and bindings
+- Dependency injection
+- State management fundamentals
+
+**advanced-getx-patterns** ⭐ *New in v1.1*
+- Workers (ever, once, debounce, interval)
+- GetxService for permanent services
+- SmartManagement strategies
+- GetConnect for HTTP, bindings composition
+
+### Data Layer (4 skills)
+
+**repository-patterns**
+- Repository interfaces and implementations
+- Offline-first patterns
+- Error handling with Either<Failure, T>
+- Cache-first vs. network-first strategies
+
+**model-patterns**
+- Entity vs. Model separation
+- JSON serialization (fromJson/toJson)
+- Type conversion and validation
+- Equatable for value comparison
+
+**http-integration**
+- REST API best practices
+- Error handling and timeouts
+- Pagination and retry strategies
+- Token management and refresh
+
+**get-storage-patterns**
+- Local persistence with GetStorage
+- Cache invalidation strategies
+- Offline data management
+- Storage keys organization
+
+### Presentation (2 skills)
+
+**navigation-patterns** ⭐ *New in v1.1*
+- GetX named routes and GetPage configuration
+- Route parameters and arguments
+- Navigation guards (GetMiddleware)
+- Deep linking (Android & iOS)
+
+**accessibility-patterns** ⭐ *New in v1.1*
+- WCAG 2.2 Level AA compliance
+- Semantic widgets and screen reader support
+- Touch target sizing (≥ 44x44)
+- Color contrast requirements (4.5:1 text, 3:1 UI)
+
+### Quality & Performance (3 skills)
+
+**testing-patterns**
+- Unit tests for domain & data layers
+- Widget tests with GetX
+- Integration tests
+- Mocking with Mocktail
+
+**performance-optimization** ⭐ *New in v1.1*
+- Widget optimization (const, keys)
+- Build performance and rebuilds
+- Image optimization and caching
+- Memory management and disposal
+- 60 FPS targets and profiling
+
+**code-quality-gates**
+- Dart analysis configuration
+- Test coverage thresholds
+- GetX compliance validation
+- Clean Architecture enforcement
+
+### Internationalization (1 skill)
+
+**internationalization-patterns** ⭐ *New in v1.1*
+- GetX Translations setup
+- Locale management and switching
+- RTL support (Arabic, Hebrew)
+- Date/number formatting
+- Pluralization rules
+
+### How to Use Skills
+
+Skills are automatically discovered from your `.claude/skills/` directory after running `/flutter-init`. The plugin's workflow orchestrator uses these skills to guide implementation:
+
+1. **Automatic Discovery**: Skills are categorized by naming patterns
+2. **Context-Aware**: Relevant skills loaded based on task
+3. **Customizable**: Add project-specific skills to `.claude/skills/`
+
+**Example**: When implementing navigation, the orchestrator automatically uses:
+- `flutter-conventions` (foundational patterns)
+- `navigation-patterns` (routing specifics)
+- `getx-patterns` (state management integration)
+- `accessibility-patterns` (semantic labels for routes)
 
 ## 🤝 Contributing
 

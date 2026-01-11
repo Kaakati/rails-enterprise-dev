@@ -147,6 +147,156 @@ grep -r "import.*\(data\|presentation\)/" lib/domain/
 ## Overall Result: [PASSED/FAILED]
 ```
 
+## Quality Gate 6: Performance Validation
+
+**Check 1**: Const constructors used
+```bash
+# Find non-const widgets that should be const
+flutter analyze | grep "prefer_const_constructors"
+```
+
+**Check 2**: ListView.builder for dynamic lists
+```bash
+# Find ListView with children (anti-pattern for large lists)
+grep -r "ListView(" lib/presentation/ | grep "children:"
+```
+
+**Check 3**: No heavy computation in build methods
+```bash
+# Find suspicious operations in build methods
+grep -A 20 "Widget build" lib/presentation/ | grep -E "\.(where|map|sort|reduce)\("
+```
+
+**Check 4**: Controllers dispose resources
+```bash
+# Check for controllers with disposable resources
+grep -A 30 "class.*Controller extends GetxController" lib/presentation/controllers/ | \
+  grep -E "(ScrollController|TextEditingController|StreamSubscription)" | \
+  grep -B 30 "onClose()"
+# Should find onClose() for each controller with resources
+```
+
+**Check 5**: Images use CachedNetworkImage
+```bash
+# Find Image.network usage (should use CachedNetworkImage)
+grep -r "Image\.network" lib/presentation/
+# Should return 0 results
+```
+
+## Quality Gate 7: Accessibility Validation
+
+**Check 1**: Interactive widgets have semantic labels
+```bash
+# Find IconButton without Semantics or Tooltip
+grep -A 5 "IconButton(" lib/presentation/ | grep -v "Semantics\|Tooltip"
+```
+
+**Check 2**: Touch targets meet minimum size
+```bash
+# Find GestureDetector with small children
+grep -A 10 "GestureDetector(" lib/presentation/ | \
+  grep -E "Icon\(.*size: [0-9]{1,2}," # Icons < 24px
+```
+
+**Check 3**: Text has sufficient contrast
+```bash
+# Find text with light colors (potential contrast issues)
+grep -r "Color(0x.*)" lib/presentation/ | grep -E "0xFF[C-F]{6}"
+# Review manually for contrast ratios
+```
+
+**Check 4**: Form fields have labels
+```bash
+# Find TextField without labelText
+grep -A 10 "TextField(" lib/presentation/ | grep "decoration:" | \
+  grep -v "labelText:"
+```
+
+**Check 5**: Status changes announced
+```bash
+# Check for SemanticsService.announce in controllers
+grep -r "SemanticsService.announce" lib/presentation/controllers/
+# Should find announcements for critical state changes
+```
+
+## Quality Gate 8: Security Checks
+
+**Check 1**: No hardcoded secrets
+```bash
+# Find potential API keys or tokens
+grep -r -E "(apiKey|API_KEY|token|TOKEN|secret|SECRET|password|PASSWORD)\s*=\s*['\"]" lib/
+# Should return 0 results
+```
+
+**Check 2**: HTTPS only
+```bash
+# Find HTTP URLs (should use HTTPS)
+grep -r "http://" lib/ | grep -v "localhost"
+# Should return 0 results
+```
+
+**Check 3**: Input validation present
+```bash
+# Check for validation in controllers
+grep -r "validate" lib/presentation/controllers/
+# Should find validation methods
+```
+
+## Quality Gate Report
+
+```markdown
+# Quality Gate Report
+
+## 1. Dart Analysis
+- Status: [PASSED/FAILED]
+- Errors: X
+- Warnings: X
+
+## 2. Test Coverage
+- Status: [PASSED/FAILED]
+- Coverage: X%
+- Threshold: 80%
+
+## 3. Build Validation
+- Status: [PASSED/FAILED]
+- Build time: X seconds
+
+## 4. GetX Compliance
+- Status: [PASSED/FAILED]
+- Controllers in bindings: ✓/✗
+- Reactive variables: ✓/✗
+- Business logic separation: ✓/✗
+
+## 5. Clean Architecture
+- Status: [PASSED/FAILED]
+- Domain layer purity: ✓/✗
+- Dependency flow: ✓/✗
+
+## 6. Performance
+- Status: [PASSED/FAILED]
+- Const constructors: ✓/✗
+- ListView.builder usage: ✓/✗
+- Build method optimization: ✓/✗
+- Resource disposal: ✓/✗
+- Image caching: ✓/✗
+
+## 7. Accessibility
+- Status: [PASSED/FAILED]
+- Semantic labels: ✓/✗
+- Touch target sizing: ✓/✗
+- Color contrast: ✓/✗
+- Form labels: ✓/✗
+- Status announcements: ✓/✗
+
+## 8. Security
+- Status: [PASSED/FAILED]
+- No hardcoded secrets: ✓/✗
+- HTTPS only: ✓/✗
+- Input validation: ✓/✗
+
+## Overall Result: [PASSED/FAILED]
+```
+
 ---
 
-**Output**: Quality gate validation report with pass/fail status for each gate.
+**Output**: Comprehensive quality gate validation report covering code quality, testing, architecture, performance, accessibility, and security.
