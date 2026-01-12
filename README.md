@@ -1,40 +1,249 @@
-# Rails Enterprise Development Plugin
+# Claude Code Plugin Marketplace
+
+Enterprise-grade development plugins for Claude Code with multi-agent orchestration, automatic skill discovery, and comprehensive workflows.
+
+## Plugins
+
+| Plugin | Version | Description |
+|--------|---------|-------------|
+| [rails-enterprise-dev](#rails-enterprise-dev) | 1.0.1 | Enterprise Rails workflow with multi-agent orchestration |
+| [reactree-rails-dev](#reactree-rails-dev) | 2.9.1 | ReAcTree-based hierarchical agent orchestration for Rails |
+| [reactree-flutter-dev](#reactree-flutter-dev) | 1.1.0 | Flutter development with GetX and Clean Architecture |
+| [reactree-ios-dev](#reactree-ios-dev) | 2.0.0 | iOS/tvOS development with SwiftUI and MVVM |
+
+---
+
+## rails-enterprise-dev
 
 Enterprise-grade Rails development workflow with multi-agent orchestration, automatic skill discovery, and beads task tracking.
 
-## Features
+### Features
 
-- 🔍 **Automatic Skill Discovery** - Uses skills from your project's `.claude/skills/` directory
-- 🎯 **Multi-Agent Orchestration** - Coordinates specialist agents through 6-phase workflow
-- 📋 **Beads Integration** - Tracks all work with persistent issue tracking
-- ✅ **Quality Gates** - Validates each phase before proceeding
-- 🔄 **Incremental Implementation** - Checkpoints at every layer
-- 🎨 **Generic & Portable** - Works with ANY Rails project
-- 🛡️ **Error Prevention** - Consults skills to avoid common pitfalls
+- **Automatic Skill Discovery** - Uses skills from your project's `.claude/skills/` directory
+- **Multi-Agent Orchestration** - Coordinates specialist agents through 6-phase workflow
+- **Beads Integration** - Tracks all work with persistent issue tracking
+- **Quality Gates** - Validates each phase before proceeding
+- **Incremental Implementation** - Checkpoints at every layer
 
-## Quick Start
-
-### Installation
-
-The plugin is already installed in `.claude/plugins/rails-enterprise-dev/`.
-
-### Basic Usage
+### Quick Start
 
 ```bash
 /rails-dev add JWT authentication with refresh tokens
 ```
 
-This single command:
-1. Discovers skills in your `.claude/skills/`
-2. Creates beads issue for tracking
-3. Analyzes your codebase patterns
-4. Creates implementation plan
-5. Implements in phases with quality validation
-6. Reviews and completes
+### Commands
 
-### Configuration
+| Command | Description |
+|---------|-------------|
+| `/rails-dev [feature]` | Main workflow for feature development |
+| `/rails-feature [story]` | Feature-driven development with user stories |
+| `/rails-debug [error]` | Systematic debugging workflow |
+| `/rails-refactor [target]` | Safe refactoring with test preservation |
 
-Create `.claude/rails-enterprise-dev.local.md` (optional):
+---
+
+## reactree-rails-dev
+
+ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, 24h TTL memory caching, and smart intent detection.
+
+### Features
+
+- **ReAcTree Architecture** - Hierarchical task decomposition with control flow nodes
+- **Parallel Execution** - Run independent tasks concurrently
+- **Dual Memory Systems** - Working memory + episodic memory with 24h TTL
+- **Smart Intent Detection** - Auto-suggests workflows based on prompts
+- **UX Engineer Agent** - Accessibility and responsive design
+- **14 Specialized Agents** - Optimized model selection (Opus/Haiku)
+- **Comprehensive Skills Library** - 16+ production-ready skills
+
+### Quick Start
+
+```bash
+/reactree-dev implement user subscription billing
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/reactree-dev [feature]` | Main ReAcTree workflow with parallel execution |
+| `/reactree-feature [story]` | Feature-driven with test-first development |
+| `/reactree-debug [error]` | Debug with FEEDBACK edges for self-correction |
+
+### Agents
+
+- **workflow-orchestrator** - Manages entire ReAcTree workflow
+- **rails-planner** - Creates implementation plans
+- **implementation-executor** - Coordinates code generation
+- **test-oracle** - Test planning with coverage validation
+- **feedback-coordinator** - FEEDBACK edge routing
+- **ux-engineer** - Accessibility and responsive design
+- **ui-specialist** - TailAdmin dashboard UI
+
+---
+
+## reactree-flutter-dev
+
+Flutter development with GetX state management, Clean Architecture, multi-agent orchestration, and comprehensive testing patterns.
+
+### Features
+
+- **GetX State Management** - Reactive controllers and dependency injection
+- **Clean Architecture** - Domain, Data, Presentation layers
+- **Multi-Agent Orchestration** - Specialized Flutter agents
+- **Quality Gates** - Automated validation at each phase
+- **Testing Patterns** - Unit, widget, integration, and golden tests
+- **Navigation Patterns** - GetX routing with guards
+- **i18n Support** - Internationalization patterns
+- **Performance Optimization** - Widget rebuilds, memory management
+- **Accessibility Patterns** - Screen reader and semantics support
+
+### Quick Start
+
+```bash
+/flutter-dev add offline-first data sync
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/flutter-dev [feature]` | Main Flutter development workflow |
+| `/flutter-feature [story]` | Feature-driven Flutter development |
+| `/flutter-debug [error]` | Flutter debugging workflow |
+
+---
+
+## reactree-ios-dev
+
+iOS and tvOS development with SwiftUI, MVVM, Clean Architecture, and enterprise-grade tooling.
+
+### Features
+
+- **SwiftUI & MVVM** - Modern iOS architecture patterns
+- **Clean Architecture** - Domain, Data, Presentation separation
+- **14 Specialized Agents** - iOS-specific expertise
+- **27 Comprehensive Skills** - Production-ready patterns
+- **Automated Quality Gates** - Swift linting and testing
+- **Hooks System** - Pre/post tool automation
+- **One-Command Setup** - `/ios-init` initializes everything
+- **Beads Integration** - Issue tracking across sessions
+- **Offline Sync** - Core Data and CloudKit patterns
+- **Push Notifications** - APNs implementation patterns
+- **tvOS Focus Navigation** - Focus engine and remote control
+- **Accessibility Testing** - VoiceOver and accessibility audit
+- **Performance Profiling** - Instruments integration
+
+### Quick Start
+
+```bash
+/ios-init                    # Initialize iOS project
+/ios-dev add biometric auth  # Implement feature
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/ios-init` | Initialize iOS project with all configurations |
+| `/ios-dev [feature]` | Main iOS development workflow |
+| `/ios-feature [story]` | Feature-driven iOS development |
+| `/ios-debug [error]` | iOS debugging workflow |
+| `/tvos-dev [feature]` | tvOS-specific development |
+
+### Agents
+
+- **ios-architect** - System design and architecture
+- **swiftui-specialist** - SwiftUI views and modifiers
+- **data-persistence** - Core Data, SwiftData, CloudKit
+- **networking-specialist** - URLSession, async/await
+- **accessibility-auditor** - VoiceOver compliance
+- **performance-profiler** - Instruments and optimization
+- **tvos-specialist** - Focus engine and remote control
+
+---
+
+## Installation
+
+### From Marketplace
+
+```bash
+# Install via Claude Code plugin marketplace (coming soon)
+claude plugins install rails-enterprise-dev
+claude plugins install reactree-rails-dev
+claude plugins install reactree-flutter-dev
+claude plugins install reactree-ios-dev
+```
+
+### Manual Installation
+
+```bash
+# Clone repository
+git clone https://github.com/kaakati/rails-enterprise-dev.git
+
+# Copy desired plugin to your project
+cp -r rails-enterprise-dev/plugins/reactree-rails-dev .claude/plugins/
+```
+
+---
+
+## Common Features
+
+All plugins share these capabilities:
+
+### Beads Integration
+
+Track work with persistent issue tracking:
+
+```bash
+bd show [issue-id]    # Detailed view
+bd ready              # See ready tasks
+bd stats              # Project statistics
+bd list --status in_progress
+```
+
+### Quality Gates
+
+Automated validation at each phase:
+- Database migrations
+- Model validations
+- Service patterns
+- Component rendering
+- Test coverage
+
+### Skill Discovery
+
+Plugins auto-discover skills from `.claude/skills/`:
+
+```
+.claude/skills/
+├── rails-conventions/SKILL.md
+├── activerecord-patterns/SKILL.md
+├── service-object-patterns/SKILL.md
+└── your-custom-skill/SKILL.md
+```
+
+### Multi-Agent Orchestration
+
+Coordinate specialist agents through hierarchical workflows:
+
+```
+Orchestrator
+├── Planner (creates implementation plan)
+├── Inspector (analyzes codebase)
+├── Executor (coordinates specialists)
+│   ├── Data Lead
+│   ├── Backend Lead
+│   ├── UI Specialist
+│   └── Test Specialist
+└── Reviewer (validates implementation)
+```
+
+---
+
+## Configuration
+
+Create project-specific config in `.claude/[plugin-name].local.md`:
 
 ```markdown
 ---
@@ -44,320 +253,47 @@ test_coverage_threshold: 90
 ---
 ```
 
-**Add to `.gitignore`**:
+Add to `.gitignore`:
 ```gitignore
 .claude/*.local.md
 ```
 
-## How It Works
-
-### 6-Phase Workflow
-
-```
-Phase 1: Initialization
-  ├─ Discover skills in .claude/skills/
-  ├─ Create beads issue (if available)
-  └─ Initialize workflow state
-
-Phase 2: Inspection
-  ├─ Invoke codebase-inspection skill (if available)
-  ├─ Invoke rails-conventions skill (if available)
-  ├─ Invoke domain skills (if available)
-  └─ Analyze existing patterns
-
-Phase 3: Planning
-  ├─ Invoke rails-error-prevention skill
-  ├─ Invoke feature-specific skills
-  └─ Create detailed implementation plan
-
-Phase 4: Implementation (Incremental)
-  ├─ Database → Models → Services → Components → Controllers → Views → Tests
-  ├─ Each layer: Invoke skills → Delegate to specialist → Validate
-  └─ Quality gates at each checkpoint
-
-Phase 5: Review
-  └─ Chief Reviewer validates entire implementation
-
-Phase 6: Completion
-  ├─ Close beads issue
-  └─ Provide summary with next steps
-```
-
-### Skill Discovery
-
-The plugin automatically discovers skills from `.claude/skills/`:
-
-**Core Skills**:
-- `rails-conventions` - Rails patterns
-- `rails-error-prevention` - Preventive checklists
-- `codebase-inspection` - Analysis procedures
-
-**Implementation Skills**:
-- `activerecord-patterns` - Database/models
-- `service-object-patterns` - Service layer
-- `api-development-patterns` - API design
-- `sidekiq-async-patterns` - Background jobs
-- `viewcomponents-specialist` - UI components
-- `hotwire-patterns` - Turbo/Stimulus
-- `tailadmin-patterns` - TailAdmin UI
-- `localization` - i18n
-- `rspec-testing-patterns` - Testing
-
-**Domain Skills** (auto-detected):
-- Any skill not matching known patterns (e.g., `manifest-project-context`)
-
-### Agent Coordination
-
-The plugin coordinates your project's specialist agents:
-
-- **workflow-orchestrator** - Manages entire workflow
-- **codebase-inspector** - Analyzes project patterns
-- **rails-planner** - Creates implementation plan
-- **implementation-executor** - Coordinates code generation
-
-These delegate to your project agents:
-- Data Lead, ActiveRecord Specialist (database/models)
-- Backend Lead, API Specialist (services/controllers)
-- Async Specialist (background jobs)
-- UI Specialist, Frontend Lead (components/views)
-- Turbo Hotwire Specialist (real-time features)
-- RSpec Specialist (tests)
-- Chief Reviewer (final validation)
-
-## Commands
-
-### `/rails-dev [feature request]`
-
-Main workflow for feature development.
-
-Examples:
-```bash
-/rails-dev add payment processing with Stripe
-/rails-dev build admin dashboard for user management
-/rails-dev implement real-time notifications
-```
-
-### `/rails-feature [description]`
-
-Feature-driven development with user stories.
-
-Examples:
-```bash
-/rails-feature User can export tasks to CSV
-/rails-feature Admin sees real-time delivery metrics
-```
-
-### `/rails-debug [error]`
-
-Systematic debugging workflow.
-
-Examples:
-```bash
-/rails-debug NoMethodError in TasksController#index
-/rails-debug Slow query on bundles page
-```
-
-### `/rails-refactor [target]`
-
-Safe refactoring with test preservation.
-
-Examples:
-```bash
-/rails-refactor Extract services into smaller classes
-/rails-refactor Optimize N+1 queries in index
-```
-
-## Beads Integration
-
-If beads is installed (`bd` command available):
-
-**View Progress**:
-```bash
-bd show [issue-id]    # Detailed feature view
-bd ready              # See ready tasks
-bd stats              # Project statistics
-bd list --status in_progress  # Active work
-```
-
-**Install Beads** (if not installed):
-```bash
-npm install -g @beads/cli
-bd init
-```
-
-Without beads, workflow continues with manual tracking.
-
-## Quality Gates
-
-When `quality_gates_enabled: true`, each phase validated:
-
-**Database**: Migrations run, rollback works
-**Models**: Load successfully, specs pass
-**Services**: Pattern correct, tests pass
-**Components**: Methods exposed, renders without errors
-**Controllers**: Routes defined, specs pass
-**Views**: Only calls exposed methods
-**Tests**: All pass, coverage > threshold
-
-To disable temporarily:
-```markdown
-# .claude/rails-enterprise-dev.local.md
----
-quality_gates_enabled: false
----
-```
-
-## Customization
-
-### Adding Project Skills
-
-1. Create skill directory:
-```bash
-mkdir -p .claude/skills/my-custom-patterns
-```
-
-2. Add `SKILL.md`:
-```markdown
----
-name: My Custom Patterns
-description: Our team's coding standards
 ---
 
-# My Custom Patterns
-
-## Service Layer
-- Always use dry-transaction gem
-- Include logging in all services
-...
-```
-
-3. Plugin auto-discovers on next run!
-
-### Skill Naming for Auto-Categorization
-
-**Data layer**: `activerecord-*`, `*-model*`, `*-database*`
-**Service layer**: `service-*`, `*-service-*`, `api-*`
-**UI**: `*-component*`, `*-view*`, `*-ui-*`, `hotwire-*`
-**Domain**: Anything else (e.g., `ecommerce-domain`, `healthcare-context`)
-
-See `CUSTOMIZATION.md` for more details.
-
-## Troubleshooting
-
-### Workflow Interrupted
-
-State saved in `.claude/rails-enterprise-dev.local.md`. Check:
-```bash
-cat .claude/rails-enterprise-dev.local.md
-```
-
-Resume workflow by re-running command.
-
-### Skills Not Being Used
-
-1. Verify skills exist: `ls .claude/skills/`
-2. Check skill has `SKILL.md` file
-3. Restart Claude Code
-4. Re-run command
-
-### Quality Gates Too Strict
-
-Temporarily disable in settings:
-```yaml
-quality_gates_enabled: false
-```
-
-Or manually override when prompted.
-
-### Beads Issues
-
-- Install: `npm install -g @beads/cli`
-- Initialize: `bd init`
-- Check status: `bd stats`
-
-Workflow continues without beads if unavailable.
-
-## Multi-Project Usage
-
-The plugin is **generic and portable**:
-
-**Project A** (Manifest LMS):
-- Has 15 skills including `manifest-project-context`
-- Plugin uses all skills for domain-aware implementation
-
-**Project B** (Simple API):
-- Has 5 basic skills
-- Plugin adapts, uses what's available
-
-**Project C** (Different UI):
-- Has `bootstrap-patterns` instead of `tailadmin-patterns`
-- Plugin uses Bootstrap patterns for UI
-
-Same plugin, adapts to each project!
-
-## Architecture
+## Repository Structure
 
 ```
-Plugin discovers skills → Coordinates agents → Tracks with beads
-
-Skills (project-specific)
-  ↓ provide guidance
-Agents (plugin-provided)
-  ↓ coordinate
-Specialists (project-provided)
-  ↓ implement code
+rails-enterprise-dev/
+├── .claude-plugin/
+│   └── marketplace.json       # Marketplace manifest
+├── plugins/
+│   ├── rails-enterprise-dev/  # Enterprise Rails plugin
+│   ├── reactree-rails-dev/    # ReAcTree Rails plugin
+│   ├── reactree-flutter-dev/  # Flutter plugin
+│   └── reactree-ios-dev/      # iOS/tvOS plugin
+├── README.md                  # This file
+└── CUSTOMIZATION.md           # Customization guide
 ```
 
-**Separation of concerns**:
-- Plugin: Workflow orchestration
-- Skills: Project patterns and conventions
-- Agents: Coordination logic
-- Specialists: Code generation
-
-## Files
-
-```
-.claude/plugins/rails-enterprise-dev/
-├── agents/
-│   ├── workflow-orchestrator.md       # Main coordinator
-│   ├── codebase-inspector.md          # Pattern analysis
-│   ├── rails-planner.md               # Implementation planning
-│   └── implementation-executor.md     # Phase execution
-├── commands/
-│   ├── rails-dev.md                   # Main workflow
-│   ├── rails-feature.md               # Feature variant
-│   ├── rails-debug.md                 # Debug variant
-│   └── rails-refactor.md              # Refactor variant
-├── skills/
-│   ├── skill-discovery/SKILL.md       # How skill discovery works
-│   ├── workflow-orchestration/SKILL.md  # Agent coordination
-│   └── beads-integration/SKILL.md     # Task tracking patterns
-└── hooks/
-    └── scripts/
-        ├── discover-skills.sh         # Skill scanner
-        ├── detect-rails-context.sh    # Auto-suggest workflow
-        ├── validate-implementation.sh # Quality gates
-        └── track-progress.sh          # Beads updates
-```
+---
 
 ## Contributing
 
-To enhance the plugin:
+To enhance the plugins:
 
-1. Add more specialized commands in `commands/`
-2. Create additional skills in `skills/`
-3. Add hooks for automation in `hooks/`
-4. Improve agents in `agents/`
+1. Add specialized commands in `plugins/[name]/commands/`
+2. Create skills in `plugins/[name]/skills/`
+3. Add hooks in `plugins/[name]/hooks/`
+4. Improve agents in `plugins/[name]/agents/`
+
+---
 
 ## Support
 
-- Documentation: This file + `CUSTOMIZATION.md`
-- Skill patterns: `.claude/skills/*/SKILL.md` in your project
-- Issues: [Report on GitHub]
+- Documentation: Plugin-specific READMEs in each plugin directory
+- Issues: [Report on GitHub](https://github.com/kaakati/rails-enterprise-dev/issues)
 
-## Version
-
-**v1.0.0** - Initial release
+---
 
 ## License
 
@@ -365,4 +301,4 @@ MIT
 
 ---
 
-**Happy Rails development!** 🚀
+**Happy coding!**
