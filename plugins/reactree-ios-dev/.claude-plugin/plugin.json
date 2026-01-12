@@ -1,16 +1,13 @@
 {
   "name": "reactree-ios-dev",
   "version": "2.0.0",
-  "displayName": "ReAcTree iOS/tvOS Development",
-  "description": "Enterprise-grade iOS/tvOS development with SwiftUI, MVVM, Clean Architecture, 14 specialized agents, 27 comprehensive skills, automated quality gates, hooks system, and beads integration. One-command setup with /ios-init.",
-  "longDescription": "Complete multi-agent orchestration system for iOS and tvOS development featuring:\n\n• 14 Specialized Agents - Workflow orchestration, code generation, testing, quality gates, accessibility, performance profiling\n• 27 Comprehensive Skills - Swift conventions, SwiftUI patterns, MVVM architecture, networking, testing, security, accessibility, performance optimization\n• Automated Init Command - /ios-init copies all agents, rules, and skills to your project in seconds\n• Hooks System - Auto-discovery, validation, and workflow routing\n• Quality Gates - SwiftLint strict mode, build validation, 80% test coverage enforcement\n• Platform Support - Universal iOS and tvOS with platform-specific patterns\n• Advanced Examples - Offline sync with Core Data, push notifications with APNs, tvOS focus navigation\n• Beads Integration - Track multi-session work with automatic epic and task creation\n• Memory Systems - Working memory (24h TTL) and episodic learning for faster workflows",
+  "description": "iOS and tvOS development with SwiftUI, MVVM, Clean Architecture, 14 specialized agents, 27 comprehensive skills, automated quality gates, hooks system, one-command setup (/ios-init), beads integration, offline sync, push notifications, tvOS focus navigation, accessibility testing, performance profiling, and dual memory systems",
   "author": {
     "name": "Mohamad Kaakati",
     "email": "hello@kaakati.me"
   },
   "homepage": "https://github.com/kaakati/ios-enterprise-dev",
   "repository": "https://github.com/kaakati/ios-enterprise-dev",
-  "documentation": "https://github.com/kaakati/ios-enterprise-dev/blob/main/README.md",
   "license": "MIT",
   "keywords": [
     "ios",
@@ -18,71 +15,11 @@
     "swift",
     "swiftui",
     "mvvm",
-    "alamofire",
     "clean-architecture",
     "reactree",
     "multi-agent",
     "quality-gates",
-    "beads",
-    "xctest",
     "hooks",
-    "automation",
-    "workflow",
-    "orchestration",
-    "accessibility",
-    "performance",
-    "offline-sync",
-    "push-notifications",
-    "core-data",
-    "swiftgen",
-    "swiftlint",
-    "xcode",
-    "testing",
-    "atomic-design"
-  ],
-  "category": "development",
-  "tags": [
-    "ios-development",
-    "tvos-development",
-    "swiftui",
-    "mobile-development",
-    "enterprise",
-    "architecture",
-    "testing",
-    "quality-assurance"
-  ],
-  "requirements": {
-    "xcode": ">=14.0",
-    "swift": ">=5.7",
-    "platform": "iOS 15.0+ / tvOS 15.0+",
-    "tools": ["swiftlint"]
-  },
-  "commands": [
-    "/ios-init",
-    "/ios-dev",
-    "/ios-feature",
-    "/ios-debug",
-    "/ios-refactor"
-  ],
-  "features": [
-    "One-command project initialization",
-    "14 specialized AI agents",
-    "27 comprehensive skill modules",
-    "Automated hooks system",
-    "SwiftLint strict mode enforcement",
-    "80% test coverage requirement",
-    "iOS and tvOS platform support",
-    "Offline-first data sync patterns",
-    "Push notification integration",
-    "tvOS focus navigation",
-    "Accessibility testing (WCAG 2.1)",
-    "Performance profiling with Instruments",
-    "Beads task tracking",
-    "Working memory and episodic learning"
-  ],
-  "changelog": "https://github.com/kaakati/ios-enterprise-dev/blob/main/CHANGELOG.md",
-  "releaseDate": "2026-01-11",
-  "compatibility": {
-    "claudeCode": ">=1.0.0"
-  }
+    "enterprise"
+  ]
 }

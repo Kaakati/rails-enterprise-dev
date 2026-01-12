@@ -1,0 +1,4 @@
+[2026-01-05T12:09:04Z] [INFO] SessionStart hook triggered for project: reactree-rails-dev
+[2026-01-05T12:09:04Z] [WARN] Skills directory not found at .claude/skills
+[2026-01-05T12:09:04Z] [INFO] Run /reactree-init to set up the plugin for this project
+[2026-01-05T12:09:04Z] [INFO] Created placeholder config - awaiting /reactree-init
