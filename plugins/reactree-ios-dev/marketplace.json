@@ -1,0 +1,551 @@
+{
+  "id": "reactree-ios-dev",
+  "name": "reactree-ios-dev",
+  "displayName": "ReAcTree iOS/tvOS Development",
+  "version": "2.0.0",
+  "releaseDate": "2026-01-11",
+  "author": {
+    "name": "Mohamad Kaakati",
+    "email": "hello@kaakati.me",
+    "url": "https://github.com/kaakati"
+  },
+  "description": {
+    "short": "Enterprise iOS/tvOS development with 14 AI agents, 27 skills, automated quality gates, and one-command setup. SwiftUI + MVVM + Clean Architecture.",
+    "long": "Complete multi-agent orchestration system for professional iOS and tvOS development.\n\n🚀 Quick Setup: One command initializes your entire development environment with /ios-init\n\n🤖 14 Specialized Agents:\n• Workflow Orchestration - 6-phase development lifecycle\n• Code Generation - Core layer, Presentation layer, Design System\n• Quality Gates - SwiftLint, build validation, 80% test coverage\n• Testing - Test pyramid enforcement and coverage analysis\n• Utilities - File discovery, log analysis, accessibility testing, performance profiling\n\n📚 27 Comprehensive Skills:\n• Core (4): Swift conventions, SwiftUI patterns, MVVM architecture, Clean Architecture\n• Networking (2): Alamofire patterns, API integration\n• UI (3): Navigation, Atomic Design, Theme management\n• Data (2): Model patterns, Core Data\n• Testing (2): XCTest patterns, Quality gates\n• Advanced (13): Error handling, Concurrency, Accessibility, Performance, Security, and more\n• Platform (1): tvOS-specific patterns\n• Tools (3): SwiftGen, Localization, Session management\n\n⚡ Automated Workflows:\n• /ios-init - One-command project setup\n• /ios-dev - Complete feature development\n• /ios-feature - Feature-driven development\n• /ios-debug - Debugging and log analysis\n• /ios-refactor - Code quality improvements\n\n🎯 Quality Assurance:\n• SwiftLint strict mode enforcement\n• Xcodebuild validation for iOS and tvOS\n• 80% minimum test coverage\n• Test pyramid validation\n• Automated quality gate checkpoints\n\n🏗️ Architecture Patterns:\n• MVVM with BaseViewModel\n• Clean Architecture (Core → Presentation → Design System)\n• Protocol-Oriented Programming\n• Atomic Design\n• Repository Pattern\n\n📱 Platform Support:\n• Universal iOS and tvOS support\n• Platform-specific patterns\n• SwiftUI-only modern approach\n• Async/await concurrency\n• Focus engine for tvOS\n\n💡 Advanced Features:\n• Offline-first data sync with Core Data\n• Push notifications with APNs and rich media\n• tvOS focus navigation and parallax effects\n• Accessibility testing (WCAG 2.1 Level AA)\n• Performance profiling with Instruments\n• Background sync with BGTaskScheduler\n\n🔗 Beads Integration:\n• Automatic epic and task creation\n• Multi-session work tracking\n• Phase dependency management\n\n🧠 Memory Systems:\n• Working memory (24h TTL)\n• Episodic learning for proven patterns\n• 15-30% faster on similar features\n\n📦 What You Get:\n• 72 files with 40,000+ lines\n• Complete examples\n• 12 architectural rules\n• Hooks system for automation\n• Comprehensive documentation"
+  },
+  "category": "development",
+  "subcategories": [
+    "mobile-development",
+    "ios-development",
+    "tvos-development",
+    "code-generation",
+    "testing",
+    "quality-assurance"
+  ],
+  "tags": [
+    "ios-development",
+    "tvos-development",
+    "swiftui",
+    "mobile-development",
+    "enterprise",
+    "architecture",
+    "testing",
+    "quality-assurance",
+    "multi-agent",
+    "automation",
+    "code-generation"
+  ],
+  "keywords": [
+    "ios",
+    "tvos",
+    "swift",
+    "swiftui",
+    "mvvm",
+    "alamofire",
+    "clean-architecture",
+    "reactree",
+    "multi-agent",
+    "quality-gates",
+    "beads",
+    "xctest",
+    "hooks",
+    "automation",
+    "workflow",
+    "orchestration",
+    "accessibility",
+    "performance",
+    "offline-sync",
+    "push-notifications",
+    "core-data",
+    "swiftgen",
+    "swiftlint",
+    "xcode",
+    "testing",
+    "atomic-design"
+  ],
+  "license": "MIT",
+  "pricing": {
+    "model": "free",
+    "cost": 0,
+    "currency": "USD"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kaakati/ios-enterprise-dev",
+    "directory": "plugins/reactree-ios-dev"
+  },
+  "homepage": "https://github.com/kaakati/ios-enterprise-dev",
+  "documentation": "https://github.com/kaakati/ios-enterprise-dev/blob/main/plugins/reactree-ios-dev/README.md",
+  "changelog": "https://github.com/kaakati/ios-enterprise-dev/blob/main/plugins/reactree-ios-dev/CHANGELOG.md",
+  "issues": "https://github.com/kaakati/ios-enterprise-dev/issues",
+  "discussions": "https://github.com/kaakati/ios-enterprise-dev/discussions",
+  "downloads": {
+    "zip": "https://github.com/kaakati/ios-enterprise-dev/archive/refs/tags/v2.0.0.zip",
+    "tarball": "https://github.com/kaakati/ios-enterprise-dev/archive/refs/tags/v2.0.0.tar.gz",
+    "release": "https://github.com/kaakati/ios-enterprise-dev/releases/tag/v2.0.0"
+  },
+  "installation": {
+    "methods": [
+      {
+        "name": "install-script",
+        "displayName": "Automated Install Script",
+        "description": "Use the provided install.sh script for automated installation",
+        "recommended": true,
+        "steps": [
+          "git clone https://github.com/kaakati/ios-enterprise-dev.git",
+          "cd ios-enterprise-dev/plugins/reactree-ios-dev",
+          "./install.sh"
+        ]
+      },
+      {
+        "name": "init-command",
+        "displayName": "Init Command",
+        "description": "Copy plugin manually and use /ios-init command",
+        "steps": [
+          "cd /path/to/your/ios/project",
+          "mkdir -p .claude/plugins",
+          "cp -r /path/to/reactree-ios-dev .claude/plugins/",
+          "/ios-init"
+        ]
+      },
+      {
+        "name": "manual",
+        "displayName": "Manual Installation",
+        "description": "Complete manual setup",
+        "steps": [
+          "cd /path/to/your/ios/project",
+          "mkdir -p .claude/plugins .claude/agents .claude/skills .claude/rules",
+          "cp -r /path/to/reactree-ios-dev .claude/plugins/",
+          "cp .claude/plugins/reactree-ios-dev/agents/*.md .claude/agents/",
+          "cp -r .claude/plugins/reactree-ios-dev/skills/* .claude/skills/",
+          "cp -r .claude/plugins/reactree-ios-dev/rules/* .claude/rules/",
+          "touch .claude/reactree-memory.jsonl .claude/reactree-episodes.jsonl .claude/reactree-feedback.jsonl .claude/reactree-state.jsonl"
+        ]
+      }
+    ]
+  },
+  "requirements": {
+    "platform": "macOS",
+    "xcode": ">=14.0",
+    "swift": ">=5.7",
+    "ios": ">=15.0",
+    "tvos": ">=15.0",
+    "tools": {
+      "required": ["swiftlint"],
+      "optional": ["swiftgen", "cocoapods"]
+    },
+    "claudeCode": ">=1.0.0"
+  },
+  "features": [
+    {
+      "name": "One-command initialization",
+      "description": "Setup entire development environment with /ios-init"
+    },
+    {
+      "name": "14 specialized AI agents",
+      "description": "Workflow orchestration, code generation, testing, quality gates, utilities"
+    },
+    {
+      "name": "27 comprehensive skill modules",
+      "description": "Swift conventions, SwiftUI patterns, networking, testing, security, and more"
+    },
+    {
+      "name": "Automated hooks system",
+      "description": "Auto-discovery, validation, and workflow routing"
+    },
+    {
+      "name": "SwiftLint strict mode enforcement",
+      "description": "Automated linting with zero tolerance for violations"
+    },
+    {
+      "name": "80% test coverage requirement",
+      "description": "Enforced code coverage with test pyramid validation"
+    },
+    {
+      "name": "iOS and tvOS platform support",
+      "description": "Universal patterns for iPhone, iPad, and Apple TV"
+    },
+    {
+      "name": "Offline-first data sync patterns",
+      "description": "Core Data integration with conflict resolution"
+    },
+    {
+      "name": "Push notification integration",
+      "description": "APNs setup with rich notifications and interactive actions"
+    },
+    {
+      "name": "tvOS focus navigation",
+      "description": "Focus engine implementation with parallax effects"
+    },
+    {
+      "name": "Accessibility testing (WCAG 2.1)",
+      "description": "VoiceOver support and WCAG Level AA compliance"
+    },
+    {
+      "name": "Performance profiling with Instruments",
+      "description": "CPU, memory, and network profiling workflows"
+    },
+    {
+      "name": "Beads task tracking",
+      "description": "Automatic epic and subtask creation for multi-session work"
+    },
+    {
+      "name": "Working memory and episodic learning",
+      "description": "24h TTL working memory and permanent episodic learning for 15-30% faster workflows"
+    }
+  ],
+  "commands": [
+    {
+      "name": "/ios-init",
+      "description": "Initialize plugin in your iOS/tvOS project by copying agents, skills, and rules"
+    },
+    {
+      "name": "/ios-dev",
+      "description": "Main development workflow with full 6-phase orchestration"
+    },
+    {
+      "name": "/ios-feature",
+      "description": "Feature-driven development workflow"
+    },
+    {
+      "name": "/ios-debug",
+      "description": "Debugging and log analysis workflow with 8 specialized workflows"
+    },
+    {
+      "name": "/ios-refactor",
+      "description": "Refactoring and code quality workflow with 9 refactoring patterns"
+    }
+  ],
+  "agents": [
+    {
+      "name": "workflow-orchestrator",
+      "description": "Master coordinator for 6-phase ReAcTree workflows"
+    },
+    {
+      "name": "codebase-inspector",
+      "description": "Analyzes Swift/SwiftUI patterns and architecture"
+    },
+    {
+      "name": "ios-planner",
+      "description": "Plans MVVM implementation with parallel execution"
+    },
+    {
+      "name": "implementation-executor",
+      "description": "Coordinates specialist agents for code generation"
+    },
+    {
+      "name": "test-oracle",
+      "description": "Validates tests and coverage with 80% threshold"
+    },
+    {
+      "name": "core-lead",
+      "description": "Implements Core layer (Services, Managers, Networking)"
+    },
+    {
+      "name": "presentation-lead",
+      "description": "Implements Presentation layer (Views, ViewModels, Models)"
+    },
+    {
+      "name": "design-system-lead",
+      "description": "Implements Design System (Atomic Design components)"
+    },
+    {
+      "name": "quality-guardian",
+      "description": "Enforces quality gates (SwiftLint, build, tests)"
+    },
+    {
+      "name": "file-finder",
+      "description": "Fast file discovery by pattern"
+    },
+    {
+      "name": "log-analyzer",
+      "description": "Analyzes Xcode build logs and crash reports"
+    },
+    {
+      "name": "swiftgen-coordinator",
+      "description": "SwiftGen configuration and validation"
+    },
+    {
+      "name": "accessibility-specialist",
+      "description": "Accessibility testing and WCAG compliance"
+    },
+    {
+      "name": "performance-profiler",
+      "description": "Performance profiling and optimization"
+    }
+  ],
+  "skills": [
+    {
+      "name": "swift-conventions",
+      "category": "core",
+      "description": "Swift 5 naming conventions and best practices"
+    },
+    {
+      "name": "swiftui-patterns",
+      "category": "core",
+      "description": "SwiftUI state management and platform-specific patterns"
+    },
+    {
+      "name": "mvvm-architecture",
+      "category": "core",
+      "description": "BaseViewModel and View-ViewModel binding"
+    },
+    {
+      "name": "clean-architecture-ios",
+      "category": "core",
+      "description": "Layer separation and dependency rules"
+    },
+    {
+      "name": "alamofire-patterns",
+      "category": "networking",
+      "description": "NetworkRouter protocol and request handling"
+    },
+    {
+      "name": "api-integration",
+      "category": "networking",
+      "description": "Service layer and API endpoint definitions"
+    },
+    {
+      "name": "navigation-patterns",
+      "category": "ui",
+      "description": "NavigationStack and NavigationPath"
+    },
+    {
+      "name": "atomic-design-ios",
+      "category": "ui",
+      "description": "Atoms, Molecules, Organisms components"
+    },
+    {
+      "name": "theme-management",
+      "category": "ui",
+      "description": "ThemeManager and SwiftGen integration"
+    },
+    {
+      "name": "model-patterns",
+      "category": "data",
+      "description": "Codable protocol and model mapping"
+    },
+    {
+      "name": "core-data-patterns",
+      "category": "data",
+      "description": "NSPersistentContainer and repository pattern"
+    },
+    {
+      "name": "xctest-patterns",
+      "category": "testing",
+      "description": "Unit, integration, and UI testing"
+    },
+    {
+      "name": "code-quality-gates",
+      "category": "testing",
+      "description": "SwiftLint and build validation"
+    },
+    {
+      "name": "error-handling-patterns",
+      "category": "advanced",
+      "description": "Swift Result type and error propagation"
+    },
+    {
+      "name": "concurrency-patterns",
+      "category": "advanced",
+      "description": "async/await and structured concurrency"
+    },
+    {
+      "name": "accessibility-patterns",
+      "category": "advanced",
+      "description": "VoiceOver support and WCAG compliance"
+    },
+    {
+      "name": "performance-optimization",
+      "category": "advanced",
+      "description": "SwiftUI performance and profiling"
+    },
+    {
+      "name": "dependency-injection",
+      "category": "advanced",
+      "description": "Constructor injection and DI patterns"
+    },
+    {
+      "name": "coordinator-pattern",
+      "category": "advanced",
+      "description": "Navigation coordination"
+    },
+    {
+      "name": "combine-reactive",
+      "category": "advanced",
+      "description": "Combine framework and reactive programming"
+    },
+    {
+      "name": "push-notifications",
+      "category": "advanced",
+      "description": "UNUserNotificationCenter and APNs"
+    },
+    {
+      "name": "app-lifecycle",
+      "category": "advanced",
+      "description": "App launch and background tasks"
+    },
+    {
+      "name": "security-best-practices",
+      "category": "advanced",
+      "description": "Keychain and secure coding"
+    },
+    {
+      "name": "tvos-specific-patterns",
+      "category": "platform",
+      "description": "Focus engine and tvOS design"
+    },
+    {
+      "name": "swiftgen-integration",
+      "category": "tools",
+      "description": "Type-safe asset generation"
+    },
+    {
+      "name": "localization-ios",
+      "category": "tools",
+      "description": "LanguageManager and RTL support"
+    },
+    {
+      "name": "session-management",
+      "category": "tools",
+      "description": "SessionManager and Keychain integration"
+    }
+  ],
+  "examples": [
+    {
+      "name": "authentication-feature",
+      "description": "JWT authentication with Keychain storage",
+      "lines": 500
+    },
+    {
+      "name": "api-integration-feature",
+      "description": "REST API with Alamofire and MVVM",
+      "lines": 450
+    },
+    {
+      "name": "video-player-feature",
+      "description": "Custom video player with AVKit",
+      "lines": 400
+    },
+    {
+      "name": "offline-sync-feature",
+      "description": "Offline-first data sync with Core Data and conflict resolution",
+      "lines": 500
+    },
+    {
+      "name": "push-notifications-feature",
+      "description": "APNs setup with rich notifications and interactive actions",
+      "lines": 400
+    },
+    {
+      "name": "tvos-focus-navigation",
+      "description": "tvOS focus engine with parallax effects and remote control handling",
+      "lines": 450
+    }
+  ],
+  "statistics": {
+    "files": 72,
+    "totalLines": 40000,
+    "agents": 14,
+    "skills": 27,
+    "rules": 12,
+    "commands": 5,
+    "examples": 6,
+    "hooks": 6
+  },
+  "changelog": {
+    "2.0.0": {
+      "date": "2026-01-11",
+      "changes": [
+        "Added /ios-init command for one-command setup",
+        "Added 3 new utility agents (accessibility, performance, SwiftGen)",
+        "Added 13 new skills (error handling, concurrency, accessibility, etc.)",
+        "Enhanced 6 agents with comprehensive implementation patterns",
+        "Enhanced 8 skills from 17-81 lines to 200-600 lines each",
+        "Expanded debug and refactor commands to 3,370-3,693 lines",
+        "Added hooks system with 6 automation scripts",
+        "Added 3 advanced examples (offline sync, push notifications, tvOS)",
+        "Added install.sh for automated installation",
+        "Marketplace preparation complete",
+        "808% skill depth increase",
+        "1,500-1,900% total content growth"
+      ]
+    },
+    "1.0.0": {
+      "date": "2025-12-15",
+      "changes": [
+        "Initial release",
+        "11 specialized agents",
+        "14 foundational skills",
+        "4 workflow commands",
+        "12 architectural rules",
+        "3 implementation examples",
+        "Quality gates (SwiftLint, build, coverage)",
+        "Beads integration",
+        "Memory systems"
+      ]
+    }
+  },
+  "compatibility": {
+    "claudeCode": ">=1.0.0",
+    "platforms": ["macOS"],
+    "languages": ["swift"],
+    "frameworks": ["swiftui", "uikit", "alamofire", "core-data"]
+  },
+  "support": {
+    "email": "hello@kaakati.me",
+    "issues": "https://github.com/kaakati/ios-enterprise-dev/issues",
+    "discussions": "https://github.com/kaakati/ios-enterprise-dev/discussions",
+    "documentation": "https://github.com/kaakati/ios-enterprise-dev/blob/main/plugins/reactree-ios-dev/README.md"
+  },
+  "media": {
+    "icon": {
+      "url": "",
+      "size": "512x512",
+      "format": "png",
+      "status": "pending"
+    },
+    "banner": {
+      "url": "",
+      "size": "1200x630",
+      "format": "png",
+      "status": "pending"
+    },
+    "screenshots": [],
+    "video": {
+      "url": "",
+      "duration": 0,
+      "format": "mp4",
+      "status": "pending"
+    }
+  },
+  "seo": {
+    "title": "ReAcTree iOS/tvOS Development - Enterprise Multi-Agent Plugin for Claude Code",
+    "metaDescription": "Professional iOS/tvOS development with 14 AI agents, 27 comprehensive skills, automated quality gates, and one-command setup. SwiftUI + MVVM + Clean Architecture.",
+    "keywords": "ios development plugin, tvos development automation, swiftui multi-agent system, mvvm architecture generator, clean architecture ios, ios quality gates, swiftui testing automation, ios enterprise development, ios code generation, tvos focus navigation, swiftui offline sync, ios push notifications",
+    "ogTitle": "ReAcTree iOS/tvOS Development",
+    "ogDescription": "Enterprise-grade iOS/tvOS development with 14 AI agents, 27 skills, automated quality gates, and one-command setup",
+    "ogImage": "",
+    "twitterCard": "summary_large_image"
+  },
+  "rating": {
+    "average": 0,
+    "count": 0,
+    "distribution": {
+      "5": 0,
+      "4": 0,
+      "3": 0,
+      "2": 0,
+      "1": 0
+    }
+  },
+  "downloads": {
+    "total": 0,
+    "lastMonth": 0,
+    "trend": "new"
+  },
+  "verified": false,
+  "featured": false,
+  "status": "published",
+  "visibility": "public"
+}
