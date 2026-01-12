@@ -43,6 +43,18 @@
       },
       "homepage": "https://github.com/kaakati/flutter-enterprise-dev",
       "category": "development"
+    },
+    {
+      "name": "reactree-ios-dev",
+      "source": "./plugins/reactree-ios-dev",
+      "version": "2.0.0",
+      "description": "iOS and tvOS development with SwiftUI, MVVM, Clean Architecture, 14 specialized agents, 27 comprehensive skills, automated quality gates, hooks system, one-command setup (/ios-init), beads integration, offline sync, push notifications, tvOS focus navigation, accessibility testing, performance profiling, and dual memory systems",
+      "author": {
+        "name": "Mohamad Kaakati",
+        "email": "hello@kaakati.me"
+      },
+      "homepage": "https://github.com/kaakati/ios-enterprise-dev",
+      "category": "development"
     }
   ]
 }
