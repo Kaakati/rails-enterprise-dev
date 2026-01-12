@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.1] - 2025-01-12
+
+### Fixed
+- **Interactive Rules Setup**: `/reactree-init` now properly copies rules to projects
+  - Previously, rules were only copied if `.claude/rules/` was completely empty
+  - Users who ran init before rules existed in plugin never got rules
+  - Inconsistent with skills setup behavior
+
+### Enhanced
+- **Phase 2.6 Rules Setup** in `/reactree-init` command:
+  - Added interactive questions (similar to skills setup)
+  - Users can now choose from 3 strategies:
+    1. **Replace all** - Overwrites with latest 15 bundled rules
+    2. **Core only** - Copies 3 essential rules (models, controllers, components)
+    3. **Merge** - Adds missing rules while preserving existing ones
+  - **Case A** (existing rules): Replace all / Keep existing / Merge
+  - **Case B** (no rules): Copy all (15 rules) / Core only (3 rules) / Skip
+
+### Improved
+- **Rules Documentation Display**:
+  - Shows all 15 file path mappings
+  - Categories: Rails (6), Frontend (2), Testing (3), Database (1), Quality Gates (3)
+  - Clear benefits explanation (60-70% context reduction, hyper-targeted guidance)
+  - Works alongside existing skills system
+
+### Documentation
+- Enhanced rules system explanation in init command
+- Added detailed path-specific rule loading documentation
+- Consistent UX between skills and rules setup
+
 ## [2.8.5] - 2025-01-05
 
 ### Fixed
