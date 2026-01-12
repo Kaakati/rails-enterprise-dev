@@ -1,0 +1,64 @@
+{
+  "description": "ReAcTree iOS/tvOS Development workflow hooks for smart intent detection, skill discovery, and utility agent routing",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/discover-skills.sh",
+            "timeout": 10,
+            "description": "Discover available skills and initialize working memory"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/detect-intent.sh",
+            "timeout": 5,
+            "description": "Smart detection: analyze prompt intent and suggest appropriate ReAcTree workflow or utility agent"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "tool:Edit && args.file_path:*.swift",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-edit-validation.sh",
+            "timeout": 10,
+            "description": "Pre-edit Swift file validation: syntax check before edits",
+            "env": {
+              "FILE_PATH": "${args.file_path}",
+              "NEW_CONTENT": "${args.new_string}"
+            }
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "tool:Write && args.file_path:*.swift",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-write-validation.sh",
+            "timeout": 15,
+            "description": "Post-write Swift file validation: syntax, SwiftLint checks",
+            "env": {
+              "FILE_PATH": "${args.file_path}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
