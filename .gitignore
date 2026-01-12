@@ -1,1 +1,12 @@
+# macOS
 .DS_Store
+
+# Experimental directories with node_modules
+RubyFlow/
+RubyAgent/
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
