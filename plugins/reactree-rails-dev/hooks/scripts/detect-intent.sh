@@ -273,39 +273,41 @@ detect_workflow_intent() {
 
 generate_agent_suggestion() {
   local agent="$1"
+  # Escape user prompt for JSON (double quotes and backslashes)
+  local escaped_prompt=$(echo "$user_prompt" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
 
   case "$agent" in
     "file-finder")
-      cat <<EOF
+      cat <<'JSONEOF'
 {
-  "systemMessage": "📁 **File Search Detected**\\n\\nConsider using the **file-finder** agent for fast file discovery:\\n\\n\`\`\`\\nUse file-finder agent to: $user_prompt\\n\`\`\`\\n\\n**Capabilities:**\\n- Find files by glob pattern\\n- Search by name/content\\n- List directory structure",
+  "systemMessage": "📁 **File Search Intent Detected - Routing to Specialist**\n\n**ACTION REQUIRED**: Invoke the **file-finder** agent immediately using the Task tool.\n\n**Agent Details:**\n- subagent_type: `reactree-rails-dev:file-finder`\n- Capabilities: Fast file discovery by glob pattern, name, or content\n\n**Invocation Pattern:**\n```\nTask tool with:\n  subagent_type: reactree-rails-dev:file-finder\n  description: Find files matching user request\n  prompt: [user's original request]\n```\n\n⚡ **Do NOT respond with text explanations** - invoke the agent immediately to handle this file search request.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       ;;
     "code-line-finder")
-      cat <<EOF
+      cat <<'JSONEOF'
 {
-  "systemMessage": "🔍 **Code Location Detected**\\n\\nConsider using the **code-line-finder** agent for precise code location:\\n\\n\`\`\`\\nUse code-line-finder agent to: $user_prompt\\n\`\`\`\\n\\n**Capabilities:**\\n- Find method definitions with line numbers\\n- LSP-powered symbol lookup\\n- Find all usages/references",
+  "systemMessage": "🔍 **Code Location Intent Detected - Routing to Specialist**\n\n**ACTION REQUIRED**: Invoke the **code-line-finder** agent immediately using the Task tool.\n\n**Agent Details:**\n- subagent_type: `reactree-rails-dev:code-line-finder`\n- Capabilities: LSP-powered symbol lookup, find definitions with line numbers, find all usages/references\n\n**Invocation Pattern:**\n```\nTask tool with:\n  subagent_type: reactree-rails-dev:code-line-finder\n  description: Find code location\n  prompt: [user's original request]\n```\n\n⚡ **Do NOT respond with text explanations** - invoke the agent immediately to handle this code location request.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       ;;
     "git-diff-analyzer")
-      cat <<EOF
+      cat <<'JSONEOF'
 {
-  "systemMessage": "📊 **Git Analysis Detected**\\n\\nConsider using the **git-diff-analyzer** agent for change analysis:\\n\\n\`\`\`\\nUse git-diff-analyzer agent to: $user_prompt\\n\`\`\`\\n\\n**Capabilities:**\\n- Analyze diffs (staged/unstaged)\\n- Compare branches/commits\\n- Git blame and history",
+  "systemMessage": "📊 **Git Analysis Intent Detected - Routing to Specialist**\n\n**ACTION REQUIRED**: Invoke the **git-diff-analyzer** agent immediately using the Task tool.\n\n**Agent Details:**\n- subagent_type: `reactree-rails-dev:git-diff-analyzer`\n- Capabilities: Analyze diffs (staged/unstaged), compare branches/commits, git blame and history\n\n**Invocation Pattern:**\n```\nTask tool with:\n  subagent_type: reactree-rails-dev:git-diff-analyzer\n  description: Analyze git changes\n  prompt: [user's original request]\n```\n\n⚡ **Do NOT respond with text explanations** - invoke the agent immediately to handle this git analysis request.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       ;;
     "log-analyzer")
-      cat <<EOF
+      cat <<'JSONEOF'
 {
-  "systemMessage": "📋 **Log Analysis Detected**\\n\\nConsider using the **log-analyzer** agent for Rails log parsing:\\n\\n\`\`\`\\nUse log-analyzer agent to: $user_prompt\\n\`\`\`\\n\\n**Capabilities:**\\n- Parse development.log/production.log\\n- Find errors and stack traces\\n- Identify slow queries",
+  "systemMessage": "📋 **Log Analysis Intent Detected - Routing to Specialist**\n\n**ACTION REQUIRED**: Invoke the **log-analyzer** agent immediately using the Task tool.\n\n**Agent Details:**\n- subagent_type: `reactree-rails-dev:log-analyzer`\n- Capabilities: Parse development.log/production.log, find errors and stack traces, identify slow queries\n\n**Invocation Pattern:**\n```\nTask tool with:\n  subagent_type: reactree-rails-dev:log-analyzer\n  description: Analyze Rails logs\n  prompt: [user's original request]\n```\n\n⚡ **Do NOT respond with text explanations** - invoke the agent immediately to handle this log analysis request.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       ;;
   esac
 }
@@ -317,36 +319,36 @@ generate_workflow_suggestion() {
   case "$intent" in
     "feature")
       if [ "$tdd_mode" = "true" ]; then
-        cat <<EOF
+        cat <<'JSONEOF'
 {
-  "systemMessage": "🧪 **TDD Feature Development Detected**\\n\\nConsider using ReAcTree workflows:\\n\\n• \`/reactree-feature\` - Feature with user stories + TDD\\n• \`/reactree-dev --test-first\` - Full workflow with test-first mode\\n\\n**Benefits:** 85%+ test coverage, test-driven design, 30-50% faster via parallel execution.",
+  "systemMessage": "🧪 **TDD Feature Development Intent Detected - Routing to Workflow**\n\n**ACTION REQUIRED**: Invoke the ReAcTree feature workflow immediately using the Skill tool.\n\n**Recommended Workflow:**\n- skill: `reactree-rails-dev:reactree-feature`\n- Or: `reactree-rails-dev:reactree-dev` with test-first approach\n\n**Invocation Pattern:**\n```\nSkill tool with:\n  skill: reactree-rails-dev:reactree-feature\n```\n\n**Benefits:** 85%+ test coverage, test-driven design, 30-50% faster via parallel execution.\n\n⚡ **Do NOT respond with text explanations** - invoke the skill immediately to start the TDD workflow.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       else
-        cat <<EOF
+        cat <<'JSONEOF'
 {
-  "systemMessage": "🚀 **Rails Feature Development Detected**\\n\\nConsider using ReAcTree workflows:\\n\\n• \`/reactree-dev\` - Full workflow with parallel execution\\n• \`/reactree-feature\` - Feature-driven with user stories\\n\\n**Benefits:** 30-50% faster, working memory caching, automatic skill discovery.",
+  "systemMessage": "🚀 **Rails Feature Development Intent Detected - Routing to Workflow**\n\n**ACTION REQUIRED**: Invoke the ReAcTree development workflow immediately using the Skill tool.\n\n**Recommended Workflows:**\n- skill: `reactree-rails-dev:reactree-dev` - Full 6-phase workflow with parallel execution\n- skill: `reactree-rails-dev:reactree-feature` - Feature-driven with user stories\n\n**Invocation Pattern:**\n```\nSkill tool with:\n  skill: reactree-rails-dev:reactree-dev\n```\n\n**Benefits:** 30-50% faster, working memory caching, automatic skill discovery.\n\n⚡ **Do NOT respond with text explanations** - invoke the skill immediately to start the development workflow.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       fi
       ;;
     "debug")
-      cat <<EOF
+      cat <<'JSONEOF'
 {
-  "systemMessage": "🔍 **Debugging Task Detected**\\n\\nConsider using:\\n\\n• \`/reactree-debug\` - Systematic debugging workflow\\n\\n**Benefits:** Root cause analysis, memory-assisted debugging, automatic regression test creation.",
+  "systemMessage": "🔍 **Debugging Task Intent Detected - Routing to Workflow**\n\n**ACTION REQUIRED**: Invoke the ReAcTree debug workflow immediately using the Skill tool.\n\n**Recommended Workflow:**\n- skill: `reactree-rails-dev:reactree-debug`\n\n**Invocation Pattern:**\n```\nSkill tool with:\n  skill: reactree-rails-dev:reactree-debug\n```\n\n**Benefits:** Root cause analysis, memory-assisted debugging, automatic regression test creation.\n\n⚡ **Do NOT respond with text explanations** - invoke the skill immediately to start the debugging workflow.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       ;;
     "refactor")
-      cat <<EOF
+      cat <<'JSONEOF'
 {
-  "systemMessage": "♻️ **Refactoring Task Detected**\\n\\nConsider using:\\n\\n• \`/reactree-dev\` - With test preservation and quality gates\\n\\n**Benefits:** Safe refactoring, automatic reference tracking, working memory ensures consistency.",
+  "systemMessage": "♻️ **Refactoring Task Intent Detected - Routing to Workflow**\n\n**ACTION REQUIRED**: Invoke the ReAcTree refactor workflow immediately using the Skill tool.\n\n**Recommended Workflow:**\n- skill: `reactree-rails-dev:reactree-refactor`\n\n**Invocation Pattern:**\n```\nSkill tool with:\n  skill: reactree-rails-dev:reactree-refactor\n```\n\n**Benefits:** Safe refactoring with test preservation, automatic reference tracking, working memory ensures consistency.\n\n⚡ **Do NOT respond with text explanations** - invoke the skill immediately to start the refactoring workflow.",
   "suppressOutput": false
 }
-EOF
+JSONEOF
       ;;
   esac
 }
