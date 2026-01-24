@@ -1,715 +1,526 @@
 ---
-name: "Accessibility Patterns"
-description: "Comprehensive accessibility implementation for iOS/tvOS including VoiceOver, Dynamic Type, and WCAG 2.1 Level AA compliance"
-version: "2.0.0"
+name: accessibility-patterns
+description: "Expert accessibility decisions for iOS/tvOS: when to combine vs separate elements, label vs hint selection, Dynamic Type layout strategies, and WCAG AA compliance trade-offs. Use when implementing VoiceOver support, handling Dynamic Type, or ensuring accessibility compliance. Trigger keywords: accessibility, VoiceOver, Dynamic Type, WCAG, a11y, accessibilityLabel, accessibilityElement, accessibilityTraits, isAccessibilityElement, reduceMotion, contrast, focus"
+version: "3.0.0"
 ---
 
-# Accessibility Patterns for iOS/tvOS
+# Accessibility Patterns — Expert Decisions
 
-Complete guide to implementing accessible iOS/tvOS applications with VoiceOver support, Dynamic Type, color contrast compliance, and WCAG 2.1 Level AA standards.
+Expert decision frameworks for accessibility choices. Claude knows accessibilityLabel and VoiceOver — this skill provides judgment calls for element grouping, label strategies, and compliance trade-offs.
 
-## VoiceOver Support
+---
 
-### Accessibility Labels
+## Decision Trees
 
+### Element Grouping Strategy
+
+```
+How should VoiceOver read this content?
+├─ Logically related (card, cell, profile)
+│  └─ Combine: .accessibilityElement(children: .combine)
+│     Read as single unit
+│
+├─ Each part independently actionable
+│  └─ Keep separate
+│     User needs to interact with each
+│
+├─ Container with multiple actions
+│  └─ Combine + custom actions
+│     Single element with .accessibilityAction
+│
+├─ Decorative image with text
+│  └─ Combine, image hidden
+│     Image adds no meaning
+│
+└─ Image conveys different info than text
+   └─ Keep separate with distinct labels
+      Both need to be announced
+```
+
+**The trap**: Combining elements that have different actions. User can't interact with individual parts.
+
+### Label vs Hint Decision
+
+```
+What should be in label vs hint?
+├─ What the element IS
+│  └─ Label
+│     "Play button", "Submit form"
+│
+├─ What happens when activated
+│  └─ Hint (only if not obvious)
+│     "Double tap to start playback"
+│
+├─ Current state
+│  └─ Value
+│     "50 percent", "Page 3 of 10"
+│
+└─ Control behavior
+   └─ Traits
+      .isButton, .isSelected, .isHeader
+```
+
+### Dynamic Type Layout Strategy
+
+```
+How should layout adapt to larger text?
+├─ Simple HStack (icon + text)
+│  └─ Stay horizontal
+│     Icons scale with text
+│
+├─ Complex HStack (image + multi-line)
+│  └─ Stack vertically at xxxLarge
+│     Check @Environment(\.dynamicTypeSize)
+│
+├─ Fixed-height cells
+│  └─ Self-sizing
+│     Remove height constraints
+│
+└─ Toolbar/navigation elements
+   └─ Consider overflow menu
+      Or scroll at extreme sizes
+```
+
+### Reduce Motion Response
+
+```
+What happens when Reduce Motion is enabled?
+├─ Transition between screens
+│  └─ Instant or simple fade
+│     No slide/zoom animations
+│
+├─ Loading indicators
+│  └─ Static or minimal
+│     No bouncing/spinning
+│
+├─ Autoplay video/animation
+│  └─ Don't autoplay
+│     User controls playback
+│
+├─ Parallax/motion effects
+│  └─ Disable completely
+│     Can cause vestibular issues
+│
+└─ Essential animation (progress)
+   └─ Keep but simplify
+      Linear, no bounce
+```
+
+---
+
+## NEVER Do
+
+### VoiceOver Labels
+
+**NEVER** include element type in labels:
 ```swift
-// SwiftUI
-struct ProfileView: View {
-    let user: User
+// ❌ Redundant — VoiceOver announces "Submit button, button"
+Button("Submit") { }
+    .accessibilityLabel("Submit button")
 
-    var body: some View {
-        HStack {
-            Image(systemName: "person.circle.fill")
-                .accessibilityLabel("Profile picture")
+// ✅ VoiceOver announces "Submit, button"
+Button("Submit") { }
+    .accessibilityLabel("Submit")
 
-            Text(user.name)
-                .accessibilityLabel("User name: \(user.name)")
+// ❌ Redundant — "Profile image, image"
+Image("profile")
+    .accessibilityLabel("Profile image")
 
-            Button(action: { /* ... */ }) {
-                Image(systemName: "envelope")
-            }
-            .accessibilityLabel("Send message to \(user.name)")
+// ✅ Describe what the image shows
+Image("profile")
+    .accessibilityLabel("John Doe's profile photo")
+```
+
+**NEVER** use generic labels:
+```swift
+// ❌ User has no idea what this does
+Button(action: deleteItem) {
+    Image(systemName: "trash")
+}
+.accessibilityLabel("Button")
+
+// ❌ Still not helpful
+Button(action: deleteItem) {
+    Image(systemName: "trash")
+}
+.accessibilityLabel("Icon")
+
+// ✅ Describe the action
+Button(action: deleteItem) {
+    Image(systemName: "trash")
+}
+.accessibilityLabel("Delete \(item.name)")
+```
+
+**NEVER** forget to label icon-only buttons:
+```swift
+// ❌ VoiceOver says nothing useful
+Button(action: share) {
+    Image(systemName: "square.and.arrow.up")
+}
+// VoiceOver: "Button" (no label!)
+
+// ✅ Always label icon buttons
+Button(action: share) {
+    Image(systemName: "square.and.arrow.up")
+}
+.accessibilityLabel("Share")
+```
+
+### Element Visibility
+
+**NEVER** hide interactive elements from accessibility:
+```swift
+// ❌ User can't access this control
+Button("Settings") { }
+    .accessibilityHidden(true)  // Why would you do this?
+
+// ✅ Every interactive element must be accessible
+// Only hide truly decorative elements
+Image("decorative-pattern")
+    .accessibilityHidden(true)  // This is OK — adds nothing
+```
+
+**NEVER** leave decorative images accessible:
+```swift
+// ❌ VoiceOver reads meaningless "image"
+Image("background-gradient")
+// VoiceOver: "Image"
+
+// ✅ Hide decorative elements
+Image("background-gradient")
+    .accessibilityHidden(true)
+```
+
+### Dynamic Type
+
+**NEVER** use fixed font sizes for user content:
+```swift
+// ❌ Doesn't respect user's text size preference
+Text("Hello, World!")
+    .font(.system(size: 16))  // Never scales!
+
+// ✅ Use Dynamic Type styles
+Text("Hello, World!")
+    .font(.body)  // Scales automatically
+
+// ✅ Custom font with scaling
+Text("Custom")
+    .font(.custom("MyFont", size: 16, relativeTo: .body))
+```
+
+**NEVER** truncate text at larger sizes without alternative:
+```swift
+// ❌ Content disappears at larger text sizes
+Text(longContent)
+    .lineLimit(2)
+    .font(.body)
+// At xxxLarge, user sees "Lorem ips..."
+
+// ✅ Allow expansion or provide full content path
+Text(longContent)
+    .lineLimit(dynamicTypeSize >= .xxxLarge ? nil : 2)
+    .font(.body)
+
+// Or use "Read more" expansion
+```
+
+### Reduce Motion
+
+**NEVER** ignore reduce motion for essential navigation:
+```swift
+// ❌ User with vestibular disorders feels sick
+.transition(.slide)
+// Reduce Motion enabled, but still slides
+
+// ✅ Respect reduce motion
+@Environment(\.accessibilityReduceMotion) var reduceMotion
+
+.transition(reduceMotion ? .opacity : .slide)
+```
+
+**NEVER** autoplay video when reduce motion is enabled:
+```swift
+// ❌ Autoplay ignores user preference
+VideoPlayer(player: player)
+    .onAppear { player.play() }  // Always autoplays
+
+// ✅ Check reduce motion
+VideoPlayer(player: player)
+    .onAppear {
+        if !UIAccessibility.isReduceMotionEnabled {
+            player.play()
         }
     }
-}
-
-// UIKit
-let imageView = UIImageView(image: UIImage(systemName: "person.circle.fill"))
-imageView.isAccessibilityElement = true
-imageView.accessibilityLabel = "Profile picture"
-
-let button = UIButton()
-button.accessibilityLabel = "Send message to \(user.name)"
 ```
 
-### Accessibility Hints
+### Color and Contrast
 
+**NEVER** convey information by color alone:
 ```swift
-// SwiftUI
-Button("Submit") {
-    submitForm()
-}
-.accessibilityLabel("Submit form")
-.accessibilityHint("Double tap to submit the registration form")
+// ❌ Color-blind users can't distinguish states
+Circle()
+    .fill(isOnline ? .green : .red)  // Only color differs
 
-// UIKit
-button.accessibilityLabel = "Submit form"
-button.accessibilityHint = "Double tap to submit the registration form"
+// ✅ Use shape/icon in addition to color
+HStack {
+    Circle()
+        .fill(isOnline ? .green : .red)
+    Text(isOnline ? "Online" : "Offline")
+}
+// Or
+Image(systemName: isOnline ? "checkmark.circle.fill" : "xmark.circle.fill")
+    .foregroundColor(isOnline ? .green : .red)
 ```
 
-### Accessibility Traits
+---
+
+## Essential Patterns
+
+### Accessible Card Component
 
 ```swift
-// SwiftUI
-struct CustomButton: View {
-    let title: String
-    let action: () -> Void
-    let isSelected: Bool
-
-    var body: some View {
-        Button(title, action: action)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-            .accessibilityRemoveTraits(.isImage)  // If button contains image
-    }
-}
-
-// Common traits
-Text("Breaking News")
-    .accessibilityAddTraits(.isHeader)
-
-Toggle("Notifications", isOn: $notificationsEnabled)
-    .accessibilityAddTraits(.isToggle)  // Automatically applied
-
-Image("banner")
-    .accessibilityAddTraits(.isImage)
-
-// UIKit
-button.accessibilityTraits = .button
-if isSelected {
-    button.accessibilityTraits.insert(.selected)
-}
-
-headerLabel.accessibilityTraits = .header
-```
-
-### Grouping Elements
-
-```swift
-// SwiftUI - Group related elements
-struct NewsCard: View {
-    let article: Article
+struct AccessibleCard: View {
+    let item: Item
+    let onTap: () -> Void
+    let onDelete: () -> Void
+    let onShare: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(article.title)
+            Text(item.title)
                 .font(.headline)
 
-            Text(article.summary)
+            Text(item.description)
                 .font(.body)
+                .foregroundColor(.secondary)
 
-            Text(article.date, style: .date)
+            Text(item.date, style: .date)
                 .font(.caption)
         }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+
+        // Combine all text for VoiceOver
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(article.title). \(article.summary). Published \(article.date.formatted())")
+        .accessibilityLabel("\(item.title). \(item.description). \(item.date.formatted())")
+        .accessibilityAddTraits(.isButton)
+
+        // Custom actions instead of hidden buttons
+        .accessibilityAction(.default) { onTap() }
+        .accessibilityAction(named: "Delete") { onDelete() }
+        .accessibilityAction(named: "Share") { onShare() }
     }
 }
-
-// UIKit - Container groups
-let containerView = UIView()
-containerView.isAccessibilityElement = false
-containerView.shouldGroupAccessibilityChildren = true
 ```
 
-## Dynamic Type Support
-
-### Scaling Text
+### Dynamic Type Adaptive Layout
 
 ```swift
-// SwiftUI - Text automatically scales
-Text("Hello, World!")
-    .font(.body)  // Scales with Dynamic Type
+struct AdaptiveProfileView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-Text("Fixed Size")
-    .font(.system(size: 17))  // Does NOT scale
+    let user: User
 
-Text("Custom Scaling")
-    .font(.system(size: 17, weight: .regular, design: .default))
-    .dynamicTypeSize(.large)  // Limit scaling
-
-// Limit text scaling range
-Text("Constrained")
-    .dynamicTypeSize(.medium ... .xxxLarge)
-
-// UIKit
-let label = UILabel()
-label.font = UIFont.preferredFont(forTextStyle: .body)
-label.adjustsFontForContentSizeCategory = true
-
-// Custom font with scaling
-let customFont = UIFont(name: "CustomFont", size: 17)!
-label.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: customFont)
-```
-
-### Layout Adaptat
-
-ion
-
-```swift
-// SwiftUI - Adaptive layout based on text size
-@Environment(\.dynamicTypeSize) var dynamicTypeSize
-
-var body: some View {
-    if dynamicTypeSize >= .xxxLarge {
-        VStack(alignment: .leading) {
-            // Vertical layout for large text
-            profileImage
-            userInfo
-        }
-    } else {
-        HStack {
-            // Horizontal layout for normal text
-            profileImage
-            userInfo
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // Vertical layout for accessibility sizes
+            VStack(alignment: .leading, spacing: 12) {
+                profileImage
+                userInfo
+            }
+        } else {
+            // Horizontal layout for standard sizes
+            HStack(spacing: 16) {
+                profileImage
+                userInfo
+            }
         }
     }
+
+    private var profileImage: some View {
+        Image(user.avatarName)
+            .resizable()
+            .scaledToFill()
+            .frame(width: imageSize, height: imageSize)
+            .clipShape(Circle())
+            .accessibilityLabel("\(user.name)'s profile photo")
+    }
+
+    private var userInfo: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(user.name)
+                .font(.headline)
+            Text(user.title)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var imageSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 80 : 60
+    }
 }
 
-// Listen to Dynamic Type changes in UIKit
-NotificationCenter.default.addObserver(
-    forName: UIContentSizeCategory.didChangeNotification,
-    object: nil,
-    queue: .main
-) { _ in
-    updateLayout()
+extension DynamicTypeSize {
+    var isAccessibilitySize: Bool {
+        self >= .accessibility1
+    }
 }
 ```
 
-## Color Contrast
-
-### Meeting WCAG AA Standards
+### Reduce Motion Wrapper
 
 ```swift
-// WCAG AA requires:
-// - Normal text (< 18pt): 4.5:1 contrast ratio
-// - Large text (≥ 18pt or 14pt bold): 3:1 contrast ratio
+struct MotionSafeAnimation<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-extension Color {
-    // Ensure sufficient contrast
-    func contrastingTextColor() -> Color {
-        // Calculate luminance and return black or white
-        let luminance = self.luminance()
-        return luminance > 0.5 ? .black : .white
-    }
+    let fullAnimation: Animation
+    let reducedAnimation: Animation
+    let content: Content
 
-    private func luminance() -> Double {
-        // Implement relative luminance calculation
-        // Based on WCAG formula
-        0.0  // Simplified
-    }
-
-    // Check if colors meet WCAG AA
-    func meetsWCAGAA(with background: Color, fontSize: CGFloat, isBold: Bool) -> Bool {
-        let requiredRatio: Double = (fontSize >= 18 || (fontSize >= 14 && isBold)) ? 3.0 : 4.5
-        let actualRatio = self.contrastRatio(with: background)
-        return actualRatio >= requiredRatio
-    }
-}
-
-// Use high contrast when enabled
-@Environment(\.accessibilityReduceTransparency) var reduceTransparency
-
-var body: some View {
-    VStack {
-        Text("Content")
-    }
-    .background(reduceTransparency ? Color.black : Color.black.opacity(0.8))
-}
-```
-
-### Accessibility-Aware Colors
-
-```swift
-// SwiftUI - Different colors for accessibility
-extension Color {
-    static let accessiblePrimary = Color("Primary", bundle: .main)
-
-    static var adaptiveText: Color {
-        Color.primary  // Automatically adjusts for dark mode and high contrast
-    }
-}
-
-// Asset catalog with high contrast variants
-// Colors.xcassets/Primary.colorset/Contents.json
-{
-  "colors": [
-    {
-      "idiom": "universal",
-      "color": { "color-space": "srgb", "components": { "red": "0.0", "green": "0.478", "blue": "1.0" }}
-    },
-    {
-      "idiom": "universal",
-      "appearances": [{ "appearance": "luminosity", "value": "dark" }],
-      "color": { "color-space": "srgb", "components": { "red": "0.039", "green": "0.518", "blue": "1.0" }}
-    },
-    {
-      "idiom": "universal",
-      "appearances": [{ "appearance": "contrast", "value": "high" }],
-      "color": { "color-space": "srgb", "components": { "red": "0.0", "green": "0.0", "blue": "0.8" }}
-    }
-  ]
-}
-```
-
-## Focus Management
-
-### Custom Focus Order
-
-```swift
-// SwiftUI
-struct FormView: View {
-    @FocusState private var focusedField: Field?
-
-    enum Field: Hashable {
-        case email, password, confirmPassword
+    init(
+        full: Animation = .spring(),
+        reduced: Animation = .linear(duration: 0.2),
+        @ViewBuilder content: () -> Content
+    ) {
+        self.fullAnimation = full
+        self.reducedAnimation = reduced
+        self.content = content()
     }
 
     var body: some View {
-        VStack {
-            TextField("Email", text: $email)
-                .focused($focusedField, equals: .email)
-                .accessibilitySortPriority(3)
+        content
+            .animation(reduceMotion ? reducedAnimation : fullAnimation, value: UUID())
+    }
+}
 
-            SecureField("Password", text: $password)
-                .focused($focusedField, equals: .password)
-                .accessibilitySortPriority(2)
+// Usage
+struct AnimatedButton: View {
+    @State private var isPressed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-            SecureField("Confirm", text: $confirmPassword)
-                .focused($focusedField, equals: .confirmPassword)
-                .accessibilitySortPriority(1)
+    var body: some View {
+        Button("Tap Me") { }
+            .scaleEffect(isPressed ? 0.95 : 1.0)
+            .animation(reduceMotion ? nil : .spring(), value: isPressed)
+            .onLongPressGesture(minimumDuration: .infinity, pressing: { pressing in
+                isPressed = pressing
+            }, perform: {})
+    }
+}
+```
+
+### Accessible Form
+
+```swift
+struct AccessibleForm: View {
+    @State private var email = ""
+    @State private var password = ""
+    @State private var emailError: String?
+    @FocusState private var focusedField: Field?
+
+    enum Field: Hashable {
+        case email, password
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Email", text: $email)
+                    .focused($focusedField, equals: .email)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .accessibilityLabel("Email address")
+                    .accessibilityValue(email.isEmpty ? "Empty" : email)
+
+                if let error = emailError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .accessibilityLabel("Error: \(error)")
+                }
+
+                SecureField("Password", text: $password)
+                    .focused($focusedField, equals: .password)
+                    .textContentType(.password)
+                    .accessibilityLabel("Password")
+                    .accessibilityHint("Minimum 8 characters")
+            }
+
+            Button("Sign In") {
+                signIn()
+            }
+            .accessibilityLabel("Sign in")
+            .accessibilityHint("Double tap to sign in with entered credentials")
         }
         .onSubmit {
             switch focusedField {
             case .email:
                 focusedField = .password
             case .password:
-                focusedField = .confirmPassword
-            case .confirmPassword:
-                submitForm()
-            default:
+                signIn()
+            case nil:
                 break
             }
         }
+        .onChange(of: emailError) { _, error in
+            if error != nil {
+                // Announce error to VoiceOver
+                UIAccessibility.post(notification: .announcement,
+                    argument: "Error: \(error ?? "")")
+            }
+        }
     }
 }
-
-// UIKit
-override var accessibilityElements: [Any]? {
-    get { [emailField, passwordField, submitButton] }
-    set { }
-}
 ```
+
+---
+
+## Quick Reference
+
+### WCAG AA Requirements
+
+| Criterion | Requirement | iOS Implementation |
+|-----------|-------------|-------------------|
+| 1.4.3 Contrast | 4.5:1 normal, 3:1 large | Use semantic colors |
+| 1.4.4 Resize Text | 200% without loss | Dynamic Type support |
+| 2.1.1 Keyboard | All functionality | VoiceOver navigation |
+| 2.4.7 Focus Visible | Clear focus indicator | @FocusState |
+| 2.5.5 Target Size | 44x44pt minimum | .frame(minWidth:minHeight:) |
+
+### Accessibility Traits
+
+| Trait | When to Use |
+|-------|-------------|
+| .isButton | Custom tappable views |
+| .isHeader | Section titles |
+| .isSelected | Currently selected item |
+| .isLink | Navigates to URL |
+| .isImage | Meaningful images |
+| .playsSound | Audio triggers |
+| .startsMediaSession | Video/audio playback |
+| .adjustable | Swipe up/down to change value |
 
 ### Focus Notifications
 
-```swift
-// UIKit - Post focus notification
-UIAccessibility.post(notification: .screenChanged, argument: errorLabel)
-
-// Announce message without changing focus
-UIAccessibility.post(notification: .announcement, argument: "Form submitted successfully")
-
-// Layout changed (smaller change than screen changed)
-UIAccessibility.post(notification: .layoutChanged, argument: newElement)
-
-// SwiftUI
-struct ContentView: View {
-    @AccessibilityFocusState private var isFocused: Bool
-
-    var body: some View {
-        VStack {
-            Text("Important Message")
-                .accessibilityFocused($isFocused)
-                .onAppear {
-                    // Set focus when view appears
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        isFocused = true
-                    }
-                }
-        }
-    }
-}
-```
-
-## Custom Accessibility Actions
-
-### Custom Actions
-
-```swift
-// SwiftUI
-struct MessageRow: View {
-    let message: Message
-
-    var body: some View {
-        HStack {
-            Text(message.content)
-            Spacer()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(message.content)
-        .accessibilityAction(named: "Reply") {
-            replyToMessage(message)
-        }
-        .accessibilityAction(named: "Delete") {
-            deleteMessage(message)
-        }
-        .accessibilityAction(named: "Forward") {
-            forwardMessage(message)
-        }
-    }
-}
-
-// UIKit
-let replyAction = UIAccessibilityCustomAction(
-    name: "Reply",
-    target: self,
-    selector: #selector(replyToMessage)
-)
-
-let deleteAction = UIAccessibilityCustomAction(
-    name: "Delete",
-    target: self,
-    selector: #selector(deleteMessage)
-)
-
-cell.accessibilityCustomActions = [replyAction, deleteAction]
-```
-
-### Adjustable Values
-
-```swift
-// SwiftUI
-struct VolumeControl: View {
-    @State private var volume: Double = 0.5
-
-    var body: some View {
-        Slider(value: $volume, in: 0...1)
-            .accessibilityLabel("Volume")
-            .accessibilityValue("\(Int(volume * 100)) percent")
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment:
-                    volume = min(1.0, volume + 0.1)
-                case .decrement:
-                    volume = max(0.0, volume - 0.1)
-                @unknown default:
-                    break
-                }
-            }
-    }
-}
-
-// UIKit
-class VolumeView: UIView {
-    var volume: Double = 0.5
-
-    override var accessibilityTraits: UIAccessibilityTraits {
-        get { .adjustable }
-        set { }
-    }
-
-    override var accessibilityValue: String? {
-        get { "\(Int(volume * 100)) percent" }
-        set { }
-    }
-
-    override func accessibilityIncrement() {
-        volume = min(1.0, volume + 0.1)
-    }
-
-    override func accessibilityDecrement() {
-        volume = max(0.0, volume - 0.1)
-    }
-}
-```
-
-## Reduce Motion
-
-### Respecting Reduce Motion
-
-```swift
-// SwiftUI
-@Environment(\.accessibilityReduceMotion) var reduceMotion
-
-var body: some View {
-    VStack {
-        if reduceMotion {
-            // Simplified animation or no animation
-            Image("logo")
-                .transition(.opacity)
-        } else {
-            // Full animation
-            Image("logo")
-                .transition(.scale.combined(with: .slide))
-        }
-    }
-    .animation(.default, value: isPresented)
-}
-
-// UIKit
-let reduceMotion = UIAccessibility.isReduceMotionEnabled
-
-if reduceMotion {
-    // Snap to final state
-    view.alpha = 1.0
-} else {
-    // Animate
-    UIView.animate(withDuration: 0.3) {
-        self.view.alpha = 1.0
-    }
-}
-
-// Listen for changes
-NotificationCenter.default.addObserver(
-    forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
-    object: nil,
-    queue: .main
-) { _ in
-    updateAnimations()
-}
-```
-
-## Accessibility Testing
-
-### Automated Testing
-
-```swift
-final class AccessibilityTests: XCTestCase {
-    func testButtonHasLabel() {
-        let app = XCUIApplication()
-        app.launch()
-
-        let button = app.buttons["Submit"]
-        XCTAssertTrue(button.exists)
-        XCTAssertEqual(button.label, "Submit form")
-    }
-
-    func testVoiceOverReading() {
-        let button = app.buttons.firstMatch
-        XCTAssertNotNil(button.label)
-        XCTAssertFalse(button.label.isEmpty)
-    }
-
-    func testDynamicTypeScaling() {
-        // Test with different text sizes
-        for size in [UIContentSizeCategory.small, .large, .xxxLarge] {
-            app.launchArguments = ["-UIPreferredContentSizeCategoryName", size.rawValue]
-            app.launch()
-
-            // Verify layout doesn't break
-            XCTAssertTrue(app.buttons["Submit"].exists)
-        }
-    }
-
-    func testColorContrast() {
-        // Enable high contrast
-        app.launchArguments = ["-UIAccessibilityDarkerSystemColorsEnabled", "1"]
-        app.launch()
-
-        // Verify elements are still visible
-        XCTAssertTrue(app.staticTexts["Title"].exists)
-    }
-}
-```
-
-### Manual Testing Checklist
-
-```markdown
-## Accessibility Manual Testing Checklist
-
-### VoiceOver
-- [ ] All interactive elements have labels
-- [ ] Labels are descriptive and concise
-- [ ] Hints provide context when needed
-- [ ] Images have meaningful labels (or are hidden if decorative)
-- [ ] Custom actions are available where appropriate
-- [ ] Focus order is logical
-- [ ] No unnecessary swipes needed
-
-### Dynamic Type
-- [ ] All text scales appropriately
-- [ ] Layout adapts to larger text sizes
-- [ ] No text truncation at xxxLarge
-- [ ] Buttons remain tappable at all sizes
-- [ ] Custom fonts scale using UIFontMetrics
-
-### Color & Contrast
-- [ ] WCAG AA contrast ratios met (4.5:1 for normal text, 3:1 for large)
-- [ ] App works in both light and dark mode
-- [ ] Information not conveyed by color alone
-- [ ] High contrast mode supported
-
-### Motion
-- [ ] Reduce Motion setting respected
-- [ ] Essential animations have reduced alternatives
-- [ ] No auto-playing videos with Reduce Motion on
-
-### Additional
-- [ ] Landscape and portrait orientations supported
-- [ ] Touch targets at least 44x44 points
-- [ ] Forms clearly indicate required fields
-- [ ] Error messages are descriptive
-```
-
-## Best Practices
-
-### 1. Meaningful Labels
-
-```swift
-// ✅ Good: Descriptive label
-Button {
-    deleteItem()
-}
-.accessibilityLabel("Delete \(item.name)")
-
-// ❌ Avoid: Generic labels
-Button {
-    deleteItem()
-}
-.accessibilityLabel("Button")
-```
-
-### 2. Combine Related Elements
-
-```swift
-// ✅ Good: Combined for context
-VStack {
-    Text("John Doe")
-    Text("Software Engineer")
-    Text("San Francisco")
-}
-.accessibilityElement(children: .combine)
-.accessibilityLabel("John Doe, Software Engineer, San Francisco")
-
-// ❌ Avoid: Separate announcements
-// VoiceOver reads each line separately, losing context
-```
-
-### 3. Use Semantic Controls
-
-```swift
-// ✅ Good: Semantic controls have built-in accessibility
-Toggle("Notifications", isOn: $enabled)
-Picker("Theme", selection: $theme) {
-    Text("Light").tag(Theme.light)
-    Text("Dark").tag(Theme.dark)
-}
-
-// ❌ Avoid: Custom controls without accessibility
-Button {
-    enabled.toggle()
-} label: {
-    HStack {
-        Text("Notifications")
-        Image(systemName: enabled ? "checkmark" : "xmark")
-    }
-}
-// Missing toggle trait and value
-```
-
-### 4. Test with Real Users
-
-```markdown
-- Run Accessibility Inspector (Xcode)
-- Use VoiceOver on real devices
-- Test with different Dynamic Type sizes
-- Enable high contrast mode
-- Try with Reduce Motion enabled
-- Consider hiring accessibility consultants
-- Include people with disabilities in user testing
-```
-
-## WCAG 2.1 Level AA Compliance
-
-### Perceivable
-
-```swift
-// 1.1 Text Alternatives
-Image("logo")
-    .accessibilityLabel("Company logo")
-
-// 1.4.3 Contrast (Minimum) - 4.5:1
-extension Color {
-    static let accessibleBlue = Color(red: 0, green: 0.4, blue: 1)  // Passes WCAG AA
-}
-
-// 1.4.4 Resize Text
-Text("Content")
-    .font(.body)  // Scales with Dynamic Type
-```
-
-### Operable
-
-```swift
-// 2.1 Keyboard Accessible
-// All interactive elements reachable via VoiceOver
-
-// 2.4.7 Focus Visible
-TextField("Email", text: $email)
-    .focused($focusedField, equals: .email)
-
-// 2.5.5 Target Size
-Button("Submit") { }
-    .frame(minWidth: 44, minHeight: 44)  // Minimum tap target
-```
-
-### Understandable
-
-```swift
-// 3.1 Readable
-Text("Content")
-    .accessibilityLabel("Clear, simple language")
-
-// 3.3 Input Assistance
-TextField("Email", text: $email)
-    .accessibilityHint("Enter a valid email address")
-```
-
-### Robust
-
-```swift
-// 4.1.2 Name, Role, Value
-Button("Submit") { }
-    .accessibilityLabel("Submit form")  // Name
-    .accessibilityAddTraits(.isButton)  // Role
-    .accessibilityValue(isSubmitting ? "Submitting" : "Ready")  // Value
-```
-
-## tvOS-Specific Accessibility
-
-### Focus Engine
-
-```swift
-struct FocusableCard: View {
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        VStack {
-            Text("Card Content")
-        }
-        .focusable()
-        .focused($isFocused)
-        .scaleEffect(isFocused ? 1.1 : 1.0)
-        .animation(.easeInOut, value: isFocused)
-    }
-}
-```
-
-## References
-
-- [Apple Accessibility Guide](https://developer.apple.com/accessibility/)
-- [WCAG 2.1 Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
-- [VoiceOver Testing Guide](https://developer.apple.com/documentation/accessibility/voiceover)
-- [Dynamic Type Guide](https://developer.apple.com/design/human-interface-guidelines/accessibility/overview/text-size-and-weight/)
-- [Accessibility Inspector](https://developer.apple.com/library/archive/documentation/Accessibility/Conceptual/AccessibilityMacOSX/OSXAXTestingApps.html)
+| Notification | Use Case |
+|--------------|----------|
+| .screenChanged | Major UI change, new screen |
+| .layoutChanged | Minor UI update |
+| .announcement | Status message |
+| .pageScrolled | Scroll position changed |
+
+### Red Flags
+
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| "Button" in label | Redundant | Remove type from label |
+| Icon without label | Inaccessible | Add accessibilityLabel |
+| .accessibilityHidden(true) on control | Can't interact | Remove or rethink |
+| .font(.system(size:)) | Doesn't scale | Use .font(.body) |
+| Color-only status | Color-blind exclusion | Add icon or text |
+| Animation ignores reduceMotion | Vestibular issues | Check environment |
+| Decorative image without hidden | Noisy VoiceOver | accessibilityHidden(true) |
+| Combined elements with separate actions | Can't interact individually | Keep separate or use custom actions |

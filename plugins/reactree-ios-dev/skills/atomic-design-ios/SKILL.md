@@ -1,744 +1,435 @@
 ---
-name: "Atomic Design iOS"
-description: "Atomic Design methodology for building scalable component libraries in iOS/tvOS applications"
-version: "2.0.0"
+name: atomic-design-ios
+description: "Expert Atomic Design decisions for iOS/tvOS: when component hierarchy adds value vs overkill, atom vs molecule boundary judgment, design token management trade-offs, and component reusability patterns. Use when structuring design systems, deciding component granularity, or organizing component libraries. Trigger keywords: Atomic Design, atoms, molecules, organisms, templates, component library, design system, design tokens, reusability, composition"
+version: "3.0.0"
 ---
 
-# Atomic Design for iOS/tvOS
+# Atomic Design iOS — Expert Decisions
 
-Complete guide to implementing Atomic Design methodology in SwiftUI applications, creating reusable component libraries from atoms to templates.
+Expert decision frameworks for Atomic Design choices in SwiftUI. Claude knows view composition — this skill provides judgment calls for when component hierarchy adds value and how to define boundaries.
 
-## Atomic Design Principles
+---
 
-### Component Hierarchy
+## Decision Trees
 
-**Brad Frost's Atomic Design:**
-1. **Atoms** - Basic building blocks (buttons, text fields, labels)
-2. **Molecules** - Simple combinations of atoms (search bars, form inputs)
-3. **Organisms** - Complex UI components (navigation bars, card lists)
-4. **Templates** - Page layouts without real data
-5. **Pages** - Specific instances with real content
+### Do You Need Atomic Design?
 
-### Benefits for iOS/tvOS
+```
+How large is your design system?
+├─ Small (< 10 components)
+│  └─ Skip formal hierarchy
+│     Simple "Components" folder is fine
+│
+├─ Medium (10-30 components)
+│  └─ Consider Atoms + Molecules
+│     Skip Organisms/Templates if not needed
+│
+└─ Large (30+ components, multiple teams)
+   └─ Full Atomic Design hierarchy
+      Atoms → Molecules → Organisms → Templates
+```
 
-- **Reusability** - Components used across multiple screens
-- **Consistency** - Unified design language
-- **Scalability** - Easy to add new features
-- **Testability** - Isolated component testing
-- **Documentation** - Self-documenting with previews
+**The trap**: Atomic Design for a 5-screen app. The overhead of categorization exceeds the benefit.
 
-## Atoms (Basic Building Blocks)
+### Atom vs Molecule Boundary
 
-### Button Atoms
+```
+Does this component combine multiple distinct elements?
+├─ NO (single visual element)
+│  └─ Atom
+│     Button, TextField, Badge, Icon, Label
+│
+└─ YES (2+ elements that work together)
+   └─ Can these elements be used independently?
+      ├─ YES → Molecule (SearchBar = Icon + TextField + Button)
+      └─ NO → Still Atom (password field with toggle is one unit)
+```
 
+### Component Extraction Decision
+
+```
+Will this be used in multiple places?
+├─ NO (one-off)
+│  └─ Don't extract
+│     Inline in parent view
+│
+├─ YES (2-3 places)
+│  └─ Extract as local component
+│     Same file or sibling file
+│
+└─ YES (4+ places or cross-feature)
+   └─ Extract to design system
+      Full Atom/Molecule treatment
+```
+
+### Design Token Scope
+
+```
+What type of value?
+├─ Color
+│  └─ Is it semantic or brand?
+│     ├─ Semantic (error, success) → Color.error, Color.success
+│     └─ Brand (primary, accent) → Color.brandPrimary
+│
+├─ Spacing
+│  └─ Use named scale (xs, sm, md, lg, xl)
+│     Never magic numbers
+│
+├─ Typography
+│  └─ Use semantic names (body, heading, caption)
+│     Map to Font.body, Font.heading
+│
+└─ Corner radius, shadows
+   └─ Named tokens if used consistently
+      Radius.card, Shadow.elevated
+```
+
+---
+
+## NEVER Do
+
+### Component Design
+
+**NEVER** create atoms that know about app state:
 ```swift
-// MARK: - Primary Button Atom
+// ❌ Atom depends on app-level state
+struct PrimaryButton: View {
+    @EnvironmentObject var authManager: AuthManager
 
+    var body: some View {
+        Button(action: action) {
+            if authManager.isLoading { ProgressView() }
+            else { Text(title) }
+        }
+    }
+}
+
+// ✅ Atom receives all state as parameters
 struct PrimaryButton: View {
     let title: String
     let action: () -> Void
     var isLoading: Bool = false
-    var isEnabled: Bool = true
 
     var body: some View {
         Button(action: action) {
-            HStack {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                } else {
-                    Text(title)
-                        .font(.headline)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(backgroundColor)
-            .foregroundColor(.white)
-            .cornerRadius(12)
-        }
-        .disabled(!isEnabled || isLoading)
-    }
-
-    private var backgroundColor: Color {
-        isEnabled && !isLoading ? Color.blue : Color.gray
-    }
-}
-
-// MARK: - Secondary Button Atom
-
-struct SecondaryButton: View {
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.white)
-                .foregroundColor(.blue)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.blue, lineWidth: 2)
-                )
-        }
-    }
-}
-
-// MARK: - Icon Button Atom
-
-struct IconButton: View {
-    let systemName: String
-    let action: () -> Void
-    var size: CGFloat = 24
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .resizable()
-                .frame(width: size, height: size)
-                .foregroundColor(.blue)
+            if isLoading { ProgressView() }
+            else { Text(title) }
         }
     }
 }
 ```
 
-### Text Field Atoms
-
+**NEVER** hardcode values in components:
 ```swift
-// MARK: - Standard Text Field Atom
-
-struct StandardTextField: View {
-    let placeholder: String
-    @Binding var text: String
-    var keyboardType: UIKeyboardType = .default
-
-    var body: some View {
-        TextField(placeholder, text: $text)
-            .keyboardType(keyboardType)
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(8)
-    }
-}
-
-// MARK: - Secure Text Field Atom
-
-struct SecureTextField: View {
-    let placeholder: String
-    @Binding var text: String
-    @State private var isSecure: Bool = true
-
-    var body: some View {
-        HStack {
-            if isSecure {
-                SecureField(placeholder, text: $text)
-            } else {
-                TextField(placeholder, text: $text)
-            }
-
-            Button {
-                isSecure.toggle()
-            } label: {
-                Image(systemName: isSecure ? "eye.slash" : "eye")
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
-    }
-}
-```
-
-### Label Atoms
-
-```swift
-// MARK: - Title Label Atom
-
-struct TitleLabel: View {
-    let text: String
-    var style: Style = .large
-
-    enum Style {
-        case large, medium, small
-
-        var font: Font {
-            switch self {
-            case .large: return .largeTitle
-            case .medium: return .title
-            case .small: return .headline
-            }
-        }
-    }
-
-    var body: some View {
-        Text(text)
-            .font(style.font)
-            .foregroundColor(.primary)
-    }
-}
-
-// MARK: - Badge Atom
-
-struct Badge: View {
-    let text: String
-    var color: Color = .blue
-
-    var body: some View {
-        Text(text)
-            .font(.caption)
-            .fontWeight(.semibold)
-            .foregroundColor(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(color)
-            .cornerRadius(4)
-    }
-}
-```
-
-## Molecules (Simple Combinations)
-
-### Search Bar Molecule
-
-```swift
-struct SearchBar: View {
-    @Binding var text: String
-    var placeholder: String = "Search"
-    var onSearch: () -> Void = {}
-
-    var body: some View {
-        HStack {
-            // Icon (Atom)
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.gray)
-
-            // Text Field (Atom)
-            TextField(placeholder, text: $text)
-                .textFieldStyle(PlainTextFieldStyle())
-
-            // Clear Button (Atom)
-            if !text.isEmpty {
-                IconButton(systemName: "xmark.circle.fill") {
-                    text = ""
-                }
-            }
-        }
-        .padding(10)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
-        .onSubmit(onSearch)
-    }
-}
-```
-
-### Card Molecule
-
-```swift
-struct Card<Content: View>: View {
-    let content: Content
-    var shadowRadius: CGFloat = 4
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
+// ❌ Magic numbers everywhere
+struct Card: View {
     var body: some View {
         content
-            .padding()
-            .background(Color.white)
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.1), radius: shadowRadius, x: 0, y: 2)
+            .padding(16)  // Magic number
+            .background(Color(hex: "#FFFFFF"))  // Hardcoded
+            .cornerRadius(12)  // Magic number
     }
 }
 
-// Usage
-Card {
-    VStack(alignment: .leading, spacing: 8) {
-        TitleLabel(text: "Card Title", style: .medium)
-        Text("Card description goes here")
-            .font(.body)
-            .foregroundColor(.secondary)
-    }
-}
-```
-
-### Form Input Molecule
-
-```swift
-struct FormInput: View {
-    let label: String
-    let placeholder: String
-    @Binding var text: String
-    var errorMessage: String?
-
+// ✅ Use design tokens
+struct Card: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Label (Atom)
-            Text(label)
-                .font(.subheadline)
-                .fontWeight(.medium)
-
-            // Text Field (Atom)
-            StandardTextField(placeholder: placeholder, text: $text)
-
-            // Error Message (Atom)
-            if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
-            }
-        }
+        content
+            .padding(Spacing.md)
+            .background(Color.surface)
+            .cornerRadius(Radius.card)
     }
 }
 ```
 
-### Tag List Molecule
-
+**NEVER** create components with too many parameters:
 ```swift
-struct TagList: View {
-    let tags: [String]
-    var onTagTap: ((String) -> Void)?
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(tags, id: \.self) { tag in
-                    Badge(text: tag)
-                        .onTapGesture {
-                            onTagTap?(tag)
-                        }
-                }
-            }
-        }
-    }
-}
-```
-
-## Organisms (Complex Components)
-
-### Navigation Bar Organism
-
-```swift
-struct CustomNavigationBar: View {
+// ❌ Too many parameters — hard to use
+struct ComplexButton: View {
     let title: String
-    var leftAction: (() -> Void)?
-    var rightAction: (() -> Void)?
-    var leftIcon: String = "chevron.left"
-    var rightIcon: String?
+    let subtitle: String?
+    let icon: String?
+    let iconPosition: IconPosition
+    let size: Size
+    let style: Style
+    let isLoading: Bool
+    let isEnabled: Bool
+    let hasBorder: Bool
+    let cornerRadius: CGFloat
+    // ... 10 more parameters
+}
 
+// ✅ Split into focused variants
+struct PrimaryButton: View { ... }
+struct SecondaryButton: View { ... }
+struct IconButton: View { ... }
+struct LoadingButton: View { ... }
+```
+
+### Hierarchy Mistakes
+
+**NEVER** skip levels in composition:
+```swift
+// ❌ Template directly uses atoms (no molecules/organisms)
+struct ProductListTemplate: View {
     var body: some View {
-        HStack {
-            // Left Button (Molecule)
-            if let leftAction = leftAction {
-                IconButton(systemName: leftIcon, action: leftAction)
-            }
-
-            Spacer()
-
-            // Title (Atom)
-            TitleLabel(text: title, style: .medium)
-
-            Spacer()
-
-            // Right Button (Molecule)
-            if let rightAction = rightAction, let rightIcon = rightIcon {
-                IconButton(systemName: rightIcon, action: rightAction)
-            } else {
-                // Spacer to balance layout
-                Color.clear.frame(width: 24, height: 24)
+        ForEach(products) { product in
+            // Building organism inline from atoms
+            HStack {
+                AsyncImage(url: product.imageURL)
+                VStack {
+                    Text(product.name).font(.headline)
+                    Text("$\(product.price)").foregroundColor(.blue)
+                }
+                Button("Add") { }
             }
         }
-        .padding()
-        .background(Color.white)
-        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 2)
+    }
+}
+
+// ✅ Template uses organisms
+struct ProductListTemplate: View {
+    var body: some View {
+        ForEach(products) { product in
+            ProductCard(product: product, onAddToCart: { })
+        }
     }
 }
 ```
 
-### Product Card Organism
-
+**NEVER** put business logic in design system components:
 ```swift
-struct ProductCard: View {
-    let product: Product
-    var onAddToCart: () -> Void
+// ❌ Organism fetches data
+struct UserCard: View {
+    @StateObject private var viewModel = UserViewModel()
 
     var body: some View {
         Card {
-            VStack(alignment: .leading, spacing: 12) {
-                // Product Image
-                AsyncImage(url: product.imageURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    ProgressView()
-                }
-                .frame(height: 150)
-                .clipped()
-                .cornerRadius(8)
-
-                // Product Info
-                VStack(alignment: .leading, spacing: 4) {
-                    TitleLabel(text: product.name, style: .small)
-
-                    Text(product.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-
-                    HStack {
-                        Text("$\(product.price, specifier: "%.2f")")
-                            .font(.headline)
-                            .foregroundColor(.blue)
-
-                        Spacer()
-
-                        if product.inStock {
-                            Badge(text: "In Stock", color: .green)
-                        } else {
-                            Badge(text: "Out of Stock", color: .red)
-                        }
-                    }
-                }
-
-                // Add to Cart Button (Molecule)
-                PrimaryButton(title: "Add to Cart", action: onAddToCart, isEnabled: product.inStock)
-            }
+            // Uses viewModel.user
         }
+        .onAppear { viewModel.load() }
     }
 }
 
-struct Product {
-    let id: String
-    let name: String
-    let description: String
-    let price: Double
-    let imageURL: URL?
-    let inStock: Bool
-}
-```
-
-### List Organism
-
-```swift
-struct ItemList<Item: Identifiable, Content: View>: View {
-    let items: [Item]
-    let content: (Item) -> Content
-    var onRefresh: (() async -> Void)?
-
-    init(items: [Item], @ViewBuilder content: @escaping (Item) -> Content, onRefresh: (() async -> Void)? = nil) {
-        self.items = items
-        self.content = content
-        self.onRefresh = onRefresh
-    }
+// ✅ Organism is purely presentational
+struct UserCard: View {
+    let user: User
+    let onTap: () -> Void
 
     var body: some View {
-        List(items) { item in
-            content(item)
-        }
-        .listStyle(.plain)
-        .refreshable {
-            if let onRefresh = onRefresh {
-                await onRefresh()
-            }
+        Card {
+            // Uses passed-in user
         }
     }
 }
 ```
 
-## Templates (Page Layouts)
+### Design Token Mistakes
 
-### Standard Page Template
-
+**NEVER** use platform colors directly:
 ```swift
-struct StandardPageTemplate<Content: View>: View {
-    let title: String
-    let content: Content
-    var onBack: (() -> Void)?
+// ❌ Hardcoded system colors
+.foregroundColor(.blue)
+.background(Color(.systemGray6))
 
-    init(title: String, onBack: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.onBack = onBack
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Navigation Bar (Organism)
-            CustomNavigationBar(
-                title: title,
-                leftAction: onBack
-            )
-
-            // Content Area
-            ScrollView {
-                content
-                    .padding()
-            }
-        }
-    }
-}
+// ✅ Semantic tokens that can be themed
+.foregroundColor(Color.interactive)
+.background(Color.surfaceSecondary)
 ```
 
-### Form Template
-
+**NEVER** duplicate token definitions:
 ```swift
-struct FormTemplate<Content: View>: View {
-    let title: String
-    let submitButtonTitle: String
-    let onSubmit: () -> Void
-    let content: Content
-    var isLoading: Bool = false
+// ❌ Same value defined in multiple places
+struct Card { let cornerRadius: CGFloat = 12 }
+struct Button { let cornerRadius: CGFloat = 12 }
+struct TextField { let cornerRadius: CGFloat = 12 }
 
-    init(
-        title: String,
-        submitButtonTitle: String,
-        isLoading: Bool = false,
-        onSubmit: @escaping () -> Void,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.submitButtonTitle = submitButtonTitle
-        self.isLoading = isLoading
-        self.onSubmit = onSubmit
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            TitleLabel(text: title, style: .large)
-                .padding()
-
-            // Form Content
-            ScrollView {
-                VStack(spacing: 20) {
-                    content
-                }
-                .padding()
-            }
-
-            // Submit Button
-            PrimaryButton(
-                title: submitButtonTitle,
-                action: onSubmit,
-                isLoading: isLoading
-            )
-            .padding()
-        }
-    }
+// ✅ Single source of truth
+enum Radius {
+    static let sm: CGFloat = 4
+    static let md: CGFloat = 8
+    static let lg: CGFloat = 12
 }
+
+struct Card { ... .cornerRadius(Radius.lg) }
 ```
 
-## Design Tokens Integration
+---
 
-### Color Tokens
+## Essential Patterns
 
-```swift
-extension Color {
-    // Brand Colors
-    static let brandPrimary = Color("BrandPrimary")
-    static let brandSecondary = Color("BrandSecondary")
-    static let brandAccent = Color("BrandAccent")
-
-    // Semantic Colors
-    static let success = Color.green
-    static let warning = Color.orange
-    static let error = Color.red
-    static let info = Color.blue
-
-    // Neutral Colors
-    static let neutral100 = Color(.systemGray6)
-    static let neutral200 = Color(.systemGray5)
-    static let neutral300 = Color(.systemGray4)
-}
-```
-
-### Typography Tokens
+### Token System Structure
 
 ```swift
-extension Font {
-    // Display
-    static let displayLarge = Font.system(size: 57, weight: .bold)
-    static let displayMedium = Font.system(size: 45, weight: .bold)
-
-    // Headings
-    static let heading1 = Font.system(size: 34, weight: .bold)
-    static let heading2 = Font.system(size: 28, weight: .bold)
-    static let heading3 = Font.system(size: 22, weight: .semibold)
-
-    // Body
-    static let bodyLarge = Font.system(size: 17, weight: .regular)
-    static let bodyRegular = Font.system(size: 15, weight: .regular)
-    static let bodySmall = Font.system(size: 13, weight: .regular)
-}
-```
-
-### Spacing Tokens
-
-```swift
+// Spacing tokens
 enum Spacing {
     static let xs: CGFloat = 4
     static let sm: CGFloat = 8
     static let md: CGFloat = 16
     static let lg: CGFloat = 24
     static let xl: CGFloat = 32
-    static let xxl: CGFloat = 48
+}
+
+// Color tokens (support dark mode)
+extension Color {
+    // Semantic
+    static let textPrimary = Color("TextPrimary")
+    static let textSecondary = Color("TextSecondary")
+    static let surface = Color("Surface")
+    static let surfaceSecondary = Color("SurfaceSecondary")
+
+    // Brand
+    static let brandPrimary = Color("BrandPrimary")
+    static let brandAccent = Color("BrandAccent")
+
+    // Feedback
+    static let success = Color("Success")
+    static let warning = Color("Warning")
+    static let error = Color("Error")
+}
+
+// Typography tokens
+extension Font {
+    static let displayLarge = Font.system(size: 34, weight: .bold)
+    static let heading1 = Font.system(size: 28, weight: .bold)
+    static let heading2 = Font.system(size: 22, weight: .semibold)
+    static let bodyLarge = Font.system(size: 17)
+    static let bodyRegular = Font.system(size: 15)
+    static let caption = Font.system(size: 13)
 }
 ```
 
-## Preview Providers
-
-### Atom Previews
+### Composable Atom Pattern
 
 ```swift
-#Preview("Primary Button") {
-    VStack(spacing: 16) {
-        PrimaryButton(title: "Enabled", action: {})
-        PrimaryButton(title: "Loading", action: {}, isLoading: true)
-        PrimaryButton(title: "Disabled", action: {}, isEnabled: false)
-    }
-    .padding()
-}
-
-#Preview("Text Fields") {
-    VStack(spacing: 16) {
-        StandardTextField(placeholder: "Email", text: .constant(""))
-        SecureTextField(placeholder: "Password", text: .constant(""))
-    }
-    .padding()
-}
-```
-
-### Molecule Previews
-
-```swift
-#Preview("Search Bar") {
-    SearchBar(text: .constant(""))
-        .padding()
-}
-
-#Preview("Form Input") {
-    VStack {
-        FormInput(label: "Email", placeholder: "Enter your email", text: .constant(""))
-        FormInput(label: "Password", placeholder: "Enter password", text: .constant(""), errorMessage: "Password is too short")
-    }
-    .padding()
-}
-```
-
-### Organism Previews
-
-```swift
-#Preview("Product Card") {
-    ProductCard(
-        product: Product(
-            id: "1",
-            name: "iPhone 15 Pro",
-            description: "The most powerful iPhone ever",
-            price: 999.99,
-            imageURL: nil,
-            inStock: true
-        ),
-        onAddToCart: {}
-    )
-    .padding()
-}
-```
-
-## Component Library Organization
-
-### File Structure
-
-```
-DesignSystem/
-├── Atoms/
-│   ├── Buttons/
-│   │   ├── PrimaryButton.swift
-│   │   ├── SecondaryButton.swift
-│   │   └── IconButton.swift
-│   ├── TextFields/
-│   │   ├── StandardTextField.swift
-│   │   └── SecureTextField.swift
-│   └── Labels/
-│       ├── TitleLabel.swift
-│       └── Badge.swift
-├── Molecules/
-│   ├── SearchBar.swift
-│   ├── Card.swift
-│   ├── FormInput.swift
-│   └── TagList.swift
-├── Organisms/
-│   ├── CustomNavigationBar.swift
-│   ├── ProductCard.swift
-│   └── ItemList.swift
-├── Templates/
-│   ├── StandardPageTemplate.swift
-│   └── FormTemplate.swift
-└── Tokens/
-    ├── Colors.swift
-    ├── Typography.swift
-    └── Spacing.swift
-```
-
-## Best Practices
-
-### 1. Keep Atoms Pure
-
-```swift
-// ✅ Good: Simple, reusable
+// Atom with sensible defaults and overrides
 struct PrimaryButton: View {
     let title: String
     let action: () -> Void
-}
+    var isLoading: Bool = false
+    var isEnabled: Bool = true
+    var size: Size = .regular
 
-// ❌ Avoid: Too much logic in atom
-struct PrimaryButton: View {
-    @EnvironmentObject var authManager: AuthManager
-    // Atoms should not know about app state
-}
-```
+    enum Size {
+        case small, regular, large
 
-### 2. Use View Builders
+        var padding: EdgeInsets {
+            switch self {
+            case .small: return EdgeInsets(horizontal: Spacing.sm, vertical: Spacing.xs)
+            case .regular: return EdgeInsets(horizontal: Spacing.md, vertical: Spacing.sm)
+            case .large: return EdgeInsets(horizontal: Spacing.lg, vertical: Spacing.md)
+            }
+        }
 
-```swift
-// ✅ Good: Flexible content
-struct Card<Content: View>: View {
-    let content: Content
+        var font: Font {
+            switch self {
+            case .small: return .caption
+            case .regular: return .bodyRegular
+            case .large: return .heading2
+            }
+        }
+    }
 
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if isLoading {
+                    ProgressView()
+                } else {
+                    Text(title).font(size.font)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(size.padding)
+        }
+        .background(isEnabled ? Color.brandPrimary : Color.textSecondary)
+        .foregroundColor(.white)
+        .cornerRadius(Radius.md)
+        .disabled(!isEnabled || isLoading)
     }
 }
 ```
 
-### 3. Provide Previews
+### Molecule with Slot Pattern
 
 ```swift
-// Always include previews for documentation
-#Preview("Component Name") {
-    ComponentView()
+// Generic molecule with customizable slots
+struct Card<Content: View, Footer: View>: View {
+    let content: Content
+    let footer: Footer?
+
+    init(
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder footer: () -> Footer
+    ) {
+        self.content = content()
+        self.footer = footer()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            content
+
+            if let footer = footer {
+                Divider()
+                footer
+            }
+        }
+        .padding(Spacing.md)
+        .background(Color.surface)
+        .cornerRadius(Radius.lg)
+        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+    }
+}
+
+// Convenience initializer without footer
+extension Card where Footer == EmptyView {
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+        self.footer = nil
+    }
 }
 ```
 
-### 4. Use Design Tokens
+---
 
-```swift
-// ✅ Good: Uses tokens
-.padding(Spacing.md)
-.foregroundColor(Color.brandPrimary)
+## Quick Reference
 
-// ❌ Avoid: Hard-coded values
-.padding(16)
-.foregroundColor(.blue)
-```
+### When to Extract Components
 
-## References
+| Scenario | Action |
+|----------|--------|
+| Used once | Keep inline |
+| Used 2-3 times in same feature | Local extraction |
+| Used across features | Design system component |
+| Complex but single-use | Extract for readability only |
 
-- [Atomic Design by Brad Frost](https://atomicdesign.bradfrost.com/)
-- [SwiftUI Documentation](https://developer.apple.com/documentation/swiftui)
-- [Design Systems Guide](https://www.designsystems.com/)
+### Component Classification
+
+| Level | Examples | Knows About |
+|-------|----------|-------------|
+| Atom | Button, TextField, Icon, Badge | Nothing external |
+| Molecule | SearchBar, FormInput, Card | Atoms only |
+| Organism | NavigationBar, ProductCard, UserList | Atoms + Molecules |
+| Template | ListPageLayout, FormLayout | Organisms |
+
+### Design Token Categories
+
+| Category | Token Examples |
+|----------|----------------|
+| Spacing | xs, sm, md, lg, xl |
+| Color | textPrimary, surface, brandPrimary, error |
+| Typography | displayLarge, heading1, body, caption |
+| Radius | sm, md, lg, full |
+| Shadow | subtle, elevated, prominent |
+
+### Red Flags
+
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| Atom uses @EnvironmentObject | Knows too much | Pass state as params |
+| 10+ parameters on component | Too flexible | Split into variants |
+| Magic numbers in components | Not themeable | Use tokens |
+| Template builds from atoms | Skipping levels | Use molecules/organisms |
+| Different corner radius per component | Inconsistency | Token system |
+| Component fetches data | Wrong layer | Presentational only |

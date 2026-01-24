@@ -1,627 +1,404 @@
 ---
-name: "Navigation Patterns"
-description: "Comprehensive SwiftUI NavigationStack and routing patterns for iOS/tvOS development"
-version: "2.0.0"
+name: navigation-patterns
+description: "Expert navigation decisions for iOS/tvOS: when NavigationStack vs Coordinator patterns, NavigationPath state management trade-offs, deep link architecture choices, and tab+navigation coordination strategies. Use when designing app navigation, implementing deep links, or debugging navigation state issues. Trigger keywords: NavigationStack, NavigationPath, deep link, routing, tab bar, navigation, programmatic navigation, universal link, URL scheme, navigation state"
+version: "3.0.0"
 ---
 
-# Navigation Patterns for iOS/tvOS
+# Navigation Patterns — Expert Decisions
 
-Complete guide to implementing navigation in SwiftUI using NavigationStack (iOS 16+), NavigationPath, deep linking, and programmatic navigation.
+Expert decision frameworks for SwiftUI navigation choices. Claude knows NavigationStack syntax — this skill provides judgment calls for architecture decisions and state management trade-offs.
 
-## Core Navigation Concepts
+---
 
-### NavigationStack (iOS 16+)
+## Decision Trees
 
-**Modern Approach:**
-```swift
-struct ContentView: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                NavigationLink("Detail") {
-                    DetailView()
-                }
-            }
-            .navigationTitle("Home")
-        }
-    }
-}
+### Navigation Architecture Selection
+
+```
+How complex is your navigation?
+├─ Simple (linear flows, 1-3 screens)
+│  └─ NavigationStack with inline NavigationLink
+│     No Router needed
+│
+├─ Medium (multiple flows, deep linking required)
+│  └─ NavigationStack + Router (ObservableObject)
+│     Centralized navigation state
+│
+└─ Complex (tabs with independent stacks, cross-tab navigation)
+   └─ Tab Coordinator + per-tab Routers
+      Each tab maintains own NavigationPath
 ```
 
-**Key Benefits:**
-- Type-safe navigation
-- Programmatic control via NavigationPath
-- Improved performance over deprecated NavigationView
-- Deep linking support
-- State restoration capabilities
+### NavigationPath vs Typed Array
 
-### Navigation with Value-Based Routing
-
-```swift
-struct ContentView: View {
-    @State private var path = NavigationPath()
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            List(items) { item in
-                NavigationLink(value: item) {
-                    ItemRow(item: item)
-                }
-            }
-            .navigationDestination(for: Item.self) { item in
-                ItemDetailView(item: item)
-            }
-            .navigationTitle("Items")
-        }
-    }
-}
+```
+Do you need heterogeneous routes?
+├─ YES (different types in same stack)
+│  └─ NavigationPath (type-erased)
+│     path.append(User(...))
+│     path.append(Product(...))
+│
+└─ NO (single route enum)
+   └─ @State var path: [Route] = []
+      Type-safe, debuggable, serializable
 ```
 
-## NavigationPath Management
+**Rule**: Prefer typed arrays unless you genuinely need mixed types. NavigationPath's type erasure makes debugging harder.
 
-### Basic NavigationPath
+### Deep Link Handling Strategy
 
-```swift
-final class NavigationManager: ObservableObject {
-    @Published var path = NavigationPath()
-
-    func navigateTo(_ destination: AnyHashable) {
-        path.append(destination)
-    }
-
-    func navigateBack() {
-        if !path.isEmpty {
-            path.removeLast()
-        }
-    }
-
-    func popToRoot() {
-        path.removeLast(path.count)
-    }
-}
+```
+When does deep link arrive?
+├─ App already running (warm start)
+│  └─ Direct navigation via Router
+│
+└─ App launches from deep link (cold start)
+   └─ Is view hierarchy ready?
+      ├─ YES → Navigate immediately
+      └─ NO → Queue pending deep link
+         Handle in root view's .onAppear
 ```
 
-### Type-Safe NavigationPath
+### Modal vs Push Selection
 
+```
+Is the destination a self-contained flow?
+├─ YES (can complete/cancel independently)
+│  └─ Modal (.sheet or .fullScreenCover)
+│     Examples: Settings, Compose, Login
+│
+└─ NO (part of current navigation hierarchy)
+   └─ Push (NavigationLink or path.append)
+      Examples: Detail views, drill-down
+```
+
+---
+
+## NEVER Do
+
+### NavigationPath State
+
+**NEVER** store NavigationPath in ViewModel without careful consideration:
 ```swift
-// Define navigation destinations
-enum Route: Hashable {
-    case home
-    case profile(userId: String)
-    case settings
-    case detail(itemId: Int)
+// ❌ ViewModel owns navigation — couples business logic to navigation
+@MainActor
+final class HomeViewModel: ObservableObject {
+    @Published var path = NavigationPath()  // Wrong layer!
 }
 
+// ✅ Router/Coordinator owns navigation, ViewModel owns data
+@MainActor
 final class Router: ObservableObject {
     @Published var path = NavigationPath()
+}
+
+@MainActor
+final class HomeViewModel: ObservableObject {
+    @Published var items: [Item] = []  // Data only
+}
+```
+
+**NEVER** use NavigationPath across tabs:
+```swift
+// ❌ Shared path across tabs — navigation becomes unpredictable
+struct MainTabView: View {
+    @StateObject var router = Router()  // Single router!
+
+    var body: some View {
+        TabView {
+            // Both tabs share same path — chaos
+        }
+    }
+}
+
+// ✅ Each tab has independent navigation stack
+struct MainTabView: View {
+    @StateObject var homeRouter = Router()
+    @StateObject var searchRouter = Router()
+
+    var body: some View {
+        TabView {
+            NavigationStack(path: $homeRouter.path) { ... }
+            NavigationStack(path: $searchRouter.path) { ... }
+        }
+    }
+}
+```
+
+**NEVER** forget to handle deep links arriving before view hierarchy:
+```swift
+// ❌ Race condition — navigation may fail silently
+@main
+struct MyApp: App {
+    @StateObject var router = Router()
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .onOpenURL { url in
+                    router.handle(url)  // View may not exist yet!
+                }
+        }
+    }
+}
+
+// ✅ Queue deep link for deferred handling
+@main
+struct MyApp: App {
+    @StateObject var router = Router()
+    @State private var pendingDeepLink: URL?
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .onAppear {
+                    if let url = pendingDeepLink {
+                        router.handle(url)
+                        pendingDeepLink = nil
+                    }
+                }
+                .onOpenURL { url in
+                    pendingDeepLink = url
+                }
+        }
+    }
+}
+```
+
+### Route Design
+
+**NEVER** use stringly-typed routes:
+```swift
+// ❌ No compile-time safety, typos cause runtime failures
+func navigate(to screen: String) {
+    switch screen {
+    case "profile": ...
+    case "setings": ...  // Typo — silent failure
+    }
+}
+
+// ✅ Enum routes with associated values
+enum Route: Hashable {
+    case profile(userId: String)
+    case settings
+}
+```
+
+**NEVER** put navigation logic in Views:
+```swift
+// ❌ View knows too much about app structure
+struct ItemRow: View {
+    var body: some View {
+        NavigationLink {
+            ItemDetailView(item: item)  // View creates destination
+        } label: {
+            Text(item.name)
+        }
+    }
+}
+
+// ✅ Delegate navigation to Router
+struct ItemRow: View {
+    @EnvironmentObject var router: Router
+
+    var body: some View {
+        Button(item.name) {
+            router.navigate(to: .itemDetail(item.id))
+        }
+    }
+}
+```
+
+### Navigation State Persistence
+
+**NEVER** lose navigation state on app termination without consideration:
+```swift
+// ❌ User loses their place when app is killed
+@StateObject var router = Router()  // State lost on terminate
+
+// ✅ Persist for important flows (optional based on UX needs)
+@SceneStorage("navigationPath") private var pathData: Data?
+
+var body: some View {
+    NavigationStack(path: $router.path) { ... }
+        .onAppear { router.restore(from: pathData) }
+        .onChange(of: router.path) { pathData = router.serialize() }
+}
+```
+
+---
+
+## Essential Patterns
+
+### Type-Safe Router
+
+```swift
+@MainActor
+final class Router: ObservableObject {
+    enum Route: Hashable {
+        case userList
+        case userDetail(userId: String)
+        case settings
+        case settingsSection(SettingsSection)
+    }
+
+    @Published var path: [Route] = []
 
     func navigate(to route: Route) {
         path.append(route)
     }
 
-    func back() {
+    func pop() {
         guard !path.isEmpty else { return }
         path.removeLast()
     }
 
-    func reset() {
-        path = NavigationPath()
+    func popToRoot() {
+        path.removeAll()
     }
-}
 
-// Usage in View
-struct ContentView: View {
-    @StateObject private var router = Router()
-
-    var body: some View {
-        NavigationStack(path: $router.path) {
-            HomeView()
-                .navigationDestination(for: Route.self) { route in
-                    destinationView(for: route)
-                }
-        }
-        .environmentObject(router)
+    func replaceStack(with routes: [Route]) {
+        path = routes
     }
 
     @ViewBuilder
-    private func destinationView(for route: Route) -> some View {
+    func destination(for route: Route) -> some View {
         switch route {
-        case .home:
-            HomeView()
-        case .profile(let userId):
-            ProfileView(userId: userId)
+        case .userList:
+            UserListView()
+        case .userDetail(let userId):
+            UserDetailView(userId: userId)
         case .settings:
             SettingsView()
-        case .detail(let itemId):
-            DetailView(itemId: itemId)
+        case .settingsSection(let section):
+            SettingsSectionView(section: section)
         }
     }
 }
 ```
 
-## Deep Linking
-
-### URL Scheme Registration
-
-**Info.plist:**
-```xml
-<key>CFBundleURLTypes</key>
-<array>
-    <dict>
-        <key>CFBundleURLName</key>
-        <string>com.yourapp.deeplink</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-            <string>yourapp</string>
-        </array>
-    </dict>
-</array>
-```
-
-### Deep Link Handling
+### Deep Link Handler
 
 ```swift
-@main
-struct YourApp: App {
-    @StateObject private var router = Router()
+enum DeepLink {
+    case user(id: String)
+    case product(id: String)
+    case settings
 
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(router)
-                .onOpenURL { url in
-                    handleDeepLink(url)
-                }
-        }
-    }
+    init?(url: URL) {
+        guard let scheme = url.scheme,
+              ["myapp", "https"].contains(scheme) else { return nil }
 
-    private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "yourapp" else { return }
-
-        // Parse URL: yourapp://profile/123
-        let path = url.path
-        let components = path.components(separatedBy: "/").filter { !$0.isEmpty }
+        let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let components = path.components(separatedBy: "/")
 
         switch components.first {
-        case "profile":
-            if let userId = components.last {
-                router.navigate(to: .profile(userId: userId))
-            }
+        case "user":
+            guard components.count > 1 else { return nil }
+            self = .user(id: components[1])
+        case "product":
+            guard components.count > 1 else { return nil }
+            self = .product(id: components[1])
         case "settings":
-            router.navigate(to: .settings)
+            self = .settings
         default:
-            break
+            return nil
+        }
+    }
+}
+
+extension Router {
+    func handle(_ deepLink: DeepLink) {
+        popToRoot()
+
+        switch deepLink {
+        case .user(let id):
+            navigate(to: .userList)
+            navigate(to: .userDetail(userId: id))
+        case .product(let id):
+            navigate(to: .productDetail(productId: id))
+        case .settings:
+            navigate(to: .settings)
         }
     }
 }
 ```
 
-### Universal Links
-
-**apple-app-site-association (on server):**
-```json
-{
-    "applinks": {
-        "apps": [],
-        "details": [
-            {
-                "appID": "TEAMID.com.yourapp",
-                "paths": ["/items/*", "/profile/*"]
-            }
-        ]
-    }
-}
-```
-
-**SwiftUI Handling:**
-```swift
-.onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { userActivity in
-    guard let url = userActivity.webpageURL else { return }
-    handleUniversalLink(url)
-}
-
-private func handleUniversalLink(_ url: URL) {
-    // Parse: https://yourapp.com/items/123
-    let path = url.path
-
-    if path.hasPrefix("/items/"), let itemId = Int(path.replacingOccurrences(of: "/items/", with: "")) {
-        router.navigate(to: .detail(itemId: itemId))
-    }
-}
-```
-
-## Tab Bar + NavigationStack Coordination
-
-### Proper Architecture
+### Tab + Navigation Coordination
 
 ```swift
-enum Tab: Hashable {
-    case home
-    case search
-    case profile
-}
-
 struct MainTabView: View {
     @State private var selectedTab: Tab = .home
     @StateObject private var homeRouter = Router()
-    @StateObject private var searchRouter = Router()
     @StateObject private var profileRouter = Router()
+
+    enum Tab { case home, search, profile }
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Home Tab
             NavigationStack(path: $homeRouter.path) {
                 HomeView()
-                    .navigationDestination(for: Route.self) { route in
-                        destinationView(for: route)
+                    .navigationDestination(for: Router.Route.self) { route in
+                        homeRouter.destination(for: route)
                     }
-            }
-            .tabItem {
-                Label("Home", systemImage: "house")
             }
             .tag(Tab.home)
             .environmentObject(homeRouter)
 
-            // Search Tab
-            NavigationStack(path: $searchRouter.path) {
-                SearchView()
-                    .navigationDestination(for: Route.self) { route in
-                        destinationView(for: route)
-                    }
-            }
-            .tabItem {
-                Label("Search", systemImage: "magnifyingglass")
-            }
-            .tag(Tab.search)
-            .environmentObject(searchRouter)
-
-            // Profile Tab
             NavigationStack(path: $profileRouter.path) {
                 ProfileView()
-                    .navigationDestination(for: Route.self) { route in
-                        destinationView(for: route)
+                    .navigationDestination(for: Router.Route.self) { route in
+                        profileRouter.destination(for: route)
                     }
-            }
-            .tabItem {
-                Label("Profile", systemImage: "person")
             }
             .tag(Tab.profile)
             .environmentObject(profileRouter)
         }
     }
 
-    @ViewBuilder
-    private func destinationView(for route: Route) -> some View {
-        // Shared destination view builder
-        switch route {
-        case .home: HomeView()
-        case .profile(let userId): ProfileDetailView(userId: userId)
-        case .settings: SettingsView()
-        case .detail(let itemId): ItemDetailView(itemId: itemId)
-        }
-    }
-}
-```
-
-## Modal Presentation
-
-### Sheet Presentation
-
-```swift
-struct HomeView: View {
-    @State private var showingSettings = false
-    @State private var selectedItem: Item?
-
-    var body: some View {
-        List(items) { item in
-            Button(item.name) {
-                selectedItem = item
+    // Pop to root on tab re-selection
+    func tabSelected(_ tab: Tab) {
+        if selectedTab == tab {
+            switch tab {
+            case .home: homeRouter.popToRoot()
+            case .profile: profileRouter.popToRoot()
+            case .search: break
             }
         }
-        .sheet(item: $selectedItem) { item in
-            NavigationStack {
-                ItemDetailView(item: item)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") {
-                                selectedItem = nil
-                            }
-                        }
-                    }
-            }
-        }
-        .toolbar {
-            Button("Settings") {
-                showingSettings = true
-            }
-        }
-        .sheet(isPresented: $showingSettings) {
-            NavigationStack {
-                SettingsView()
-            }
-        }
+        selectedTab = tab
     }
 }
 ```
 
-### Full Screen Cover
+---
 
-```swift
-struct ContentView: View {
-    @State private var showOnboarding = false
+## Quick Reference
 
-    var body: some View {
-        NavigationStack {
-            // Content
-        }
-        .fullScreenCover(isPresented: $showOnboarding) {
-            OnboardingView()
-        }
-    }
-}
-```
+### Navigation Architecture Comparison
 
-### Confirmation Dialog
+| Pattern | Complexity | Deep Link Support | Testability |
+|---------|------------|-------------------|-------------|
+| Inline NavigationLink | Low | Manual | Low |
+| Router with typed array | Medium | Good | High |
+| NavigationPath | Medium | Good | Medium |
+| Coordinator Pattern | High | Excellent | Excellent |
 
-```swift
-struct ItemRow: View {
-    let item: Item
-    @State private var showingOptions = false
+### When to Use Each Modal Type
 
-    var body: some View {
-        Button(item.name) {
-            showingOptions = true
-        }
-        .confirmationDialog("Options", isPresented: $showingOptions) {
-            Button("Edit") { /* ... */ }
-            Button("Share") { /* ... */ }
-            Button("Delete", role: .destructive) { /* ... */ }
-        }
-    }
-}
-```
+| Modal Type | Use For |
+|------------|---------|
+| `.sheet` | Secondary tasks, can dismiss |
+| `.fullScreenCover` | Immersive flows (onboarding, login) |
+| `.alert` | Critical decisions |
+| `.confirmationDialog` | Action choices |
 
-## Programmatic Navigation
+### Red Flags
 
-### Navigate on Action
-
-```swift
-struct LoginView: View {
-    @EnvironmentObject var router: Router
-    @StateObject private var viewModel = LoginViewModel()
-
-    var body: some View {
-        VStack {
-            // Login form
-        }
-        .onChange(of: viewModel.isAuthenticated) { isAuth in
-            if isAuth {
-                router.navigate(to: .home)
-            }
-        }
-    }
-}
-```
-
-### Navigate from ViewModel
-
-```swift
-@MainActor
-final class LoginViewModel: ObservableObject {
-    @Published var isAuthenticated = false
-    private let router: Router
-
-    init(router: Router) {
-        self.router = router
-    }
-
-    func login() async {
-        // Perform login
-        isAuthenticated = true
-        router.navigate(to: .home)
-    }
-}
-
-// Inject router in View
-struct LoginView: View {
-    @EnvironmentObject var router: Router
-    @StateObject private var viewModel: LoginViewModel
-
-    init(router: Router) {
-        _viewModel = StateObject(wrappedValue: LoginViewModel(router: router))
-    }
-
-    var body: some View {
-        VStack {
-            Button("Login") {
-                Task {
-                    await viewModel.login()
-                }
-            }
-        }
-    }
-}
-```
-
-## tvOS-Specific Navigation
-
-### Focus Management
-
-```swift
-struct tvOSMenuView: View {
-    @FocusState private var focusedItem: MenuItem?
-
-    enum MenuItem: Hashable {
-        case home
-        case movies
-        case tvShows
-        case settings
-    }
-
-    var body: some View {
-        VStack(spacing: 20) {
-            ForEach([MenuItem.home, .movies, .tvShows, .settings], id: \.self) { item in
-                Button(item.title) {
-                    // Navigate
-                }
-                .focused($focusedItem, equals: item)
-            }
-        }
-        .onAppear {
-            focusedItem = .home
-        }
-    }
-}
-```
-
-### Remote Control Navigation
-
-```swift
-struct tvOSNavigationView: View {
-    var body: some View {
-        NavigationStack {
-            ContentView()
-                .onPlayPauseCommand {
-                    // Handle play/pause button
-                }
-                .onExitCommand {
-                    // Handle menu button (back navigation)
-                }
-        }
-    }
-}
-```
-
-## Best Practices
-
-### 1. Use NavigationStack over NavigationView
-
-**✅ Good:**
-```swift
-NavigationStack(path: $path) {
-    ContentView()
-}
-```
-
-**❌ Avoid:**
-```swift
-NavigationView {  // Deprecated in iOS 16
-    ContentView()
-}
-```
-
-### 2. Centralize Navigation Logic
-
-```swift
-// Router as single source of truth
-@EnvironmentObject var router: Router
-
-// Avoid scattered @State navigation flags
-// ❌ Bad:
-@State private var showDetail = false
-@State private var showSettings = false
-@State private var showProfile = false
-```
-
-### 3. Type-Safe Routes
-
-```swift
-// Use enums for type safety
-enum Route: Hashable {
-    case detail(id: Int)
-}
-
-// Avoid stringly-typed navigation
-// ❌ Bad: navigateTo("detail/123")
-```
-
-### 4. Handle Back Button Properly
-
-```swift
-.toolbar {
-    ToolbarItem(placement: .navigationBarLeading) {
-        Button("Back") {
-            router.back()
-        }
-    }
-}
-```
-
-### 5. Test Navigation Flows
-
-```swift
-final class RouterTests: XCTestCase {
-    func testNavigationToDetail() {
-        let router = Router()
-        router.navigate(to: .detail(itemId: 123))
-
-        XCTAssertEqual(router.path.count, 1)
-    }
-
-    func testBackNavigation() {
-        let router = Router()
-        router.navigate(to: .detail(itemId: 123))
-        router.back()
-
-        XCTAssertEqual(router.path.count, 0)
-    }
-}
-```
-
-## Common Pitfalls
-
-### 1. Memory Leaks in NavigationPath
-
-**Issue:** Retaining references in closures
-**Fix:** Use `[weak self]` in closures
-
-### 2. Lost Navigation State
-
-**Issue:** Not persisting NavigationPath on app termination
-**Fix:** Save/restore path using SceneStorage or UserDefaults
-
-```swift
-@SceneStorage("navigationPath") private var pathData: Data = Data()
-
-var body: some View {
-    NavigationStack(path: $path) {
-        // ...
-    }
-    .onAppear {
-        restorePath()
-    }
-    .onChange(of: path) { _ in
-        savePath()
-    }
-}
-```
-
-### 3. Deep Link Race Conditions
-
-**Issue:** Deep link processed before view hierarchy ready
-**Fix:** Delay navigation until onAppear
-
-```swift
-@State private var pendingDeepLink: URL?
-
-var body: some View {
-    NavigationStack {
-        ContentView()
-            .onAppear {
-                if let url = pendingDeepLink {
-                    handleDeepLink(url)
-                    pendingDeepLink = nil
-                }
-            }
-    }
-    .onOpenURL { url in
-        pendingDeepLink = url
-    }
-}
-```
-
-## References
-
-- [Human Interface Guidelines - Navigation](https://developer.apple.com/design/human-interface-guidelines/navigation)
-- [NavigationStack Documentation](https://developer.apple.com/documentation/swiftui/navigationstack)
-- [Universal Links Guide](https://developer.apple.com/documentation/xcode/supporting-universal-links-in-your-app)
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| NavigationPath across tabs | State confusion | Per-tab routers |
+| View creates destination directly | Tight coupling | Router pattern |
+| String-based routing | No compile safety | Enum routes |
+| Deep link ignored on cold start | Race condition | Pending URL queue |
+| ViewModel owns NavigationPath | Layer violation | Router owns navigation |
+| No popToRoot on tab re-tap | UX expectation | Handle tab selection |

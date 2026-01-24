@@ -1,557 +1,527 @@
 ---
-name: "Push Notifications"
-description: "Remote and local push notification implementation for iOS/tvOS using UNUserNotificationCenter and APNs"
-version: "2.0.0"
+name: push-notifications
+description: "Expert notification decisions for iOS/tvOS: when to request permission, silent vs visible notification trade-offs, rich notification strategies, and APNs architecture choices. Use when implementing push notifications, debugging delivery issues, or designing notification UX. Trigger keywords: push notification, UNUserNotificationCenter, APNs, device token, silent notification, content-available, mutable-content, notification extension, notification actions, badge"
+version: "3.0.0"
 ---
 
-# Push Notifications for iOS/tvOS
+# Push Notifications — Expert Decisions
 
-Complete guide to implementing push notifications in iOS/tvOS applications using UNUserNotificationCenter, handling remote notifications, and integrating with Apple Push Notification service (APNs).
+Expert decision frameworks for notification choices. Claude knows UNUserNotificationCenter and APNs — this skill provides judgment calls for permission timing, delivery strategies, and architecture trade-offs.
 
-## Setup and Permissions
+---
 
-### Request Authorization
+## Decision Trees
 
+### Permission Request Timing
+
+```
+When should you ask for notification permission?
+├─ User explicitly wants notifications
+│  └─ After user taps "Enable Notifications" button
+│     Highest acceptance rate (70-80%)
+│
+├─ After demonstrating value
+│  └─ After user completes key action
+│     "Get notified when your order ships?"
+│     Context-specific, 50-60% acceptance
+│
+├─ First meaningful moment
+│  └─ After onboarding, before home screen
+│     Explain why, 30-40% acceptance
+│
+└─ On app launch
+   └─ AVOID — lowest acceptance (15-20%)
+      No context, feels intrusive
+```
+
+**The trap**: Requesting permission on first launch. Users deny reflexively. Wait for a moment when notifications clearly add value.
+
+### Silent vs Visible Notification
+
+```
+What's the notification purpose?
+├─ Background data sync
+│  └─ Silent notification (content-available: 1)
+│     No user interruption, wakes app
+│
+├─ User needs to know immediately
+│  └─ Visible alert
+│     Messages, time-sensitive info
+│
+├─ Informational, not urgent
+│  └─ Badge + silent
+│     User sees count, checks when ready
+│
+└─ Needs user action
+   └─ Visible with actions
+      Reply, accept/decline buttons
+```
+
+### Notification Extension Strategy
+
+```
+Do you need to modify notifications?
+├─ Download images/media
+│  └─ Notification Service Extension
+│     mutable-content: 1 in payload
+│
+├─ Decrypt end-to-end encrypted content
+│  └─ Notification Service Extension
+│     Required for E2EE messaging
+│
+├─ Custom notification UI
+│  └─ Notification Content Extension
+│     Long-press/3D Touch custom view
+│
+└─ Standard text/badge
+   └─ No extension needed
+      Less complexity, faster delivery
+```
+
+### Token Management
+
+```
+How should you handle device tokens?
+├─ Single device per user
+│  └─ Replace token on registration
+│     Simple, most apps need this
+│
+├─ Multiple devices per user
+│  └─ Register all tokens
+│     Send to all active devices
+│
+├─ Token changed (reinstall/restore)
+│  └─ Deduplicate on server
+│     Same device, new token
+│
+└─ User logged out
+   └─ Deregister token from user
+      Prevents notifications to wrong user
+```
+
+---
+
+## NEVER Do
+
+### Permission Handling
+
+**NEVER** request permission without context:
 ```swift
-import UserNotifications
+// ❌ First thing on app launch — user denies
+func application(_ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
+    return true
+}
 
-final class NotificationManager: NSObject, ObservableObject {
-    static let shared = NotificationManager()
-
-    func requestAuthorization() async -> Bool {
-        do {
-            let granted = try await UNUserNotificationCenter.current().requestAuthorization(
-                options: [.alert, .sound, .badge]
-            )
-            return granted
-        } catch {
-            print("Error requesting notification authorization: \(error)")
-            return false
+// ✅ After user action that demonstrates value
+func userTappedEnableNotifications() {
+    showPrePermissionExplanation {
+        Task {
+            let granted = try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .badge, .sound])
+            if granted == true {
+                await MainActor.run { registerForRemoteNotifications() }
+            }
         }
     }
+}
+```
 
-    func checkAuthorizationStatus() async -> UNAuthorizationStatus {
+**NEVER** ignore denied permission:
+```swift
+// ❌ Keeps trying, annoys user
+func checkNotifications() {
+    Task {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        return settings.authorizationStatus
-    }
-}
-
-// SwiftUI usage
-struct ContentView: View {
-    @StateObject private var notificationManager = NotificationManager.shared
-
-    var body: some View {
-        VStack {
-            Button("Enable Notifications") {
-                Task {
-                    let granted = await notificationManager.requestAuthorization()
-                    print("Authorized: \(granted)")
-                }
-            }
+        if settings.authorizationStatus == .denied {
+            // Ask again!  <- User already said no
+            requestPermission()
         }
     }
 }
-```
 
-### Register for Remote Notifications
-
-```swift
-// AppDelegate.swift
-import UIKit
-import UserNotifications
-
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        UNUserNotificationCenter.current().delegate = self
-
-        Task {
-            let granted = await NotificationManager.shared.requestAuthorization()
-            if granted {
-                await MainActor.run {
-                    application.registerForRemoteNotifications()
-                }
-            }
-        }
-
-        return true
-    }
-
-    func application(
-        _ application: UIApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
-        let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        print("Device Token: \(token)")
-
-        // Send token to backend
-        Task {
-            await sendTokenToServer(token)
-        }
-    }
-
-    func application(
-        _ application: UIApplication,
-        didFailToRegisterForRemoteNotificationsWithError error: Error
-    ) {
-        print("Failed to register for remote notifications: \(error)")
-    }
-
-    private func sendTokenToServer(_ token: String) async {
-        // Send device token to your backend
-    }
-}
-```
-
-## Notification Payload Handling
-
-### Remote Notification Payload
-
-```json
-{
-  "aps": {
-    "alert": {
-      "title": "New Message",
-      "subtitle": "From John Doe",
-      "body": "Hey, how are you doing?"
-    },
-    "badge": 1,
-    "sound": "default",
-    "category": "MESSAGE_CATEGORY",
-    "thread-id": "conversation-123"
-  },
-  "customData": {
-    "userId": "123",
-    "conversationId": "456",
-    "messageId": "789"
-  }
-}
-```
-
-### Handle Notification Reception
-
-```swift
-extension AppDelegate: UNUserNotificationCenterDelegate {
-    // Notification received while app is in foreground
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        print("Received notification: \(notification.request.content.userInfo)")
-
-        // Show banner, play sound, and update badge
-        return [.banner, .sound, .badge]
-    }
-
-    // User tapped notification
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        let userInfo = response.notification.request.content.userInfo
-
-        // Extract custom data
-        if let customData = userInfo["customData"] as? [String: Any],
-           let conversationId = customData["conversationId"] as? String {
-            // Navigate to conversation
-            await openConversation(id: conversationId)
-        }
-    }
-
-    private func openConversation(id: String) async {
-        // Deep link to conversation
-    }
-}
-```
-
-## Local Notifications
-
-### Schedule Local Notification
-
-```swift
-final class LocalNotificationService {
-    func scheduleNotification(
-        title: String,
-        body: String,
-        date: Date,
-        identifier: String
-    ) async throws {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        content.badge = 1
-
-        // Calendar trigger
-        let dateComponents = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute],
-            from: date
-        )
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
-
-        // Create request
-        let request = UNNotificationRequest(
-            identifier: identifier,
-            content: content,
-            trigger: trigger
-        )
-
-        try await UNUserNotificationCenter.current().add(request)
-    }
-
-    func scheduleRepeatingNotification(
-        title: String,
-        body: String,
-        hour: Int,
-        minute: Int,
-        identifier: String
-    ) async throws {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-
-        var dateComponents = DateComponents()
-        dateComponents.hour = hour
-        dateComponents.minute = minute
-
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: dateComponents,
-            repeats: true
-        )
-
-        let request = UNNotificationRequest(
-            identifier: identifier,
-            content: content,
-            trigger: trigger
-        )
-
-        try await UNUserNotificationCenter.current().add(request)
-    }
-
-    func cancelNotification(identifier: String) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: [identifier]
-        )
-    }
-
-    func cancelAllNotifications() {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-    }
-}
-```
-
-## Notification Actions
-
-### Define Categories and Actions
-
-```swift
-final class NotificationActionManager {
-    static let messageCategory = "MESSAGE_CATEGORY"
-    static let reminderCategory = "REMINDER_CATEGORY"
-
-    func registerCategories() {
-        // Message actions
-        let replyAction = UNTextInputNotificationAction(
-            identifier: "REPLY_ACTION",
-            title: "Reply",
-            options: [],
-            textInputButtonTitle: "Send",
-            textInputPlaceholder: "Type your message..."
-        )
-
-        let markReadAction = UNNotificationAction(
-            identifier: "MARK_READ_ACTION",
-            title: "Mark as Read",
-            options: []
-        )
-
-        let messageCategory = UNNotificationCategory(
-            identifier: Self.messageCategory,
-            actions: [replyAction, markReadAction],
-            intentIdentifiers: [],
-            options: []
-        )
-
-        // Reminder actions
-        let snoozeAction = UNNotificationAction(
-            identifier: "SNOOZE_ACTION",
-            title: "Snooze",
-            options: []
-        )
-
-        let completeAction = UNNotificationAction(
-            identifier: "COMPLETE_ACTION",
-            title: "Complete",
-            options: [.destructive]
-        )
-
-        let reminderCategory = UNNotificationCategory(
-            identifier: Self.reminderCategory,
-            actions: [snoozeAction, completeAction],
-            intentIdentifiers: [],
-            options: []
-        )
-
-        UNUserNotificationCenter.current().setNotificationCategories([
-            messageCategory,
-            reminderCategory
-        ])
-    }
-}
-
-// Handle actions
-extension AppDelegate: UNUserNotificationCenterDelegate {
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        switch response.actionIdentifier {
-        case "REPLY_ACTION":
-            if let textResponse = response as? UNTextInputNotificationResponse {
-                await handleReply(text: textResponse.userText)
-            }
-
-        case "MARK_READ_ACTION":
-            await markAsRead()
-
-        case "SNOOZE_ACTION":
-            await snoozeReminder()
-
-        case "COMPLETE_ACTION":
-            await completeReminder()
-
-        default:
-            // Default tap (no action selected)
+// ✅ Respect denial, offer settings path
+func checkNotifications() {
+    Task {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .denied:
+            showSettingsPrompt()  // "Enable in Settings to receive..."
+        case .notDetermined:
+            showPrePermissionScreen()
+        case .authorized, .provisional, .ephemeral:
+            ensureRegistered()
+        @unknown default:
             break
         }
     }
 }
 ```
 
-## Silent Notifications
+### Token Handling
 
-### Background Updates
-
+**NEVER** cache device tokens long-term in app:
 ```swift
-// Enable background modes in Xcode: Remote notifications
+// ❌ Token may change without app knowing
+class TokenManager {
+    static var cachedToken: String?  // Stale after reinstall!
 
-// AppDelegate
-func application(
-    _ application: UIApplication,
-    didReceiveRemoteNotification userInfo: [AnyHashable: Any]
-) async -> UIBackgroundFetchResult {
-    print("Received silent notification: \(userInfo)")
+    func getToken() -> String? {
+        return Self.cachedToken  // May be invalid
+    }
+}
 
-    // Perform background update
+// ✅ Always use fresh token from registration callback
+func application(_ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+    let token = deviceToken.hexString
+
+    // Send to server immediately — this is the source of truth
+    Task {
+        await sendTokenToServer(token)
+    }
+}
+```
+
+**NEVER** assume token format:
+```swift
+// ❌ Token format is not guaranteed
+let tokenString = String(data: deviceToken, encoding: .utf8)  // Returns nil!
+
+// ✅ Convert bytes to hex
+extension Data {
+    var hexString: String {
+        map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+let tokenString = deviceToken.hexString
+```
+
+### Silent Notifications
+
+**NEVER** rely on silent notifications for time-critical delivery:
+```swift
+// ❌ Silent notifications are low priority
+// Server sends: {"aps": {"content-available": 1}}
+// Expecting: Immediate delivery
+// Reality: iOS may delay minutes/hours or drop entirely
+
+// ✅ Use visible notification for time-critical content
+// Or use silent for prefetch, visible for alert
+{
+    "aps": {
+        "alert": {"title": "New Message", "body": "..."},
+        "content-available": 1  // Also prefetch in background
+    }
+}
+```
+
+**NEVER** do heavy work in silent notification handler:
+```swift
+// ❌ System will kill your app
+func application(_ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+
+    await downloadLargeFiles()  // Takes too long!
+    await processAllData()       // iOS terminates app
+
+    return .newData
+}
+
+// ✅ Quick fetch, defer heavy processing
+func application(_ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+
+    // 30 seconds max — fetch metadata only
     do {
-        await updateData()
-        return .newData
+        let hasNew = try await checkForNewContent()
+        if hasNew {
+            scheduleBackgroundProcessing()  // BGProcessingTask
+        }
+        return hasNew ? .newData : .noData
     } catch {
         return .failed
     }
 }
-
-// Silent notification payload
-{
-  "aps": {
-    "content-available": 1
-  },
-  "customData": {
-    "type": "dataUpdate",
-    "timestamp": 1234567890
-  }
-}
 ```
-
-## Rich Notifications
 
 ### Notification Service Extension
 
+**NEVER** forget expiration handler:
 ```swift
-// 1. Create Notification Service Extension target in Xcode
-// 2. Implement NotificationService class
+// ❌ System shows unmodified notification
+class NotificationService: UNNotificationServiceExtension {
+    override func didReceive(_ request: UNNotificationRequest,
+        withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
 
-import UserNotifications
+        // Start async work...
+        downloadImage { image in
+            // Never called if timeout!
+            contentHandler(modifiedContent)
+        }
+    }
 
+    // Missing serviceExtensionTimeWillExpire!
+}
+
+// ✅ Always implement expiration handler
 class NotificationService: UNNotificationServiceExtension {
     var contentHandler: ((UNNotificationContent) -> Void)?
     var bestAttemptContent: UNMutableNotificationContent?
 
-    override func didReceive(
-        _ request: UNNotificationRequest,
-        withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
-    ) {
+    override func didReceive(_ request: UNNotificationRequest,
+        withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         self.contentHandler = contentHandler
-        bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
+        bestAttemptContent = request.content.mutableCopy() as? UNMutableNotificationContent
 
-        guard let bestAttemptContent = bestAttemptContent else {
+        downloadImage { [weak self] image in
+            guard let self, let content = self.bestAttemptContent else { return }
+            if let image { content.attachments = [image] }
+            contentHandler(content)
+        }
+    }
+
+    override func serviceExtensionTimeWillExpire() {
+        // Called ~30 seconds — deliver what you have
+        if let content = bestAttemptContent {
+            contentHandler?(content)
+        }
+    }
+}
+```
+
+---
+
+## Essential Patterns
+
+### Permission Flow with Pre-Permission
+
+```swift
+@MainActor
+final class NotificationPermissionManager: ObservableObject {
+    @Published var status: UNAuthorizationStatus = .notDetermined
+
+    func checkStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        status = settings.authorizationStatus
+    }
+
+    func requestPermission() async -> Bool {
+        do {
+            let granted = try await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .badge, .sound])
+
+            if granted {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+
+            await checkStatus()
+            return granted
+        } catch {
+            return false
+        }
+    }
+
+    func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+}
+
+// Pre-permission screen
+struct NotificationPermissionView: View {
+    @StateObject private var manager = NotificationPermissionManager()
+    @State private var showSystemPrompt = false
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "bell.badge")
+                .font(.system(size: 60))
+
+            Text("Stay Updated")
+                .font(.title)
+
+            Text("Get notified about new messages, order updates, and important alerts.")
+                .multilineTextAlignment(.center)
+
+            Button("Enable Notifications") {
+                Task { await manager.requestPermission() }
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button("Not Now") { dismiss() }
+                .foregroundColor(.secondary)
+        }
+        .padding()
+    }
+}
+```
+
+### Notification Action Handler
+
+```swift
+@MainActor
+final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = NotificationHandler()
+
+    private let router: DeepLinkRouter
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        // App is in foreground
+        let userInfo = notification.request.content.userInfo
+
+        // Check if we should show banner or handle silently
+        if shouldShowInForeground(userInfo) {
+            return [.banner, .sound, .badge]
+        } else {
+            handleSilently(userInfo)
+            return []
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse) async {
+        let userInfo = response.notification.request.content.userInfo
+
+        switch response.actionIdentifier {
+        case UNNotificationDefaultActionIdentifier:
+            // User tapped notification
+            await handleNotificationTap(userInfo)
+
+        case "REPLY_ACTION":
+            if let textResponse = response as? UNTextInputNotificationResponse {
+                await handleReply(text: textResponse.userText, userInfo: userInfo)
+            }
+
+        case "MARK_READ_ACTION":
+            await markAsRead(userInfo)
+
+        case UNNotificationDismissActionIdentifier:
+            // User dismissed
+            break
+
+        default:
+            await handleCustomAction(response.actionIdentifier, userInfo: userInfo)
+        }
+    }
+
+    private func handleNotificationTap(_ userInfo: [AnyHashable: Any]) async {
+        guard let deepLink = userInfo["deep_link"] as? String,
+              let url = URL(string: deepLink) else { return }
+
+        await router.navigate(to: url)
+    }
+}
+```
+
+### Rich Notification Service
+
+```swift
+class NotificationService: UNNotificationServiceExtension {
+    var contentHandler: ((UNNotificationContent) -> Void)?
+    var bestAttemptContent: UNMutableNotificationContent?
+
+    override func didReceive(_ request: UNNotificationRequest,
+        withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+        self.contentHandler = contentHandler
+        bestAttemptContent = request.content.mutableCopy() as? UNMutableNotificationContent
+
+        guard let content = bestAttemptContent else {
             contentHandler(request.content)
             return
         }
 
-        // Download image attachment
-        if let attachmentURLString = bestAttemptContent.userInfo["image_url"] as? String,
-           let attachmentURL = URL(string: attachmentURLString) {
-            Task {
-                await downloadAndAttachImage(url: attachmentURL, content: bestAttemptContent)
-                contentHandler(bestAttemptContent)
-            }
-        } else {
-            contentHandler(bestAttemptContent)
-        }
-    }
-
-    private func downloadAndAttachImage(url: URL, content: UNMutableNotificationContent) async {
-        do {
-            let (localURL, _) = try await URLSession.shared.download(from: url)
-
-            let attachment = try UNNotificationAttachment(
-                identifier: "image",
-                url: localURL,
-                options: nil
-            )
-            content.attachments = [attachment]
-        } catch {
-            print("Error downloading image: \(error)")
-        }
-    }
-}
-
-// Rich notification payload
-{
-  "aps": {
-    "alert": {
-      "title": "New Photo",
-      "body": "Check out this amazing sunset!"
-    },
-    "mutable-content": 1
-  },
-  "image_url": "https://example.com/sunset.jpg"
-}
-```
-
-## Badge Management
-
-### Update App Badge
-
-```swift
-final class BadgeManager {
-    static func setBadge(_ count: Int) async {
-        do {
-            try await UNUserNotificationCenter.current().setBadgeCount(count)
-        } catch {
-            print("Error setting badge: \(error)")
-        }
-    }
-
-    static func incrementBadge() async {
-        let current = await UNUserNotificationCenter.current().deliveredNotifications().count
-        await setBadge(current + 1)
-    }
-
-    static func clearBadge() async {
-        await setBadge(0)
-    }
-}
-
-// SwiftUI usage
-struct ContentView: View {
-    var body: some View {
-        VStack {
-            Button("Clear Badge") {
-                Task {
-                    await BadgeManager.clearBadge()
+        Task {
+            // Download and attach media
+            if let mediaURL = request.content.userInfo["media_url"] as? String {
+                if let attachment = await downloadAttachment(from: mediaURL) {
+                    content.attachments = [attachment]
                 }
             }
+
+            // Decrypt if needed
+            if let encrypted = request.content.userInfo["encrypted_body"] as? String {
+                content.body = decrypt(encrypted)
+            }
+
+            contentHandler(content)
+        }
+    }
+
+    override func serviceExtensionTimeWillExpire() {
+        if let content = bestAttemptContent {
+            contentHandler?(content)
+        }
+    }
+
+    private func downloadAttachment(from urlString: String) async -> UNNotificationAttachment? {
+        guard let url = URL(string: urlString) else { return nil }
+
+        do {
+            let (localURL, response) = try await URLSession.shared.download(from: url)
+
+            let fileExtension = (response as? HTTPURLResponse)?
+                .mimeType.flatMap { mimeToExtension[$0] } ?? "jpg"
+
+            let destURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(fileExtension)
+
+            try FileManager.default.moveItem(at: localURL, to: destURL)
+
+            return try UNNotificationAttachment(identifier: "media", url: destURL)
+        } catch {
+            return nil
         }
     }
 }
 ```
 
-## Testing Push Notifications
+---
 
-### Simulator Testing (iOS 16+)
+## Quick Reference
 
-```bash
-# Create payload.json
-{
-  "Simulator Target Bundle": "com.yourcompany.yourapp",
-  "aps": {
-    "alert": {
-      "title": "Test Notification",
-      "body": "This is a test notification"
-    },
-    "badge": 1
-  }
-}
+### Payload Structure
 
-# Send notification
-xcrun simctl push booted com.yourcompany.yourapp payload.json
-```
+| Field | Purpose | Value |
+|-------|---------|-------|
+| alert | Visible notification | {title, subtitle, body} |
+| badge | App icon badge | Number |
+| sound | Notification sound | "default" or filename |
+| content-available | Silent/background | 1 |
+| mutable-content | Service extension | 1 |
+| category | Action buttons | Category identifier |
+| thread-id | Notification grouping | Thread identifier |
 
-### Testing on Device
+### Permission States
 
-1. Export .p12 certificate from Keychain
-2. Use testing tool (e.g., Pusher, APNS Tool)
-3. Send test notification with device token
+| Status | Meaning | Action |
+|--------|---------|--------|
+| notDetermined | Never asked | Show pre-permission |
+| denied | User declined | Show settings prompt |
+| authorized | Full access | Register for remote |
+| provisional | Quiet delivery | Consider upgrade prompt |
+| ephemeral | App clip temporary | Limited time |
 
-## Best Practices
+### Extension Limits
 
-### 1. Request Permission at Right Time
+| Extension | Time Limit | Use Case |
+|-----------|------------|----------|
+| Service Extension | ~30 seconds | Download media, decrypt |
+| Content Extension | User interaction | Custom UI |
+| Background fetch | ~30 seconds | Data refresh |
 
-```swift
-// ✅ Good: Request after user action
-Button("Enable Notifications") {
-    Task {
-        await NotificationManager.shared.requestAuthorization()
-    }
-}
+### Red Flags
 
-// ❌ Avoid: Request immediately on launch
-// Confusing and likely to be denied
-```
-
-### 2. Handle All Notification States
-
-```swift
-func checkNotificationStatus() async {
-    let status = await NotificationManager.shared.checkAuthorizationStatus()
-
-    switch status {
-    case .authorized:
-        print("Authorized")
-    case .denied:
-        print("Show settings prompt")
-    case .notDetermined:
-        print("Not requested yet")
-    case .provisional:
-        print("Provisional authorization")
-    case .ephemeral:
-        print("Temporary authorization")
-    @unknown default:
-        break
-    }
-}
-```
-
-### 3. Clear Delivered Notifications
-
-```swift
-// Clear specific notification
-UNUserNotificationCenter.current().removeDeliveredNotifications(
-    withIdentifiers: ["notification-id"]
-)
-
-// Clear all
-UNUserNotificationCenter.current().removeAllDeliveredNotifications()
-```
-
-## References
-
-- [UserNotifications Framework](https://developer.apple.com/documentation/usernotifications)
-- [APNs Overview](https://developer.apple.com/documentation/usernotifications/setting_up_a_remote_notification_server)
-- [Rich Notifications](https://developer.apple.com/documentation/usernotifications/unnotificationserviceextension)
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| Permission on launch | Low acceptance | Wait for user action |
+| Cached device token | May be stale | Always use callback |
+| String(data:encoding:) for token | Returns nil | Use hex encoding |
+| Silent for time-critical | May be delayed | Use visible notification |
+| Heavy work in silent handler | App terminated | Quick fetch, defer work |
+| No serviceExtensionTimeWillExpire | Unmodified content shown | Always implement |
+| Ignoring denied status | Frustrates user | Offer settings path |

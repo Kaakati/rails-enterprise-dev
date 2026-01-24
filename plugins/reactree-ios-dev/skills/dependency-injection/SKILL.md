@@ -1,210 +1,305 @@
 ---
-name: "Dependency Injection"
-description: "Dependency injection patterns for iOS/tvOS including constructor injection, protocol-based DI, and SwiftUI environment injection"
-version: "2.0.0"
+name: dependency-injection
+description: "Expert DI decisions for iOS/tvOS: when DI containers add value vs overkill, choosing between injection patterns, protocol design for testability, and SwiftUI-specific injection strategies. Use when designing service layers, setting up testing infrastructure, or deciding how to wire dependencies. Trigger keywords: dependency injection, DI, constructor injection, protocol, mock, testability, container, factory, @EnvironmentObject, service locator"
+version: "3.0.0"
 ---
 
-# Dependency Injection for iOS/tvOS
+# Dependency Injection — Expert Decisions
 
-Complete guide to implementing dependency injection in Swift and SwiftUI applications using constructor injection, protocol-based patterns, environment objects, and DI containers.
+Expert decision frameworks for dependency injection choices. Claude knows DI basics — this skill provides judgment calls for when and how to apply DI patterns.
 
-## Constructor Injection
+---
 
-### Basic Constructor Injection
+## Decision Trees
 
+### Do You Need DI?
+
+```
+Is the dependency tested independently?
+├─ NO → Is it a pure function or value type?
+│  ├─ YES → No DI needed (just call it)
+│  └─ NO → Consider DI for future testability
+│
+└─ YES → How many classes use this dependency?
+   ├─ 1 class → Simple constructor injection
+   ├─ 2-5 classes → Protocol + constructor injection
+   └─ Many classes → Consider lightweight container
+```
+
+**The trap**: DI everything. If a helper function has no side effects and doesn't need mocking, don't wrap it in a protocol.
+
+### Which Injection Pattern?
+
+```
+Who creates the object?
+├─ Caller provides dependency
+│  └─ Constructor Injection (most common)
+│     init(service: ServiceProtocol)
+│
+├─ Object creates dependency but needs flexibility
+│  └─ Default Parameter Injection
+│     init(service: ServiceProtocol = Service())
+│
+├─ Dependency changes during lifetime
+│  └─ Property Injection (rare, avoid if possible)
+│     var service: ServiceProtocol?
+│
+└─ Factory creates object with dependencies
+   └─ Factory Pattern
+      container.makeUserViewModel()
+```
+
+### Protocol vs Concrete Type
+
+```
+Will this dependency be mocked in tests?
+├─ YES → Protocol
+│
+└─ NO → Is it from external module?
+   ├─ YES → Protocol (wrap for decoupling)
+   └─ NO → Is interface likely to change?
+      ├─ YES → Protocol
+      └─ NO → Concrete type is fine
+```
+
+**Rule of thumb**: Network, database, analytics, external APIs → Protocol. Date formatters, math utilities → Concrete.
+
+### DI Container Complexity
+
+```
+Team size?
+├─ Solo/Small (1-3)
+│  └─ Default parameters + simple factory
+│
+├─ Medium (4-10)
+│  └─ Simple manual container
+│     final class Container {
+│         lazy var userService = UserService()
+│     }
+│
+└─ Large (10+)
+   └─ Consider Swinject or similar
+      (only if manual wiring becomes painful)
+```
+
+---
+
+## NEVER Do
+
+### Protocol Design
+
+**NEVER** create protocols with only one implementation:
 ```swift
-// Protocol defining dependency
+// ❌ Protocol just for the sake of it
+protocol DateFormatterProtocol {
+    func format(_ date: Date) -> String
+}
+
+class DateFormatterImpl: DateFormatterProtocol {
+    func format(_ date: Date) -> String { ... }
+}
+
+// ✅ Just use the type directly
+let formatter = DateFormatter()
+formatter.dateStyle = .medium
+```
+
+**Exception**: When wrapping external dependencies for decoupling or testing.
+
+**NEVER** mirror the entire class interface in a protocol:
+```swift
+// ❌ 1:1 mapping is a code smell
 protocol UserServiceProtocol {
+    var users: [User] { get }
+    var isLoading: Bool { get }
+    func fetchUser(id: String) async throws -> User
+    func updateUser(_ user: User) async throws
+    func deleteUser(id: String) async throws
+    // ...20 more methods
+}
+
+// ✅ Minimal interface for what's actually needed
+protocol UserFetching {
     func fetchUser(id: String) async throws -> User
 }
+```
 
-// Concrete implementation
-final class UserService: UserServiceProtocol {
-    private let networkManager: NetworkManager
+**NEVER** put mutable state requirements in protocols:
+```swift
+// ❌ Forces implementation details
+protocol CacheProtocol {
+    var storage: [String: Any] { get set }  // Leaks implementation
+}
 
-    init(networkManager: NetworkManager) {
-        self.networkManager = networkManager
-    }
+// ✅ Behavior-focused
+protocol CacheProtocol {
+    func get(key: String) -> Any?
+    func set(key: String, value: Any)
+}
+```
 
-    func fetchUser(id: String) async throws -> User {
-        try await networkManager.request(.getUser(id: id))
+### Constructor Injection
+
+**NEVER** use property injection when constructor injection works:
+```swift
+// ❌ Object can be in invalid state
+class UserViewModel {
+    var userService: UserServiceProtocol!  // Can be nil!
+
+    func loadUser() async {
+        let user = try? await userService.fetchUser(id: "1")  // Crash if not set!
     }
 }
 
-// ViewModel with constructor injection
-@MainActor
-final class UserViewModel: ObservableObject {
-    @Published var user: User?
+// ✅ Guaranteed valid state
+class UserViewModel {
     private let userService: UserServiceProtocol
+
+    init(userService: UserServiceProtocol) {
+        self.userService = userService  // Never nil
+    }
+}
+```
+
+**NEVER** create objects with many dependencies (> 5):
+```swift
+// ❌ Too many dependencies — class does too much
+init(
+    userService: UserServiceProtocol,
+    authService: AuthServiceProtocol,
+    analyticsService: AnalyticsProtocol,
+    networkManager: NetworkManagerProtocol,
+    cacheManager: CacheProtocol,
+    configService: ConfigServiceProtocol,
+    featureFlagService: FeatureFlagProtocol
+) { ... }
+
+// ✅ Split into smaller, focused classes
+// Or create a composite service
+```
+
+### Service Locator (Anti-Pattern)
+
+**NEVER** use Service Locator pattern:
+```swift
+// ❌ Hidden dependencies, runtime errors, untestable
+class UserViewModel {
+    func loadUser() async {
+        let service = ServiceLocator.shared.resolve(UserServiceProtocol.self)!
+        // Crashes if not registered
+        // Dependency is hidden
+        // Can't see what this class needs
+    }
+}
+
+// ✅ Explicit constructor injection
+class UserViewModel {
+    private let userService: UserServiceProtocol  // Visible dependency
 
     init(userService: UserServiceProtocol) {
         self.userService = userService
     }
+}
+```
 
-    func loadUser(id: String) async {
-        do {
-            user = try await userService.fetchUser(id: id)
-        } catch {
-            print("Error: \(error)")
-        }
+### Testing
+
+**NEVER** create mocks with real side effects:
+```swift
+// ❌ Mock does real work
+class MockNetworkManager: NetworkManagerProtocol {
+    func request<T>(_ endpoint: Endpoint) async throws -> T {
+        // Actually makes network call!
+        return try await URLSession.shared.data(from: endpoint.url)
     }
 }
 
-// Usage
-let networkManager = NetworkManager()
-let userService = UserService(networkManager: networkManager)
-let viewModel = UserViewModel(userService: userService)
+// ✅ Mocks return stubbed data
+class MockNetworkManager: NetworkManagerProtocol {
+    var stubbedResult: Any?
+    var stubbedError: Error?
+
+    func request<T>(_ endpoint: Endpoint) async throws -> T {
+        if let error = stubbedError { throw error }
+        return stubbedResult as! T
+    }
+}
 ```
 
-### Default Parameters for Flexibility
+**NEVER** test mocks instead of real code:
+```swift
+// ❌ Testing the mock, not the system
+func testMockReturnsUser() {
+    let mock = MockUserService()
+    mock.stubbedUser = User(name: "John")
+    XCTAssertEqual(mock.fetchUser().name, "John")  // Tests mock, not app
+}
+
+// ✅ Test the system under test
+func testViewModelLoadsUser() async {
+    let mock = MockUserService()
+    mock.stubbedUser = User(name: "John")
+
+    let viewModel = UserViewModel(userService: mock)  // SUT
+    await viewModel.loadUser(id: "1")
+
+    XCTAssertEqual(viewModel.user?.name, "John")  // Tests ViewModel
+}
+```
+
+---
+
+## Essential Patterns
+
+### Default Parameter Injection
 
 ```swift
+// Production uses real, tests inject mock
 @MainActor
 final class UserViewModel: ObservableObject {
     private let userService: UserServiceProtocol
-    private let analytics: AnalyticsProtocol
 
-    init(
-        userService: UserServiceProtocol = UserService.shared,
-        analytics: AnalyticsProtocol = Analytics.shared
-    ) {
+    init(userService: UserServiceProtocol = UserService()) {
         self.userService = userService
-        self.analytics = analytics
     }
 }
 
-// Production usage (uses defaults)
+// Production
 let viewModel = UserViewModel()
 
-// Testing usage (injects mocks)
-let viewModel = UserViewModel(
-    userService: MockUserService(),
-    analytics: MockAnalytics()
-)
+// Test
+let viewModel = UserViewModel(userService: MockUserService())
 ```
 
-## Protocol-Based Dependency Injection
-
-### Defining Protocols
+### Simple Manual Container
 
 ```swift
-// Service protocol
-protocol AuthenticationServiceProtocol {
-    func login(email: String, password: String) async throws -> User
-    func logout() async throws
-    func refreshToken() async throws -> String
-}
+@MainActor
+final class Container {
+    static let shared = Container()
 
-// Repository protocol
-protocol UserRepositoryProtocol {
-    func getUser(id: String) async throws -> User
-    func saveUser(_ user: User) async throws
-    func deleteUser(id: String) async throws
-}
+    // Singletons (lazy initialized)
+    lazy var networkManager: NetworkManagerProtocol = NetworkManager()
+    lazy var authService: AuthServiceProtocol = AuthService(network: networkManager)
+    lazy var userService: UserServiceProtocol = UserService(network: networkManager)
 
-// Network protocol
-protocol NetworkManagerProtocol {
-    func request<T: Decodable>(_ endpoint: APIEndpoint) async throws -> T
-}
-```
-
-### Concrete Implementations
-
-```swift
-final class AuthenticationService: AuthenticationServiceProtocol {
-    private let networkManager: NetworkManagerProtocol
-    private let sessionManager: SessionManagerProtocol
-
-    init(
-        networkManager: NetworkManagerProtocol,
-        sessionManager: SessionManagerProtocol
-    ) {
-        self.networkManager = networkManager
-        self.sessionManager = sessionManager
+    // Factory methods (new instance each time)
+    func makeUserViewModel() -> UserViewModel {
+        UserViewModel(userService: userService)
     }
 
-    func login(email: String, password: String) async throws -> User {
-        let credentials = LoginCredentials(email: email, password: password)
-        let response: LoginResponse = try await networkManager.request(.login(credentials))
-
-        await sessionManager.saveToken(response.token)
-        return response.user
-    }
-
-    func logout() async throws {
-        try await networkManager.request(.logout)
-        await sessionManager.clearSession()
-    }
-
-    func refreshToken() async throws -> String {
-        let response: TokenResponse = try await networkManager.request(.refreshToken)
-        await sessionManager.saveToken(response.token)
-        return response.token
+    func makeLoginViewModel() -> LoginViewModel {
+        LoginViewModel(authService: authService)
     }
 }
 ```
 
-## SwiftUI Environment Injection
-
-### @EnvironmentObject
+### SwiftUI Environment Injection
 
 ```swift
-// AppDependencies as EnvironmentObject
-final class AppDependencies: ObservableObject {
-    let userService: UserServiceProtocol
-    let authService: AuthenticationServiceProtocol
-    let analytics: AnalyticsProtocol
-
-    init(
-        userService: UserServiceProtocol = UserService(),
-        authService: AuthenticationServiceProtocol = AuthenticationService(),
-        analytics: AnalyticsProtocol = Analytics()
-    ) {
-        self.userService = userService
-        self.authService = authService
-        self.analytics = analytics
-    }
-}
-
-// App setup
-@main
-struct MyApp: App {
-    @StateObject private var dependencies = AppDependencies()
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(dependencies)
-        }
-    }
-}
-
-// View consuming dependencies
-struct UserListView: View {
-    @EnvironmentObject var dependencies: AppDependencies
-    @State private var users: [User] = []
-
-    var body: some View {
-        List(users) { user in
-            Text(user.name)
-        }
-        .task {
-            do {
-                users = try await dependencies.userService.fetchAllUsers()
-            } catch {
-                print("Error: \(error)")
-            }
-        }
-    }
-}
-```
-
-### Custom Environment Keys
-
-```swift
-// Define environment key
+// Custom environment key
 private struct UserServiceKey: EnvironmentKey {
-    static let defaultValue: UserServiceProtocol = UserService.shared
+    static let defaultValue: UserServiceProtocol = UserService()
 }
 
 extension EnvironmentValues {
@@ -214,408 +309,102 @@ extension EnvironmentValues {
     }
 }
 
-// Inject dependency
-struct ContentView: View {
-    var body: some View {
-        UserListView()
-            .environment(\.userService, UserService())
+// Inject at app level
+@main
+struct MyApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environment(\.userService, Container.shared.userService)
+        }
     }
 }
 
-// Consume dependency
-struct UserListView: View {
+// Consume in any view
+struct UserView: View {
     @Environment(\.userService) var userService
 
     var body: some View {
-        List {
-            // ...
-        }
-        .task {
-            let users = try? await userService.fetchAllUsers()
-        }
+        // Use userService
     }
 }
 ```
 
-## Dependency Injection Container
-
-### Simple DI Container
+### Mock with Verification
 
 ```swift
-final class DependencyContainer {
-    static let shared = DependencyContainer()
-
-    private init() {
-        registerDependencies()
-    }
-
-    // Registered services
-    private(set) lazy var networkManager: NetworkManagerProtocol = NetworkManager()
-    private(set) lazy var sessionManager: SessionManagerProtocol = SessionManager()
-    private(set) lazy var userService: UserServiceProtocol = UserService(
-        networkManager: networkManager
-    )
-    private(set) lazy var authService: AuthenticationServiceProtocol = AuthenticationService(
-        networkManager: networkManager,
-        sessionManager: sessionManager
-    )
-
-    private func registerDependencies() {
-        // Additional setup if needed
-    }
-
-    // Factory methods for scoped instances
-    func makeUserViewModel() -> UserViewModel {
-        UserViewModel(userService: userService)
-    }
-
-    func makeLoginViewModel() -> LoginViewModel {
-        LoginViewModel(authService: authService)
-    }
-}
-
-// Usage
-let container = DependencyContainer.shared
-let viewModel = container.makeUserViewModel()
-```
-
-### Protocol-Based Container
-
-```swift
-protocol DependencyContainerProtocol {
-    var userService: UserServiceProtocol { get }
-    var authService: AuthenticationServiceProtocol { get }
-    var analytics: AnalyticsProtocol { get }
-}
-
-final class AppDependencyContainer: DependencyContainerProtocol {
-    lazy var userService: UserServiceProtocol = UserService()
-    lazy var authService: AuthenticationServiceProtocol = AuthenticationService()
-    lazy var analytics: AnalyticsProtocol = Analytics()
-}
-
-final class TestDependencyContainer: DependencyContainerProtocol {
-    lazy var userService: UserServiceProtocol = MockUserService()
-    lazy var authService: AuthenticationServiceProtocol = MockAuthService()
-    lazy var analytics: AnalyticsProtocol = MockAnalytics()
-}
-```
-
-## Factory Pattern
-
-### Simple Factory
-
-```swift
-protocol ViewModelFactory {
-    func makeUserViewModel() -> UserViewModel
-    func makeLoginViewModel() -> LoginViewModel
-    func makeProfileViewModel(user: User) -> ProfileViewModel
-}
-
-final class DefaultViewModelFactory: ViewModelFactory {
-    private let container: DependencyContainerProtocol
-
-    init(container: DependencyContainerProtocol) {
-        self.container = container
-    }
-
-    func makeUserViewModel() -> UserViewModel {
-        UserViewModel(userService: container.userService)
-    }
-
-    func makeLoginViewModel() -> LoginViewModel {
-        LoginViewModel(authService: container.authService)
-    }
-
-    func makeProfileViewModel(user: User) -> ProfileViewModel {
-        ProfileViewModel(
-            user: user,
-            userService: container.userService,
-            analytics: container.analytics
-        )
-    }
-}
-```
-
-### Factory with Builder Pattern
-
-```swift
-final class ViewModelBuilder {
-    private var userService: UserServiceProtocol?
-    private var authService: AuthenticationServiceProtocol?
-    private var analytics: AnalyticsProtocol?
-
-    func with(userService: UserServiceProtocol) -> Self {
-        self.userService = userService
-        return self
-    }
-
-    func with(authService: AuthenticationServiceProtocol) -> Self {
-        self.authService = authService
-        return self
-    }
-
-    func with(analytics: AnalyticsProtocol) -> Self {
-        self.analytics = analytics
-        return self
-    }
-
-    func build() -> UserViewModel {
-        UserViewModel(
-            userService: userService ?? UserService.shared,
-            authService: authService ?? AuthenticationService.shared,
-            analytics: analytics ?? Analytics.shared
-        )
-    }
-}
-
-// Usage
-let viewModel = ViewModelBuilder()
-    .with(userService: UserService())
-    .with(analytics: Analytics())
-    .build()
-```
-
-## Mock Injection for Testing
-
-### Mock Implementations
-
-```swift
-// Mock user service
 final class MockUserService: UserServiceProtocol {
-    var users: [User] = []
-    var shouldThrowError = false
-    var fetchUserCallCount = 0
+    // Stubbed returns
+    var stubbedUser: User?
+    var stubbedError: Error?
+
+    // Call tracking
+    private(set) var fetchUserCallCount = 0
+    private(set) var fetchUserLastId: String?
 
     func fetchUser(id: String) async throws -> User {
         fetchUserCallCount += 1
+        fetchUserLastId = id
 
-        if shouldThrowError {
-            throw NetworkError.serverError(statusCode: 500, message: nil)
+        if let error = stubbedError { throw error }
+        guard let user = stubbedUser else {
+            throw MockError.notStubbed
         }
-
-        guard let user = users.first(where: { $0.id == id }) else {
-            throw NetworkError.notFound
-        }
-
         return user
     }
-
-    func fetchAllUsers() async throws -> [User] {
-        if shouldThrowError {
-            throw NetworkError.serverError(statusCode: 500, message: nil)
-        }
-        return users
-    }
 }
 
-// Testing with mocks
-@MainActor
-final class UserViewModelTests: XCTestCase {
-    func testLoadUserSuccess() async {
-        // Given
-        let mockService = MockUserService()
-        mockService.users = [User(id: "123", name: "John")]
+// Test with verification
+func testFetchesCorrectUser() async {
+    let mock = MockUserService()
+    mock.stubbedUser = User(id: "123", name: "John")
 
-        let viewModel = UserViewModel(userService: mockService)
+    let viewModel = UserViewModel(userService: mock)
+    await viewModel.loadUser(id: "123")
 
-        // When
-        await viewModel.loadUser(id: "123")
-
-        // Then
-        XCTAssertNotNil(viewModel.user)
-        XCTAssertEqual(viewModel.user?.name, "John")
-        XCTAssertEqual(mockService.fetchUserCallCount, 1)
-    }
-
-    func testLoadUserFailure() async {
-        // Given
-        let mockService = MockUserService()
-        mockService.shouldThrowError = true
-
-        let viewModel = UserViewModel(userService: mockService)
-
-        // When
-        await viewModel.loadUser(id: "123")
-
-        // Then
-        XCTAssertNil(viewModel.user)
-        XCTAssertNotNil(viewModel.errorMessage)
-    }
+    XCTAssertEqual(mock.fetchUserCallCount, 1)
+    XCTAssertEqual(mock.fetchUserLastId, "123")
 }
 ```
 
-## Singleton vs Dependency Injection
+---
 
-### When to Use Singletons
+## Quick Reference
 
-```swift
-// ✅ Good: Singleton for truly global state
-final class AppConfiguration {
-    static let shared = AppConfiguration()
+### When to Use Each Pattern
 
-    let apiBaseURL: String
-    let environment: Environment
+| Pattern | Use When | Avoid When |
+|---------|----------|------------|
+| Constructor injection | Default choice | Never avoid |
+| Default parameters | Convenience with testability | Dependency changes at runtime |
+| Property injection | Framework requires it (rare) | You have control over init |
+| Factory | Object needs runtime parameters | Simple object creation |
+| Container | Many cross-cutting dependencies | Small app, few dependencies |
 
-    private init() {
-        #if DEBUG
-        self.environment = .development
-        self.apiBaseURL = "https://dev.api.example.com"
-        #else
-        self.environment = .production
-        self.apiBaseURL = "https://api.example.com"
-        #endif
-    }
-}
+### Protocol Checklist
 
-// ❌ Avoid: Singleton for testable services
-final class UserService {
-    static let shared = UserService()  // Hard to test!
+- [ ] Will it be mocked? If no, skip protocol
+- [ ] Interface is minimal (only needed methods)
+- [ ] No mutable state requirements
+- [ ] No implementation details leaked
+- [ ] Single responsibility
 
-    func fetchUser(id: String) async throws -> User {
-        // ...
-    }
-}
-```
+### DI Red Flags
 
-### Converting Singleton to DI
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| Protocol for every class | Over-engineering | Only where needed |
+| Service Locator | Hidden dependencies | Constructor injection |
+| > 5 constructor params | Class does too much | Split responsibilities |
+| Property injection | Object can be invalid | Constructor injection |
+| Mock does real work | Tests are slow/flaky | Return stubbed data |
+| 1:1 protocol:class ratio | Unnecessary abstraction | Remove unused protocols |
 
-```swift
-// Before: Singleton
-final class UserService {
-    static let shared = UserService()
+### SwiftUI DI Comparison
 
-    private init() {}
-
-    func fetchUser(id: String) async throws -> User {
-        // Implementation
-    }
-}
-
-// After: Dependency injection
-protocol UserServiceProtocol {
-    func fetchUser(id: String) async throws -> User
-}
-
-final class UserService: UserServiceProtocol {
-    private let networkManager: NetworkManagerProtocol
-
-    init(networkManager: NetworkManagerProtocol) {
-        self.networkManager = networkManager
-    }
-
-    func fetchUser(id: String) async throws -> User {
-        // Implementation
-    }
-}
-
-// Shared instance for convenience (optional)
-extension UserService {
-    static let shared = UserService(networkManager: NetworkManager.shared)
-}
-```
-
-## Service Locator Pattern (Anti-Pattern)
-
-### Why to Avoid
-
-```swift
-// ❌ Avoid: Service Locator
-final class ServiceLocator {
-    static let shared = ServiceLocator()
-
-    private var services: [String: Any] = [:]
-
-    func register<T>(_ service: T, for type: T.Type) {
-        let key = String(describing: type)
-        services[key] = service
-    }
-
-    func resolve<T>(_ type: T.Type) -> T? {
-        let key = String(describing: type)
-        return services[key] as? T
-    }
-}
-
-// Problems:
-// 1. Hidden dependencies (not visible in initializer)
-// 2. Runtime errors if service not registered
-// 3. Difficult to test
-// 4. Tight coupling to ServiceLocator
-
-// ✅ Good: Explicit constructor injection
-final class UserViewModel {
-    private let userService: UserServiceProtocol  // Dependency is explicit
-
-    init(userService: UserServiceProtocol) {
-        self.userService = userService
-    }
-}
-```
-
-## Best Practices
-
-### 1. Depend on Abstractions
-
-```swift
-// ✅ Good: Depend on protocol
-final class UserViewModel {
-    private let userService: UserServiceProtocol  // Abstract
-
-    init(userService: UserServiceProtocol) {
-        self.userService = userService
-    }
-}
-
-// ❌ Avoid: Depend on concrete class
-final class UserViewModel {
-    private let userService: UserService  // Concrete
-
-    init(userService: UserService) {
-        self.userService = userService
-    }
-}
-```
-
-### 2. Constructor Injection Over Property Injection
-
-```swift
-// ✅ Good: Constructor injection
-final class UserViewModel {
-    private let userService: UserServiceProtocol
-
-    init(userService: UserServiceProtocol) {
-        self.userService = userService
-    }
-}
-
-// ❌ Avoid: Property injection
-final class UserViewModel {
-    var userService: UserServiceProtocol!  // Can be nil!
-
-    init() {}
-}
-```
-
-### 3. Keep Containers Simple
-
-```swift
-// ✅ Good: Simple, focused container
-final class ServiceContainer {
-    lazy var userService: UserServiceProtocol = UserService(networkManager: networkManager)
-    lazy var networkManager: NetworkManagerProtocol = NetworkManager()
-}
-
-// ❌ Avoid: Over-complicated container
-final class MegaContainer {
-    // 100+ dependencies
-    // Complex registration logic
-    // Circular dependency resolution
-}
-```
-
-## References
-
-- [Dependency Injection in Swift](https://www.swiftbysundell.com/articles/dependency-injection-using-factories-in-swift/)
-- [Protocol-Oriented Programming](https://developer.apple.com/videos/play/wwdc2015/408/)
-- [Testing with Mocks](https://www.swiftbysundell.com/articles/mocking-in-swift/)
+| Pattern | Scope | Use For |
+|---------|-------|---------|
+| `@Environment` | View hierarchy | System/app services |
+| `@EnvironmentObject` | View hierarchy | Observable shared state |
+| `@StateObject` init injection | Single view | View-specific ViewModel |
+| Container factory | App-wide | Complex dependency graphs |

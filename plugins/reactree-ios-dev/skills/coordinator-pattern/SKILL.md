@@ -1,550 +1,421 @@
 ---
-name: "Coordinator Pattern"
-description: "Navigation coordination pattern for iOS/tvOS to decouple navigation logic from view controllers and manage app flow"
-version: "2.0.0"
+name: coordinator-pattern
+description: "Expert Coordinator pattern decisions for iOS/tvOS: when coordinators add value vs overkill, parent-child coordinator hierarchy design, SwiftUI vs UIKit coordinator differences, and flow completion handling. Use when designing navigation architecture, implementing multi-step flows, or decoupling views from navigation. Trigger keywords: Coordinator, navigation, flow, parent coordinator, child coordinator, deep link, routing, navigation hierarchy, flow completion"
+version: "3.0.0"
 ---
 
-# Coordinator Pattern for iOS/tvOS
+# Coordinator Pattern — Expert Decisions
 
-Complete guide to implementing the Coordinator pattern in SwiftUI and UIKit applications for clean navigation architecture and decoupled view logic.
+Expert decision frameworks for Coordinator pattern choices. Claude knows the pattern — this skill provides judgment calls for when coordinators add value and how to structure hierarchies.
 
-## Core Concept
+---
 
-The Coordinator pattern separates navigation logic from view controllers/views, creating a dedicated object responsible for app flow.
+## Decision Trees
 
-### Benefits
+### Do You Need Coordinators?
 
-- **Separation of Concerns**: Navigation logic separated from UI
-- **Testability**: Navigation can be tested independently
-- **Reusability**: Views don't know about navigation context
-- **Deep Linking**: Centralized place to handle deep links
-- **Dependency Injection**: Coordinators create and configure views
+```
+How many navigation flows does your app have?
+├─ 1-2 simple flows
+│  └─ Skip coordinators
+│     NavigationStack + simple Router is enough
+│
+├─ 3-5 distinct flows
+│  └─ Consider coordinators IF:
+│     • Flows have complex branching
+│     • Deep linking is required
+│     • Flows need to share navigation logic
+│
+└─ 6+ flows or multi-team development
+   └─ Coordinators recommended
+      • Clear ownership boundaries
+      • Parallel development possible
+      • Testable navigation logic
+```
 
-## SwiftUI Coordinator
+**The trap**: Adding coordinators to simple apps. If your app is 5 screens with linear flow, coordinators add complexity without benefit.
 
-### Basic Coordinator Protocol
+### Coordinator Hierarchy Design
+
+```
+Does this flow need to manage sub-flows?
+├─ NO (leaf coordinator)
+│  └─ Simple coordinator
+│     Owns NavigationPath, creates views
+│
+└─ YES (has sub-flows)
+   └─ Parent coordinator
+      Manages childCoordinators array
+      Delegates to child for sub-flows
+```
+
+### SwiftUI vs UIKit Coordinator
+
+```
+Which UI framework?
+├─ SwiftUI
+│  └─ Coordinator as ObservableObject
+│     • Owns NavigationPath
+│     • @ViewBuilder for destinations
+│     • Pass via EnvironmentObject or explicit injection
+│
+└─ UIKit
+   └─ Coordinator owns UINavigationController
+      • Creates and pushes ViewControllers
+      • Uses delegation for flow completion
+      • Manages childCoordinators manually
+```
+
+### Flow Completion Strategy
+
+```
+How does a flow end?
+├─ Success (user completed task)
+│  └─ Delegate method with result
+│     coordinator.didCompleteLogin(user: user)
+│
+├─ Cancellation (user backed out)
+│  └─ Delegate method without result
+│     coordinator.didCancelLogin()
+│
+└─ Automatic (flow naturally ends)
+   └─ Parent removes child automatically
+      No explicit completion needed
+```
+
+---
+
+## NEVER Do
+
+### Child Coordinator Lifecycle
+
+**NEVER** forget to remove child coordinators:
+```swift
+// ❌ Memory leak — child coordinator retained forever
+final class ParentCoordinator {
+    var childCoordinators: [Coordinator] = []
+
+    func startLoginFlow() {
+        let loginCoordinator = LoginCoordinator()
+        childCoordinators.append(loginCoordinator)
+        loginCoordinator.start()
+        // Never removed! Leaks.
+    }
+}
+
+// ✅ Remove child on flow completion
+final class ParentCoordinator: LoginCoordinatorDelegate {
+    var childCoordinators: [Coordinator] = []
+
+    func startLoginFlow() {
+        let loginCoordinator = LoginCoordinator()
+        loginCoordinator.delegate = self
+        childCoordinators.append(loginCoordinator)
+        loginCoordinator.start()
+    }
+
+    func loginCoordinatorDidFinish(_ coordinator: LoginCoordinator) {
+        childCoordinators.removeAll { $0 === coordinator }
+    }
+}
+```
+
+**NEVER** use strong parent references:
+```swift
+// ❌ Retain cycle — coordinator never deallocates
+final class ChildCoordinator {
+    var parent: ParentCoordinator  // Strong reference!
+}
+
+// ✅ Weak parent or delegate
+final class ChildCoordinator {
+    weak var delegate: ChildCoordinatorDelegate?
+    // OR
+    weak var parent: ParentCoordinator?
+}
+```
+
+### Coordinator Responsibilities
+
+**NEVER** put business logic in coordinators:
+```swift
+// ❌ Coordinator doing business logic
+final class CheckoutCoordinator {
+    func completeOrder() async {
+        // Business logic leaked into coordinator!
+        let total = cart.items.reduce(0) { $0 + $1.price }
+        let tax = total * 0.08
+        try await paymentService.charge(total + tax)
+    }
+}
+
+// ✅ Coordinator orchestrates, ViewModel/UseCase handles logic
+final class CheckoutCoordinator {
+    func showCheckout() {
+        let viewModel = CheckoutViewModel(
+            cartService: container.cartService,
+            paymentService: container.paymentService
+        )
+        // ViewModel handles business logic
+    }
+}
+```
+
+**NEVER** let views know about coordinator hierarchy:
+```swift
+// ❌ View knows about parent coordinator
+struct LoginView: View {
+    let coordinator: LoginCoordinator
+
+    var body: some View {
+        Button("Done") {
+            coordinator.parent?.childDidFinish(coordinator)  // Wrong!
+        }
+    }
+}
+
+// ✅ View only knows its immediate coordinator
+struct LoginView: View {
+    let coordinator: LoginCoordinator
+
+    var body: some View {
+        Button("Done") {
+            coordinator.completeLogin()  // Coordinator handles delegation
+        }
+    }
+}
+```
+
+### SwiftUI-Specific
+
+**NEVER** create coordinators as @StateObject in child views:
+```swift
+// ❌ New coordinator created on every parent rebuild
+struct ParentView: View {
+    var body: some View {
+        ChildView()  // Child creates its own coordinator
+    }
+}
+
+struct ChildView: View {
+    @StateObject var coordinator = ChildCoordinator()  // Wrong!
+}
+
+// ✅ Parent creates and owns coordinator
+struct ParentView: View {
+    @StateObject var childCoordinator = ChildCoordinator()
+
+    var body: some View {
+        ChildView(coordinator: childCoordinator)
+    }
+}
+```
+
+**NEVER** use NavigationLink directly when using coordinators:
+```swift
+// ❌ Bypasses coordinator — navigation untracked
+struct UserListView: View {
+    var body: some View {
+        NavigationLink("User") {
+            UserDetailView()  // Coordinator doesn't know about this!
+        }
+    }
+}
+
+// ✅ Delegate navigation to coordinator
+struct UserListView: View {
+    @ObservedObject var coordinator: UsersCoordinator
+
+    var body: some View {
+        Button("User") {
+            coordinator.showUserDetail(userId: "123")
+        }
+    }
+}
+```
+
+---
+
+## Essential Patterns
+
+### SwiftUI Coordinator Protocol
 
 ```swift
+@MainActor
 protocol Coordinator: ObservableObject {
     associatedtype Route: Hashable
-    var navigationPath: NavigationPath { get set }
+    var path: NavigationPath { get set }
 
+    func start() -> AnyView
     func navigate(to route: Route)
     func pop()
     func popToRoot()
 }
 
-// App coordinator
-final class AppCoordinator: Coordinator {
-    enum Route: Hashable {
-        case home
-        case userList
-        case userDetail(userId: String)
-        case settings
-    }
-
-    @Published var navigationPath = NavigationPath()
-
-    func navigate(to route: Route) {
-        navigationPath.append(route)
-    }
-
+extension Coordinator {
     func pop() {
-        if !navigationPath.isEmpty {
-            navigationPath.removeLast()
-        }
+        guard !path.isEmpty else { return }
+        path.removeLast()
     }
 
     func popToRoot() {
-        navigationPath = NavigationPath()
-    }
-
-    @ViewBuilder
-    func view(for route: Route) -> some View {
-        switch route {
-        case .home:
-            HomeView(coordinator: self)
-        case .userList:
-            UserListView(coordinator: self)
-        case .userDetail(let userId):
-            UserDetailView(userId: userId, coordinator: self)
-        case .settings:
-            SettingsView(coordinator: self)
-        }
+        path = NavigationPath()
     }
 }
 ```
 
-### NavigationStack Integration
+### Parent-Child Coordinator
 
 ```swift
-struct CoordinatedApp: View {
-    @StateObject private var coordinator = AppCoordinator()
-
-    var body: some View {
-        NavigationStack(path: $coordinator.navigationPath) {
-            coordinator.view(for: .home)
-                .navigationDestination(for: AppCoordinator.Route.self) { route in
-                    coordinator.view(for: route)
-                }
-        }
-        .environmentObject(coordinator)
-    }
-}
-
-// Views using coordinator
-struct HomeView: View {
-    @ObservedObject var coordinator: AppCoordinator
-
-    var body: some View {
-        VStack {
-            Button("View Users") {
-                coordinator.navigate(to: .userList)
-            }
-
-            Button("Settings") {
-                coordinator.navigate(to: .settings)
-            }
-        }
-        .navigationTitle("Home")
-    }
-}
-
-struct UserListView: View {
-    @ObservedObject var coordinator: AppCoordinator
-    @State private var users: [User] = []
-
-    var body: some View {
-        List(users) { user in
-            Button(user.name) {
-                coordinator.navigate(to: .userDetail(userId: user.id))
-            }
-        }
-        .navigationTitle("Users")
-    }
-}
-```
-
-## Hierarchical Coordinators
-
-### Parent-Child Coordinator Pattern
-
-```swift
-protocol ParentCoordinator: AnyObject {
+@MainActor
+protocol ParentCoordinatorProtocol: AnyObject {
     var childCoordinators: [any Coordinator] { get set }
-
-    func start(coordinator: any Coordinator)
-    func didFinish(coordinator: any Coordinator)
+    func addChild(_ coordinator: any Coordinator)
+    func removeChild(_ coordinator: any Coordinator)
 }
 
-extension ParentCoordinator {
-    func start(coordinator: any Coordinator) {
+extension ParentCoordinatorProtocol {
+    func addChild(_ coordinator: any Coordinator) {
         childCoordinators.append(coordinator)
     }
 
-    func didFinish(coordinator: any Coordinator) {
+    func removeChild(_ coordinator: any Coordinator) {
         childCoordinators.removeAll { $0 === coordinator as AnyObject }
     }
 }
 
 // Tab coordinator managing child coordinators
-final class TabCoordinator: ParentCoordinator {
+@MainActor
+final class TabCoordinator: ParentCoordinatorProtocol, ObservableObject {
     var childCoordinators: [any Coordinator] = []
 
-    lazy var homeCoordinator = HomeCoordinator(parent: self)
-    lazy var profileCoordinator = ProfileCoordinator(parent: self)
-    lazy var settingsCoordinator = SettingsCoordinator(parent: self)
+    lazy var homeCoordinator: HomeCoordinator = {
+        let coordinator = HomeCoordinator()
+        coordinator.parent = self
+        addChild(coordinator)
+        return coordinator
+    }()
 
-    @ViewBuilder
-    func makeTabView() -> some View {
-        TabView {
-            homeCoordinator.start()
-                .tabItem { Label("Home", systemImage: "house") }
+    lazy var profileCoordinator: ProfileCoordinator = {
+        let coordinator = ProfileCoordinator()
+        coordinator.parent = self
+        addChild(coordinator)
+        return coordinator
+    }()
+}
+```
 
-            profileCoordinator.start()
-                .tabItem { Label("Profile", systemImage: "person") }
+### Flow Completion with Result
 
-            settingsCoordinator.start()
-                .tabItem { Label("Settings", systemImage: "gear") }
-        }
-    }
+```swift
+protocol LoginCoordinatorDelegate: AnyObject {
+    func loginCoordinator(_ coordinator: LoginCoordinator, didFinishWith result: LoginResult)
 }
 
-// Child coordinator
-final class HomeCoordinator: Coordinator {
+enum LoginResult {
+    case success(User)
+    case cancelled
+}
+
+@MainActor
+final class LoginCoordinator: ObservableObject {
+    weak var delegate: LoginCoordinatorDelegate?
+    @Published var path = NavigationPath()
+
     enum Route: Hashable {
-        case home
-        case feed
-        case notifications
+        case credentials
+        case forgotPassword
+        case twoFactor(email: String)
     }
 
-    weak var parent: ParentCoordinator?
-    @Published var navigationPath = NavigationPath()
-
-    init(parent: ParentCoordinator) {
-        self.parent = parent
+    func completeLogin(user: User) {
+        delegate?.loginCoordinator(self, didFinishWith: .success(user))
     }
 
-    func start() -> some View {
-        NavigationStack(path: $navigationPath) {
-            view(for: .home)
-                .navigationDestination(for: Route.self) { route in
-                    view(for: route)
-                }
-        }
-    }
-
-    func navigate(to route: Route) {
-        navigationPath.append(route)
-    }
-
-    @ViewBuilder
-    func view(for route: Route) -> some View {
-        switch route {
-        case .home:
-            HomeView(coordinator: self)
-        case .feed:
-            FeedView(coordinator: self)
-        case .notifications:
-            NotificationsView(coordinator: self)
-        }
+    func cancel() {
+        delegate?.loginCoordinator(self, didFinishWith: .cancelled)
     }
 }
 ```
 
-## Deep Linking
-
-### Deep Link Handling
+### Deep Link Integration
 
 ```swift
-enum DeepLink: Equatable {
-    case user(id: String)
-    case product(id: String)
-    case settings(section: String)
-    case notification(id: String)
+@MainActor
+final class AppCoordinator: ObservableObject, ParentCoordinatorProtocol {
+    var childCoordinators: [any Coordinator] = []
+    @Published var path = NavigationPath()
 
-    init?(url: URL) {
-        guard url.scheme == "myapp" else { return nil }
-
-        let components = url.pathComponents.dropFirst()
-
-        switch url.host {
-        case "user":
-            guard let id = components.first else { return nil }
-            self = .user(id: id)
-
-        case "product":
-            guard let id = components.first else { return nil }
-            self = .product(id: id)
-
-        case "settings":
-            let section = components.first ?? "general"
-            self = .settings(section: section)
-
-        case "notification":
-            guard let id = components.first else { return nil }
-            self = .notification(id: id)
-
-        default:
-            return nil
-        }
-    }
-}
-
-final class AppCoordinator: Coordinator {
     func handle(deepLink: DeepLink) {
+        // Reset to known state
         popToRoot()
+        childCoordinators.forEach { removeChild($0) }
 
+        // Navigate to deep link destination
         switch deepLink {
         case .user(let id):
             navigate(to: .userList)
             navigate(to: .userDetail(userId: id))
 
-        case .product(let id):
-            navigate(to: .productList)
-            navigate(to: .productDetail(productId: id))
+        case .checkout:
+            let checkoutCoordinator = CheckoutCoordinator()
+            checkoutCoordinator.delegate = self
+            addChild(checkoutCoordinator)
+            // Present checkout flow
 
         case .settings(let section):
             navigate(to: .settings)
-            navigate(to: .settingsSection(section))
-
-        case .notification(let id):
-            navigate(to: .notifications)
-            navigate(to: .notificationDetail(id))
-        }
-    }
-}
-
-// SwiftUI scene integration
-@main
-struct MyApp: App {
-    @StateObject private var coordinator = AppCoordinator()
-
-    var body: some Scene {
-        WindowGroup {
-            CoordinatedApp()
-                .onOpenURL { url in
-                    if let deepLink = DeepLink(url: url) {
-                        coordinator.handle(deepLink: deepLink)
-                    }
-                }
-        }
-    }
-}
-```
-
-## UIKit Coordinator
-
-### UIKit Coordinator Pattern
-
-```swift
-protocol UIKitCoordinator: AnyObject {
-    var navigationController: UINavigationController { get }
-    var childCoordinators: [UIKitCoordinator] { get set }
-
-    func start()
-}
-
-// Example coordinator
-final class LoginCoordinator: UIKitCoordinator {
-    let navigationController: UINavigationController
-    var childCoordinators: [UIKitCoordinator] = []
-    weak var parentCoordinator: UIKitCoordinator?
-
-    init(navigationController: UINavigationController) {
-        self.navigationController = navigationController
-    }
-
-    func start() {
-        showLogin()
-    }
-
-    private func showLogin() {
-        let viewModel = LoginViewModel(coordinator: self)
-        let loginVC = LoginViewController(viewModel: viewModel)
-        navigationController.pushViewController(loginVC, animated: true)
-    }
-
-    func didFinishLogin(user: User) {
-        showHome(user: user)
-    }
-
-    private func showHome(user: User) {
-        let homeCoordinator = HomeCoordinator(
-            navigationController: navigationController,
-            user: user
-        )
-        childCoordinators.append(homeCoordinator)
-        homeCoordinator.start()
-    }
-}
-```
-
-## Modal Presentation
-
-### Sheet Presentation
-
-```swift
-final class AppCoordinator: ObservableObject {
-    enum Sheet: Identifiable {
-        case settings
-        case profile(userId: String)
-        case compose
-
-        var id: String {
-            switch self {
-            case .settings: return "settings"
-            case .profile(let id): return "profile-\(id)"
-            case .compose: return "compose"
+            if let section = section {
+                navigate(to: .settingsSection(section))
             }
         }
     }
-
-    @Published var activeSheet: Sheet?
-
-    func presentSheet(_ sheet: Sheet) {
-        activeSheet = sheet
-    }
-
-    func dismissSheet() {
-        activeSheet = nil
-    }
-
-    @ViewBuilder
-    func sheetView(for sheet: Sheet) -> some View {
-        switch sheet {
-        case .settings:
-            SettingsView(coordinator: self)
-        case .profile(let userId):
-            ProfileView(userId: userId, coordinator: self)
-        case .compose:
-            ComposeView(coordinator: self)
-        }
-    }
-}
-
-struct ContentView: View {
-    @StateObject private var coordinator = AppCoordinator()
-
-    var body: some View {
-        NavigationStack {
-            HomeView(coordinator: coordinator)
-        }
-        .sheet(item: $coordinator.activeSheet) { sheet in
-            coordinator.sheetView(for: sheet)
-        }
-    }
 }
 ```
 
-## Coordinator with Dependency Injection
+---
 
-### Factory Pattern
+## Quick Reference
 
-```swift
-protocol CoordinatorFactory {
-    func makeAppCoordinator() -> AppCoordinator
-    func makeAuthCoordinator(parent: AppCoordinator) -> AuthCoordinator
-    func makeHomeCoordinator(parent: AppCoordinator) -> HomeCoordinator
-}
+### Coordinator Checklist
 
-final class DefaultCoordinatorFactory: CoordinatorFactory {
-    private let container: DependencyContainer
+- [ ] Coordinator owns NavigationPath (SwiftUI) or UINavigationController (UIKit)
+- [ ] Parent-child references are weak
+- [ ] Child coordinators removed on flow completion
+- [ ] Views don't know about coordinator hierarchy
+- [ ] Business logic stays in ViewModels/UseCases
+- [ ] Deep links handled at appropriate coordinator level
 
-    init(container: DependencyContainer) {
-        self.container = container
-    }
+### When to Use Coordinators
 
-    func makeAppCoordinator() -> AppCoordinator {
-        AppCoordinator(
-            authService: container.authService,
-            factory: self
-        )
-    }
+| Scenario | Use Coordinator? |
+|----------|------------------|
+| Simple 3-5 screen app | No — simple Router |
+| Multiple independent flows | Yes |
+| Deep linking required | Likely yes |
+| Multi-step wizard flows | Yes |
+| Cross-tab navigation | Yes |
+| A/B testing navigation | Yes |
+| Team-based feature ownership | Yes |
 
-    func makeAuthCoordinator(parent: AppCoordinator) -> AuthCoordinator {
-        AuthCoordinator(
-            parent: parent,
-            authService: container.authService
-        )
-    }
+### Red Flags
 
-    func makeHomeCoordinator(parent: AppCoordinator) -> HomeCoordinator {
-        HomeCoordinator(
-            parent: parent,
-            userService: container.userService
-        )
-    }
-}
-```
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| childCoordinators grows forever | Memory leak | Remove on completion |
+| Strong parent reference | Retain cycle | Use weak or delegate |
+| Business logic in coordinator | Wrong layer | Move to ViewModel/UseCase |
+| View creates NavigationLink | Bypasses coordinator | Delegate to coordinator |
+| @StateObject coordinator in child | Recreated on rebuild | Parent owns coordinator |
+| Coordinator creates its own views | Can't inject dependencies | Use ViewFactory |
 
-## Testing Coordinators
+### Coordinator vs Router
 
-### Coordinator Tests
-
-```swift
-final class AppCoordinatorTests: XCTestCase {
-    var sut: AppCoordinator!
-
-    override func setUp() {
-        super.setUp()
-        sut = AppCoordinator()
-    }
-
-    func testNavigateToUserList() {
-        // When
-        sut.navigate(to: .userList)
-
-        // Then
-        XCTAssertEqual(sut.navigationPath.count, 1)
-    }
-
-    func testPopToRoot() {
-        // Given
-        sut.navigate(to: .userList)
-        sut.navigate(to: .userDetail(userId: "123"))
-
-        // When
-        sut.popToRoot()
-
-        // Then
-        XCTAssertEqual(sut.navigationPath.count, 0)
-    }
-
-    func testDeepLinkHandling() {
-        // Given
-        let url = URL(string: "myapp://user/123")!
-        let deepLink = DeepLink(url: url)
-
-        // When
-        if let deepLink = deepLink {
-            sut.handle(deepLink: deepLink)
-        }
-
-        // Then
-        XCTAssertEqual(sut.navigationPath.count, 2)
-    }
-}
-```
-
-## Best Practices
-
-### 1. Single Responsibility
-
-```swift
-// ✅ Good: One coordinator per feature
-final class AuthCoordinator: Coordinator {
-    // Handles only authentication flow
-}
-
-final class ProfileCoordinator: Coordinator {
-    // Handles only profile flow
-}
-
-// ❌ Avoid: God coordinator
-final class AppCoordinator: Coordinator {
-    // Handles everything
-}
-```
-
-### 2. Weak Parent References
-
-```swift
-// ✅ Good: Weak parent to prevent retain cycles
-final class ChildCoordinator: Coordinator {
-    weak var parent: ParentCoordinator?
-}
-
-// ❌ Avoid: Strong parent reference
-final class ChildCoordinator: Coordinator {
-    var parent: ParentCoordinator  // Retain cycle!
-}
-```
-
-### 3. View Doesn't Know About Navigation
-
-```swift
-// ✅ Good: View delegates navigation to coordinator
-struct UserDetailView: View {
-    let coordinator: AppCoordinator
-
-    var body: some View {
-        Button("Edit") {
-            coordinator.navigate(to: .editUser)
-        }
-    }
-}
-
-// ❌ Avoid: View knows about NavigationLink
-struct UserDetailView: View {
-    var body: some View {
-        NavigationLink("Edit", destination: EditUserView())
-    }
-}
-```
-
-## References
-
-- [Coordinator Pattern](https://www.hackingwithswift.com/articles/71/how-to-use-the-coordinator-pattern-in-ios-apps)
-- [SwiftUI Navigation](https://developer.apple.com/documentation/swiftui/navigation)
-- [Advanced Coordinators](https://www.swiftbysundell.com/articles/navigation-in-swiftui/)
+| Aspect | Coordinator | Router |
+|--------|-------------|--------|
+| Complexity | Higher | Lower |
+| Hierarchy support | Yes (parent-child) | No |
+| Flow isolation | Strong | Weak |
+| Testing | Excellent | Good |
+| Learning curve | Steep | Gentle |
+| Best for | Large apps, teams | Small-medium apps |

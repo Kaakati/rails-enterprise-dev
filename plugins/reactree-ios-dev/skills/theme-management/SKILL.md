@@ -1,675 +1,378 @@
 ---
-name: "Theme Management"
-description: "Comprehensive theme management, dark mode, and dynamic styling patterns for iOS/tvOS"
-version: "2.0.0"
+name: theme-management
+description: "Expert theming decisions for iOS/tvOS: when custom themes add value vs system colors suffice, color token architecture trade-offs, theme switching animation strategies, and accessibility contrast compliance. Use when designing color systems, implementing dark mode, or building theme pickers. Trigger keywords: theme, dark mode, light mode, color scheme, appearance, colorScheme, ThemeManager, adaptive colors, dynamic colors, color tokens, WCAG contrast"
+version: "3.0.0"
 ---
 
-# Theme Management for iOS/tvOS
+# Theme Management — Expert Decisions
 
-Complete guide to implementing theme systems, dark mode support, dynamic colors, and custom theming in SwiftUI applications.
+Expert decision frameworks for theming choices in SwiftUI. Claude knows Color and colorScheme — this skill provides judgment calls for when custom theming adds value and architecture trade-offs.
 
-## Core ThemeManager Pattern
+---
 
-### Singleton ThemeManager
+## Decision Trees
+
+### Do You Need Custom Theming?
+
+```
+What's your color requirement?
+├─ Standard light/dark mode only
+│  └─ System colors are sufficient
+│     Color(.systemBackground), Color(.label)
+│
+├─ Brand colors that differ from system
+│  └─ Asset catalog colors (Named Colors)
+│     Define light/dark variants in xcassets
+│
+├─ User-selectable themes (beyond light/dark)
+│  └─ Full ThemeManager with custom palettes
+│     User can choose "Ocean", "Forest", etc.
+│
+└─ White-label app (different branding per client)
+   └─ Remote theme configuration
+      Fetch brand colors from server
+```
+
+**The trap**: Building a ThemeManager for an app that only needs light/dark mode. Asset catalog colors already handle this automatically.
+
+### Color Token Architecture
+
+```
+How should you organize colors?
+├─ Small app (< 20 screens)
+│  └─ Direct Color("name") usage
+│     Don't over-engineer
+│
+├─ Medium app, single brand
+│  └─ Color extension with static properties
+│     Color.appPrimary, Color.appBackground
+│
+├─ Large app, design system
+│  └─ Semantic tokens + primitive tokens
+│     Primitives: blue500, gray100
+│     Semantic: textPrimary → gray900/gray100
+│
+└─ Multi-brand/white-label
+   └─ Protocol-based themes
+      protocol Theme { var primary: Color }
+```
+
+### Theme Switching Strategy
+
+```
+When should theme changes apply?
+├─ Immediate (all screens at once)
+│  └─ Environment-based (@Environment(\.colorScheme))
+│     System handles propagation
+│
+├─ Per-screen animation
+│  └─ withAnimation on theme property change
+│     Smooth transition within visible content
+│
+├─ Custom transition (like morphing)
+│  └─ Snapshot + crossfade technique
+│     Complex, usually not worth it
+│
+└─ App restart required
+   └─ For deep UIKit integration
+      Sometimes unavoidable with third-party SDKs
+```
+
+### Dark Mode Compliance Level
+
+```
+What's your dark mode strategy?
+├─ System automatic (no custom colors)
+│  └─ Free dark mode support
+│     UIColor semantic colors work automatically
+│
+├─ Custom colors with asset catalog
+│  └─ Define both appearances per color
+│     Xcode handles switching
+│
+├─ Programmatic dark variants
+│  └─ Use Color.dynamic(light:dark:)
+│     More flexible, harder to maintain
+│
+└─ Ignoring dark mode
+   └─ DON'T — accessibility issue
+      Users expect dark mode support
+```
+
+---
+
+## NEVER Do
+
+### Color Definition
+
+**NEVER** hardcode colors in views:
+```swift
+// ❌ Doesn't adapt to dark mode
+Text("Hello")
+    .foregroundColor(Color(red: 0, green: 0, blue: 0))
+    .background(Color.white)
+
+// ✅ Adapts automatically
+Text("Hello")
+    .foregroundColor(Color(.label))
+    .background(Color(.systemBackground))
+
+// Or use named colors from asset catalog
+Text("Hello")
+    .foregroundColor(Color("TextPrimary"))
+```
+
+**NEVER** use opposite colors for dark mode:
+```swift
+// ❌ Pure black/white has harsh contrast
+let background = colorScheme == .dark ? Color.black : Color.white
+let text = colorScheme == .dark ? Color.white : Color.black
+
+// ✅ Use elevated surfaces and softer contrasts
+let background = Color(.systemBackground)  // Slightly elevated in dark mode
+let text = Color(.label)  // Not pure white in dark mode
+```
+
+**NEVER** check colorScheme when system colors suffice:
+```swift
+// ❌ Unnecessary — system colors do this
+@Environment(\.colorScheme) var colorScheme
+
+var textColor: Color {
+    colorScheme == .dark ? .white : .black  // Reimplementing Color(.label)!
+}
+
+// ✅ Just use the semantic color
+.foregroundColor(Color(.label))
+```
+
+### Theme Architecture
+
+**NEVER** store theme in multiple places:
+```swift
+// ❌ State scattered — which is source of truth?
+class ThemeManager {
+    @Published var isDark = false
+}
+
+struct SettingsView: View {
+    @AppStorage("isDark") var isDark = false  // Different storage!
+}
+
+// ✅ Single source of truth
+class ThemeManager: ObservableObject {
+    @AppStorage("theme") var theme: Theme = .system  // One place
+}
+```
+
+**NEVER** force override system preference without user consent:
+```swift
+// ❌ Ignores user's system-wide preference
+init() {
+    UIApplication.shared.windows.first?.overrideUserInterfaceStyle = .dark
+}
+
+// ✅ Only override if user explicitly chose in-app
+func applyUserPreference(_ theme: Theme) {
+    switch theme {
+    case .system:
+        window?.overrideUserInterfaceStyle = .unspecified  // Respect system
+    case .light:
+        window?.overrideUserInterfaceStyle = .light
+    case .dark:
+        window?.overrideUserInterfaceStyle = .dark
+    }
+}
+```
+
+**NEVER** forget accessibility contrast requirements:
+```swift
+// ❌ Low contrast — fails WCAG AA
+let textColor = Color(white: 0.6)  // On white background = 2.5:1 ratio
+let backgroundColor = Color.white
+
+// ✅ Meets WCAG AA (4.5:1 for normal text)
+let textColor = Color(.secondaryLabel)  // System ensures compliance
+let backgroundColor = Color(.systemBackground)
+```
+
+### Performance
+
+**NEVER** recompute colors on every view update:
+```swift
+// ❌ Creates new color object every render
+var body: some View {
+    Text("Hello")
+        .foregroundColor(Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark ? .white : .black
+        }))  // New UIColor closure every time!
+}
+
+// ✅ Define once, reuse
+extension Color {
+    static let adaptiveText = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .white : .black
+    })
+}
+
+var body: some View {
+    Text("Hello")
+        .foregroundColor(.adaptiveText)
+}
+```
+
+---
+
+## Essential Patterns
+
+### Semantic Color System
+
+```swift
+// Primitive tokens (raw values)
+extension Color {
+    enum Primitive {
+        static let blue500 = Color(hex: "#007AFF")
+        static let blue600 = Color(hex: "#0056B3")
+        static let gray900 = Color(hex: "#1A1A1A")
+        static let gray100 = Color(hex: "#F5F5F5")
+    }
+}
+
+// Semantic tokens (usage-based)
+extension Color {
+    static let textPrimary = Color("TextPrimary")  // gray900 light, gray100 dark
+    static let textSecondary = Color("TextSecondary")
+    static let surfacePrimary = Color("SurfacePrimary")
+    static let surfaceSecondary = Color("SurfaceSecondary")
+    static let interactive = Color("Interactive")  // blue500
+    static let interactivePressed = Color("InteractivePressed")  // blue600
+
+    // Feedback colors (always same hue, adjusted for mode)
+    static let success = Color("Success")
+    static let warning = Color("Warning")
+    static let error = Color("Error")
+}
+```
+
+### ThemeManager with Persistence
 
 ```swift
 @MainActor
 final class ThemeManager: ObservableObject {
     static let shared = ThemeManager()
 
-    @Published var currentTheme: Theme = .system
-    @Published private(set) var colors: ThemeColors
-    @Published private(set) var typography: ThemeTypography
+    @AppStorage("selectedTheme") private var storedTheme: String = Theme.system.rawValue
 
-    private let themeKey = "selectedTheme"
+    @Published private(set) var currentTheme: Theme = .system
+
+    enum Theme: String, CaseIterable {
+        case system, light, dark
+
+        var overrideStyle: UIUserInterfaceStyle {
+            switch self {
+            case .system: return .unspecified
+            case .light: return .light
+            case .dark: return .dark
+            }
+        }
+    }
 
     private init() {
-        // Load saved theme preference
-        if let savedTheme = UserDefaults.standard.string(forKey: themeKey),
-           let theme = Theme(rawValue: savedTheme) {
-            self.currentTheme = theme
-        }
-
-        // Initialize colors based on theme
-        self.colors = ThemeColors(theme: currentTheme)
-        self.typography = ThemeTypography()
+        currentTheme = Theme(rawValue: storedTheme) ?? .system
+        applyTheme(currentTheme)
     }
 
     func setTheme(_ theme: Theme) {
         currentTheme = theme
-        colors = ThemeColors(theme: theme)
-        UserDefaults.standard.set(theme.rawValue, forKey: themeKey)
-
-        // Notify system of theme change
+        storedTheme = theme.rawValue
         applyTheme(theme)
     }
 
     private func applyTheme(_ theme: Theme) {
-        // Apply theme to UIKit components if needed
-        switch theme {
-        case .light:
-            UIApplication.shared.windows.first?.overrideUserInterfaceStyle = .light
-        case .dark:
-            UIApplication.shared.windows.first?.overrideUserInterfaceStyle = .dark
-        case .system:
-            UIApplication.shared.windows.first?.overrideUserInterfaceStyle = .unspecified
-        }
-    }
-}
-
-enum Theme: String, CaseIterable, Identifiable {
-    case light = "light"
-    case dark = "dark"
-    case system = "system"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .light: return "Light"
-        case .dark: return "Dark"
-        case .system: return "System"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .light: return "sun.max.fill"
-        case .dark: return "moon.fill"
-        case .system: return "circle.lefthalf.filled"
-        }
-    }
-}
-```
-
-## Dark Mode Support
-
-### Environment-Based Dark Mode
-
-```swift
-struct ContentView: View {
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        VStack {
-            Text("Current mode: \(colorScheme == .dark ? "Dark" : "Light")")
-                .foregroundColor(textColor)
-                .background(backgroundColor)
-        }
-    }
-
-    private var textColor: Color {
-        colorScheme == .dark ? .white : .black
-    }
-
-    private var backgroundColor: Color {
-        colorScheme == .dark ? .black : .white
-    }
-}
-```
-
-### Adaptive Colors
-
-```swift
-struct ThemeColors {
-    let theme: Theme
-
-    // Primary colors
-    var primary: Color {
-        switch theme {
-        case .light:
-            return Color(hex: "#007AFF")
-        case .dark:
-            return Color(hex: "#0A84FF")
-        case .system:
-            return Color.accentColor
-        }
-    }
-
-    var secondary: Color {
-        switch theme {
-        case .light:
-            return Color(hex: "#5856D6")
-        case .dark:
-            return Color(hex: "#5E5CE6")
-        case .system:
-            return Color.secondary
-        }
-    }
-
-    // Background colors
-    var background: Color {
-        Color(.systemBackground)
-    }
-
-    var secondaryBackground: Color {
-        Color(.secondarySystemBackground)
-    }
-
-    var tertiaryBackground: Color {
-        Color(.tertiarySystemBackground)
-    }
-
-    // Text colors
-    var text: Color {
-        Color(.label)
-    }
-
-    var secondaryText: Color {
-        Color(.secondaryLabel)
-    }
-
-    var tertiaryText: Color {
-        Color(.tertiaryLabel)
-    }
-
-    // Semantic colors
-    var success: Color {
-        Color(.systemGreen)
-    }
-
-    var warning: Color {
-        Color(.systemOrange)
-    }
-
-    var error: Color {
-        Color(.systemRed)
-    }
-
-    var info: Color {
-        Color(.systemBlue)
-    }
-}
-
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (255, 0, 0, 0)
-        }
-
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue: Double(b) / 255,
-            opacity: Double(a) / 255
-        )
-    }
-}
-```
-
-## SwiftGen Integration
-
-### Assets.xcassets Configuration
-
-**Colors.xcassets structure:**
-```
-Colors.xcassets/
-├── Primary.colorset/
-│   └── Contents.json
-├── Secondary.colorset/
-│   └── Contents.json
-├── Background.colorset/
-│   └── Contents.json
-└── Text.colorset/
-    └── Contents.json
-```
-
-**Contents.json example:**
-```json
-{
-  "colors": [
-    {
-      "idiom": "universal",
-      "color": {
-        "color-space": "srgb",
-        "components": {
-          "red": "0.000",
-          "green": "0.478",
-          "blue": "1.000",
-          "alpha": "1.000"
-        }
-      }
-    },
-    {
-      "idiom": "universal",
-      "appearances": [
-        {
-          "appearance": "luminosity",
-          "value": "dark"
-        }
-      ],
-      "color": {
-        "color-space": "srgb",
-        "components": {
-          "red": "0.039",
-          "green": "0.518",
-          "blue": "1.000",
-          "alpha": "1.000"
-        }
-      }
-    }
-  ],
-  "info": {
-    "author": "xcode",
-    "version": 1
-  }
-}
-```
-
-### SwiftGen Generated Colors
-
-**swiftgen.yml:**
-```yaml
-colors:
-  inputs: Resources/Colors.xcassets
-  outputs:
-    - templateName: swift5
-      output: Generated/Colors.swift
-```
-
-**Usage:**
-```swift
-// Generated code usage
-Text("Hello")
-    .foregroundColor(Asset.Colors.primary.swiftUIColor)
-    .background(Asset.Colors.background.swiftUIColor)
-
-// Extension for convenience
-extension Color {
-    static let themePrimary = Asset.Colors.primary.swiftUIColor
-    static let themeSecondary = Asset.Colors.secondary.swiftUIColor
-    static let themeBackground = Asset.Colors.background.swiftUIColor
-}
-```
-
-## Dynamic Color Systems
-
-### Asset Catalog Colors
-
-```swift
-extension Color {
-    // Automatically adapts to light/dark mode
-    static let appPrimary = Color("AppPrimary")
-    static let appSecondary = Color("AppSecondary")
-    static let appBackground = Color("AppBackground")
-    static let appText = Color("AppText")
-}
-
-// Usage
-struct ThemedView: View {
-    var body: some View {
-        VStack {
-            Text("Title")
-                .foregroundColor(.appText)
-        }
-        .background(Color.appBackground)
-    }
-}
-```
-
-### Custom Dynamic Colors
-
-```swift
-extension Color {
-    static func dynamic(light: Color, dark: Color) -> Color {
-        return Color(UIColor { traitCollection in
-            traitCollection.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
-        })
-    }
-}
-
-// Usage
-let customColor = Color.dynamic(
-    light: Color(hex: "#007AFF"),
-    dark: Color(hex: "#0A84FF")
-)
-```
-
-## Typography System
-
-### ThemeTypography
-
-```swift
-struct ThemeTypography {
-    // Title styles
-    let largeTitle: Font = .system(size: 34, weight: .bold)
-    let title1: Font = .system(size: 28, weight: .bold)
-    let title2: Font = .system(size: 22, weight: .bold)
-    let title3: Font = .system(size: 20, weight: .semibold)
-
-    // Body styles
-    let body: Font = .system(size: 17, weight: .regular)
-    let bodyBold: Font = .system(size: 17, weight: .semibold)
-    let callout: Font = .system(size: 16, weight: .regular)
-
-    // Supporting styles
-    let caption1: Font = .system(size: 12, weight: .regular)
-    let caption2: Font = .system(size: 11, weight: .regular)
-    let footnote: Font = .system(size: 13, weight: .regular)
-
-    // Custom app fonts
-    static func appFont(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        return .custom("YourAppFont", size: size)
-            .weight(weight)
-    }
-}
-
-// Environment injection
-struct ThemeTypographyKey: EnvironmentKey {
-    static let defaultValue = ThemeTypography()
-}
-
-extension EnvironmentValues {
-    var typography: ThemeTypography {
-        get { self[ThemeTypographyKey.self] }
-        set { self[ThemeTypographyKey.self] = newValue }
-    }
-}
-
-// Usage
-struct StyledText: View {
-    @Environment(\.typography) var typography
-
-    var body: some View {
-        Text("Styled Text")
-            .font(typography.title1)
-    }
-}
-```
-
-## Theme Switching
-
-### Theme Picker View
-
-```swift
-struct ThemePickerView: View {
-    @EnvironmentObject var themeManager: ThemeManager
-
-    var body: some View {
-        Form {
-            Section {
-                ForEach(Theme.allCases) { theme in
-                    Button {
-                        themeManager.setTheme(theme)
-                    } label: {
-                        HStack {
-                            Image(systemName: theme.icon)
-                                .foregroundColor(themeManager.colors.primary)
-
-                            Text(theme.displayName)
-                                .foregroundColor(themeManager.colors.text)
-
-                            Spacer()
-
-                            if themeManager.currentTheme == theme {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(themeManager.colors.primary)
-                            }
-                        }
-                    }
-                }
-            } header: {
-                Text("Appearance")
+        // Apply to all windows (handles multiple scenes)
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                window.overrideUserInterfaceStyle = theme.overrideStyle
             }
         }
     }
 }
 ```
 
-### Animated Theme Transitions
-
-```swift
-extension ThemeManager {
-    func setTheme(_ theme: Theme, animated: Bool = true) {
-        if animated {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                currentTheme = theme
-                colors = ThemeColors(theme: theme)
-            }
-        } else {
-            currentTheme = theme
-            colors = ThemeColors(theme: theme)
-        }
-
-        UserDefaults.standard.set(theme.rawValue, forKey: themeKey)
-        applyTheme(theme)
-    }
-}
-```
-
-## Custom Theme Creation
-
-### User-Defined Themes
-
-```swift
-struct CustomTheme: Codable, Identifiable {
-    let id: UUID
-    let name: String
-    let primaryColor: String
-    let secondaryColor: String
-    let backgroundColor: String
-    let textColor: String
-
-    var colors: ThemeColors {
-        ThemeColors(
-            primary: Color(hex: primaryColor),
-            secondary: Color(hex: secondaryColor),
-            background: Color(hex: backgroundColor),
-            text: Color(hex: textColor)
-        )
-    }
-}
-
-extension ThemeManager {
-    @Published var customThemes: [CustomTheme] = []
-
-    func addCustomTheme(_ theme: CustomTheme) {
-        customThemes.append(theme)
-        saveCustomThemes()
-    }
-
-    func applyCustomTheme(_ theme: CustomTheme) {
-        colors = theme.colors
-    }
-
-    private func saveCustomThemes() {
-        if let encoded = try? JSONEncoder().encode(customThemes) {
-            UserDefaults.standard.set(encoded, forKey: "customThemes")
-        }
-    }
-
-    private func loadCustomThemes() {
-        if let data = UserDefaults.standard.data(forKey: "customThemes"),
-           let decoded = try? JSONDecoder().decode([CustomTheme].self, from: data) {
-            customThemes = decoded
-        }
-    }
-}
-```
-
-## Accessibility Considerations
-
-### Color Contrast Validation
+### Contrast Validation
 
 ```swift
 extension Color {
-    func contrastRatio(with other: Color) -> CGFloat {
-        let luminance1 = self.relativeLuminance()
-        let luminance2 = other.relativeLuminance()
+    func contrastRatio(against background: Color) -> Double {
+        let fgLuminance = relativeLuminance
+        let bgLuminance = background.relativeLuminance
 
-        let lighter = max(luminance1, luminance2)
-        let darker = min(luminance1, luminance2)
+        let lighter = max(fgLuminance, bgLuminance)
+        let darker = min(fgLuminance, bgLuminance)
 
         return (lighter + 0.05) / (darker + 0.05)
     }
 
-    private func relativeLuminance() -> CGFloat {
-        // Convert to RGB components
-        guard let components = UIColor(self).cgColor.components else { return 0 }
-
-        let r = linearize(components[0])
-        let g = linearize(components[1])
-        let b = linearize(components[2])
-
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    var meetsWCAGAA: Bool {
+        // Check against both light and dark backgrounds
+        let lightBg = Color.white
+        let darkBg = Color.black
+        return contrastRatio(against: lightBg) >= 4.5 ||
+               contrastRatio(against: darkBg) >= 4.5
     }
 
-    private func linearize(_ value: CGFloat) -> CGFloat {
-        if value <= 0.03928 {
-            return value / 12.92
-        } else {
-            return pow((value + 0.055) / 1.055, 2.4)
+    private var relativeLuminance: Double {
+        guard let components = UIColor(self).cgColor.components,
+              components.count >= 3 else { return 0 }
+
+        func linearize(_ value: CGFloat) -> Double {
+            let v = Double(value)
+            return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
         }
-    }
 
-    func meetsWCAGAA(on background: Color) -> Bool {
-        return contrastRatio(with: background) >= 4.5
-    }
-
-    func meetsWCAGAAA(on background: Color) -> Bool {
-        return contrastRatio(with: background) >= 7.0
+        return 0.2126 * linearize(components[0]) +
+               0.7152 * linearize(components[1]) +
+               0.0722 * linearize(components[2])
     }
 }
 ```
 
-### High Contrast Mode Support
+---
 
-```swift
-struct ThemedButton: View {
-    @Environment(\.colorScheme) var colorScheme
-    @Environment(\.accessibilityDifferentiateWithoutColor) var differentiateWithoutColor
+## Quick Reference
 
-    let title: String
+### When to Use Custom Theming
 
-    var body: some View {
-        Button(title) {
-            // Action
-        }
-        .foregroundColor(.white)
-        .background(buttonColor)
-        .overlay(
-            differentiateWithoutColor ?
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.primary, lineWidth: 2)
-                : nil
-        )
-    }
+| Scenario | Solution |
+|----------|----------|
+| Standard light/dark | System colors only |
+| Brand colors | Asset catalog named colors |
+| User-selectable themes | ThemeManager + color palettes |
+| White-label | Remote config + theme protocol |
 
-    private var buttonColor: Color {
-        differentiateWithoutColor ? .gray : .blue
-    }
-}
-```
+### System vs Custom Colors
 
-## Best Practices
+| Need | System | Custom |
+|------|--------|--------|
+| Text colors | Color(.label), Color(.secondaryLabel) | Only if brand requires |
+| Backgrounds | Color(.systemBackground) | Only if brand requires |
+| Dividers | Color(.separator) | Rarely |
+| Tint/accent | Color.accentColor | Usually brand color |
 
-### 1. Use System Colors When Possible
+### Contrast Ratios (WCAG)
 
-```swift
-// ✅ Good: Uses adaptive system colors
-Color(.systemBackground)
-Color(.label)
-Color(.systemBlue)
+| Level | Normal Text | Large Text | Use Case |
+|-------|-------------|------------|----------|
+| AA | 4.5:1 | 3:1 | Minimum acceptable |
+| AAA | 7:1 | 4.5:1 | Enhanced readability |
 
-// ❌ Avoid: Hard-coded colors
-Color.white
-Color.black
-Color(red: 0, green: 0, blue: 1)
-```
+### Red Flags
 
-### 2. Respect User Preferences
-
-```swift
-@Environment(\.colorScheme) var colorScheme
-@Environment(\.colorSchemeContrast) var contrast
-@Environment(\.accessibilityReduceTransparency) var reduceTransparency
-
-var background: some View {
-    if reduceTransparency {
-        Color.systemBackground
-    } else {
-        Color.systemBackground.opacity(0.95)
-    }
-}
-```
-
-### 3. Test in Both Modes
-
-```swift
-#Preview("Light Mode") {
-    ContentView()
-        .preferredColorScheme(.light)
-}
-
-#Preview("Dark Mode") {
-    ContentView()
-        .preferredColorScheme(.dark)
-}
-```
-
-### 4. Provide Theme Toggle
-
-```swift
-struct SettingsView: View {
-    @EnvironmentObject var themeManager: ThemeManager
-
-    var body: some View {
-        Form {
-            Picker("Appearance", selection: $themeManager.currentTheme) {
-                ForEach(Theme.allCases) { theme in
-                    Text(theme.displayName).tag(theme)
-                }
-            }
-        }
-    }
-}
-```
-
-## Testing Themes
-
-```swift
-final class ThemeManagerTests: XCTestCase {
-    var sut: ThemeManager!
-
-    override func setUp() {
-        super.setUp()
-        sut = ThemeManager()
-    }
-
-    func testSetLightTheme() {
-        sut.setTheme(.light)
-        XCTAssertEqual(sut.currentTheme, .light)
-    }
-
-    func testSetDarkTheme() {
-        sut.setTheme(.dark)
-        XCTAssertEqual(sut.currentTheme, .dark)
-    }
-
-    func testColorContrast() {
-        let white = Color.white
-        let black = Color.black
-
-        XCTAssertTrue(white.meetsWCAGAAA(on: black))
-        XCTAssertTrue(black.meetsWCAGAAA(on: white))
-    }
-}
-```
-
-## References
-
-- [Human Interface Guidelines - Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode)
-- [Color Assets](https://developer.apple.com/documentation/xcode/asset-management)
-- [SwiftGen Documentation](https://github.com/SwiftGen/SwiftGen)
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| Color(red:green:blue:) in view | No dark mode | Use semantic colors |
+| @Environment colorScheme everywhere | Over-engineering | System colors adapt automatically |
+| Pure black/white | Harsh contrast | Elevated surfaces |
+| Theme in multiple @AppStorage | Split source of truth | Single ThemeManager |
+| window.overrideUserInterfaceStyle in init | Ignores user pref | Only on explicit user action |

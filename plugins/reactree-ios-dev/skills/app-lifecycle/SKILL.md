@@ -1,528 +1,442 @@
 ---
-name: "App Lifecycle"
-description: "iOS/tvOS application lifecycle management including app launch, scene lifecycle, state restoration, and background tasks"
-version: "2.0.0"
+name: app-lifecycle
+description: "Expert lifecycle decisions for iOS/tvOS: when SwiftUI lifecycle vs SceneDelegate, background task strategies, state restoration trade-offs, and launch optimization. Use when managing app state transitions, handling background work, or debugging lifecycle issues. Trigger keywords: lifecycle, scenePhase, SceneDelegate, AppDelegate, background task, state restoration, launch time, didFinishLaunching, applicationWillTerminate, sceneDidBecomeActive"
+version: "3.0.0"
 ---
 
-# App Lifecycle for iOS/tvOS
+# App Lifecycle — Expert Decisions
 
-Complete guide to managing iOS/tvOS application lifecycle including app launch sequence, scene lifecycle (iOS 13+), state restoration, background tasks, and memory warnings.
+Expert decision frameworks for app lifecycle choices. Claude knows scenePhase and SceneDelegate — this skill provides judgment calls for architecture decisions and background task trade-offs.
 
-## App Launch Sequence
+---
 
-### Application Lifecycle (Pre-iOS 13)
+## Decision Trees
 
+### Lifecycle API Selection
+
+```
+What's your project setup?
+├─ Pure SwiftUI app (iOS 14+)
+│  └─ @main App + scenePhase
+│     Simplest approach, sufficient for most apps
+│
+├─ Need UIKit integration
+│  └─ SceneDelegate + UIHostingController
+│     Required for some third-party SDKs
+│
+├─ Need pre-launch setup
+│  └─ AppDelegate + SceneDelegate
+│     SDK initialization, remote notifications
+│
+└─ Legacy app (pre-iOS 13)
+   └─ AppDelegate only
+      window property on AppDelegate
+```
+
+**The trap**: Using SceneDelegate when pure SwiftUI suffices. scenePhase covers most use cases without the boilerplate.
+
+### Background Task Strategy
+
+```
+What work needs to happen in background?
+├─ Quick save (< 5 seconds)
+│  └─ UIApplication.beginBackgroundTask
+│     Request extra time in sceneDidEnterBackground
+│
+├─ Network sync (< 30 seconds)
+│  └─ BGAppRefreshTask
+│     System schedules, best-effort timing
+│
+├─ Large download/upload
+│  └─ Background URL Session
+│     Continues even after app termination
+│
+├─ Location tracking
+│  └─ Location background mode
+│     Significant change or continuous
+│
+└─ Long processing (> 30 seconds)
+   └─ BGProcessingTask
+      Runs during charging, overnight
+```
+
+### State Restoration Approach
+
+```
+What state needs restoration?
+├─ Simple navigation state
+│  └─ @SceneStorage
+│     Per-scene, automatic, Codable types only
+│
+├─ Complex navigation + data
+│  └─ @AppStorage + manual encoding
+│     More control, cross-scene sharing
+│
+├─ UIKit-based navigation
+│  └─ State restoration identifiers
+│     encodeRestorableState/decodeRestorableState
+│
+└─ Don't need restoration
+   └─ Start fresh each launch
+      Some apps are better this way
+```
+
+### Launch Optimization Priority
+
+```
+What's blocking your launch time?
+├─ SDK initialization
+│  └─ Defer non-critical SDKs
+│     Analytics can wait, auth cannot
+│
+├─ Database loading
+│  └─ Lazy loading + skeleton UI
+│     Show UI immediately, load data async
+│
+├─ Network requests
+│  └─ Cache + background refresh
+│     Never block launch for network
+│
+└─ Asset loading
+   └─ Progressive loading
+      Load visible content first
+```
+
+---
+
+## NEVER Do
+
+### Launch Time
+
+**NEVER** block main thread during launch:
 ```swift
-import UIKit
+// ❌ UI frozen until network completes
+func application(_ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    let data = try! Data(contentsOf: remoteURL)  // Synchronous network!
+    processData(data)
+    return true
+}
 
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
+// ✅ Defer non-critical work
+func application(_ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    setupCriticalServices()  // Auth, crash reporting
 
-    // 1. App launch
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        print("App did finish launching")
+    Task.detached(priority: .background) {
+        await self.setupNonCriticalServices()  // Analytics, prefetch
+    }
+    return true
+}
+```
 
-        // Setup app (networking, third-party SDKs, etc.)
-        setupApplication()
+**NEVER** initialize all SDKs synchronously:
+```swift
+// ❌ Each SDK adds to launch time
+func application(...) -> Bool {
+    AnalyticsSDK.initialize()      // 100ms
+    CrashReporterSDK.initialize()  // 50ms
+    FeatureFlagsSDK.initialize()   // 200ms
+    SocialSDK.initialize()         // 150ms
+    // Total: 500ms added to launch!
+    return true
+}
 
-        return true
+// ✅ Prioritize and defer
+func application(...) -> Bool {
+    CrashReporterSDK.initialize()  // Critical — catches launch crashes
+
+    DispatchQueue.main.async {
+        AnalyticsSDK.initialize()  // Can wait one runloop
     }
 
-    // 2. App becomes active
-    func applicationDidBecomeActive(_ application: UIApplication) {
-        print("App did become active")
-        // Restart tasks, refresh UI
+    Task.detached(priority: .utility) {
+        FeatureFlagsSDK.initialize()
+        SocialSDK.initialize()
+    }
+    return true
+}
+```
+
+### Background Tasks
+
+**NEVER** assume background time is guaranteed:
+```swift
+// ❌ May not complete — iOS can terminate anytime
+func sceneDidEnterBackground(_ scene: UIScene) {
+    performLongSync()  // No protection!
+}
+
+// ✅ Request background time and handle expiration
+func sceneDidEnterBackground(_ scene: UIScene) {
+    var taskId: UIBackgroundTaskIdentifier = .invalid
+    taskId = UIApplication.shared.beginBackgroundTask {
+        // Expiration handler — save partial progress
+        savePartialProgress()
+        UIApplication.shared.endBackgroundTask(taskId)
     }
 
-    // 3. App will resign active
-    func applicationWillResignActive(_ application: UIApplication) {
-        print("App will resign active")
-        // Pause ongoing tasks, disable timers
-    }
-
-    // 4. App enters background
-    func applicationDidEnterBackground(_ application: UIApplication) {
-        print("App did enter background")
-        // Save data, release resources
-        saveApplicationState()
-    }
-
-    // 5. App will enter foreground
-    func applicationWillEnterForeground(_ application: UIApplication) {
-        print("App will enter foreground")
-        // Undo what was done in background
-    }
-
-    // 6. App will terminate
-    func applicationWillTerminate(_ application: UIApplication) {
-        print("App will terminate")
-        // Save data, cleanup
-        saveApplicationState()
-    }
-
-    private func setupApplication() {
-        // Initialize third-party SDKs
-        // Setup network monitoring
-        // Configure appearance
-    }
-
-    private func saveApplicationState() {
-        // Save user data
-        // Persist state
+    Task {
+        await performSync()
+        UIApplication.shared.endBackgroundTask(taskId)
     }
 }
 ```
 
-## Scene Lifecycle (iOS 13+)
-
-### SceneDelegate
-
+**NEVER** forget to end background tasks:
 ```swift
-import UIKit
+// ❌ Leaks background task — iOS may terminate app
+func saveData() {
+    let taskId = UIApplication.shared.beginBackgroundTask { }
+    saveToDatabase()
+    // Missing: endBackgroundTask!
+}
 
-class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-    var window: UIWindow?
-
-    // Scene created
-    func scene(
-        _ scene: UIScene,
-        willConnectTo session: UISceneSession,
-        options connectionOptions: UIScene.ConnectionOptions
-    ) {
-        guard let windowScene = (scene as? UIWindowScene) else { return }
-
-        // Setup window
-        window = UIWindow(windowScene: windowScene)
-        window?.rootViewController = UIHostingController(rootView: ContentView())
-        window?.makeKeyAndVisible()
-
-        // Handle URL if launched via deep link
-        if let urlContext = connectionOptions.urlContexts.first {
-            handleURL(urlContext.url)
-        }
+// ✅ Always end in both success and failure
+func saveData() {
+    var taskId: UIBackgroundTaskIdentifier = .invalid
+    taskId = UIApplication.shared.beginBackgroundTask {
+        UIApplication.shared.endBackgroundTask(taskId)
     }
 
-    // Scene disconnected
-    func sceneDidDisconnect(_ scene: UIScene) {
-        print("Scene did disconnect")
-        // Release resources
-    }
+    defer { UIApplication.shared.endBackgroundTask(taskId) }
 
-    // Scene became active
-    func sceneDidBecomeActive(_ scene: UIScene) {
-        print("Scene did become active")
-        // Restart paused tasks
-        // Refresh UI
-    }
-
-    // Scene will resign active
-    func sceneWillResignActive(_ scene: UIScene) {
-        print("Scene will resign active")
-        // Pause ongoing tasks
-    }
-
-    // Scene entered foreground
-    func sceneWillEnterForeground(_ scene: UIScene) {
-        print("Scene will enter foreground")
-        // Undo background changes
-    }
-
-    // Scene entered background
-    func sceneDidEnterBackground(_ scene: UIScene) {
-        print("Scene did enter background")
-        // Save data
-        // Release resources
-    }
-
-    // Handle deep link
-    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        if let url = URLContexts.first?.url {
-            handleURL(url)
-        }
-    }
-
-    private func handleURL(_ url: URL) {
-        print("Handle URL: \(url)")
-        // Deep link handling
+    do {
+        try saveToDatabase()
+    } catch {
+        Logger.app.error("Save failed: \(error)")
     }
 }
 ```
 
-### SwiftUI App Lifecycle
+### State Transitions
+
+**NEVER** trust applicationWillTerminate to be called:
+```swift
+// ❌ May never be called — iOS can kill app without notice
+func applicationWillTerminate(_ application: UIApplication) {
+    saveCriticalData()  // Not guaranteed to run!
+}
+
+// ✅ Save on every background transition
+func sceneDidEnterBackground(_ scene: UIScene) {
+    saveCriticalData()  // Called reliably
+}
+
+// Also save periodically during use
+Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+    saveApplicationState()
+}
+```
+
+**NEVER** do heavy work in sceneWillResignActive:
+```swift
+// ❌ Blocks app switcher animation
+func sceneWillResignActive(_ scene: UIScene) {
+    generateThumbnails()  // Visible lag in app switcher
+    syncToServer()        // Delays user
+}
+
+// ✅ Only pause essential operations
+func sceneWillResignActive(_ scene: UIScene) {
+    pauseVideoPlayback()
+    pauseAnimations()
+    // Heavy work goes in sceneDidEnterBackground
+}
+```
+
+### Scene Lifecycle
+
+**NEVER** confuse scene disconnect with app termination:
+```swift
+// ❌ Wrong assumption
+func sceneDidDisconnect(_ scene: UIScene) {
+    // App is terminating!  <- WRONG
+    cleanupEverything()
+}
+
+// ✅ Scene disconnect means scene released, not app death
+func sceneDidDisconnect(_ scene: UIScene) {
+    // Scene being released — save per-scene state
+    // App may continue running with other scenes
+    // Or system may reconnect this scene later
+    saveSceneState(scene)
+}
+```
+
+---
+
+## Essential Patterns
+
+### SwiftUI Lifecycle Handler
 
 ```swift
-import SwiftUI
-
 @main
 struct MyApp: App {
-    @Environment(\.scenePhase) var scenePhase
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var appState = AppState()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(appState)
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
-            switch newPhase {
-            case .active:
-                print("App is active")
-                handleActive()
-
-            case .inactive:
-                print("App is inactive")
-                handleInactive()
-
-            case .background:
-                print("App is in background")
-                handleBackground()
-
-            @unknown default:
-                break
-            }
+            handlePhaseChange(from: oldPhase, to: newPhase)
         }
     }
 
-    private func handleActive() {
-        // Refresh content
-        // Restart timers
-    }
+    private func handlePhaseChange(from old: ScenePhase, to new: ScenePhase) {
+        switch (old, new) {
+        case (_, .active):
+            appState.refreshDataIfStale()
 
-    private func handleInactive() {
-        // Pause animations
-        // Save state
-    }
+        case (.active, .inactive):
+            // Transitioning away — pause but don't save yet
+            appState.pauseActiveOperations()
 
-    private func handleBackground() {
-        // Save data
-        // Stop network requests
-    }
-}
-```
+        case (_, .background):
+            appState.saveState()
+            scheduleBackgroundRefresh()
 
-## State Restoration
-
-### Save State
-
-```swift
-// Enable state restoration in AppDelegate
-func application(
-    _ application: UIApplication,
-    shouldSaveSecureApplicationState coder: NSCoder
-) -> Bool {
-    return true
-}
-
-// ViewController state restoration
-class UserDetailViewController: UIViewController {
-    override var restorationIdentifier: String? {
-        get { "UserDetailViewController" }
-        set { }
-    }
-
-    override func encodeRestorableState(with coder: NSCoder) {
-        super.encodeRestorableState(with: coder)
-
-        // Save state
-        coder.encode(userId, forKey: "userId")
-        coder.encode(scrollPosition, forKey: "scrollPosition")
-    }
-
-    override func decodeRestorableState(with coder: NSCoder) {
-        super.decodeRestorableState(with: coder)
-
-        // Restore state
-        userId = coder.decodeObject(forKey: "userId") as? String
-        scrollPosition = coder.decodeDouble(forKey: "scrollPosition")
-    }
-}
-```
-
-### SwiftUI State Restoration
-
-```swift
-struct ContentView: View {
-    @SceneStorage("selectedTab") private var selectedTab = 0
-    @SceneStorage("searchText") private var searchText = ""
-
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            HomeView()
-                .tabItem { Label("Home", systemImage: "house") }
-                .tag(0)
-
-            SearchView(searchText: $searchText)
-                .tabItem { Label("Search", systemImage: "magnifyingglass") }
-                .tag(1)
+        default:
+            break
         }
     }
 }
-
-// @SceneStorage automatically saves and restores per-scene state
 ```
 
-## Background Tasks
-
-### Background Fetch
+### Background Task Manager
 
 ```swift
-// Enable background modes in Xcode: Background fetch
+final class BackgroundTaskManager {
+    static let shared = BackgroundTaskManager()
 
+    func registerTasks() {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: "com.app.refresh",
+            using: nil
+        ) { task in
+            self.handleAppRefresh(task as! BGAppRefreshTask)
+        }
+
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: "com.app.processing",
+            using: nil
+        ) { task in
+            self.handleProcessing(task as! BGProcessingTask)
+        }
+    }
+
+    func scheduleRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: "com.app.refresh")
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    private func handleAppRefresh(_ task: BGAppRefreshTask) {
+        scheduleRefresh()  // Schedule next refresh
+
+        let refreshTask = Task {
+            await performRefresh()
+        }
+
+        task.expirationHandler = {
+            refreshTask.cancel()
+        }
+
+        Task {
+            await refreshTask.value
+            task.setTaskCompleted(success: true)
+        }
+    }
+}
+```
+
+### Launch Time Optimization
+
+```swift
 @main
-class AppDelegate: UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        // Set minimum background fetch interval
-        UIApplication.shared.setMinimumBackgroundFetchInterval(
-            UIApplication.backgroundFetchIntervalMinimum
-        )
+class AppDelegate: UIResponder, UIApplicationDelegate {
+    private var launchStartTime: CFAbsoluteTime = 0
+
+    func application(_ application: UIApplication,
+        willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        launchStartTime = CFAbsoluteTimeGetCurrent()
+
+        // Phase 1: Absolute minimum (crash reporting)
+        CrashReporter.initialize()
+
         return true
     }
 
-    func application(
-        _ application: UIApplication,
-        performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
-    ) {
-        Task {
-            do {
-                let newData = try await fetchNewData()
-                completionHandler(newData ? .newData : .noData)
-            } catch {
-                completionHandler(.failed)
-            }
+    func application(_ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Phase 2: Required for first frame
+        configureAppearance()
+
+        // Phase 3: Deferred to after first frame
+        DispatchQueue.main.async {
+            self.completePostLaunchSetup()
+            let launchTime = CFAbsoluteTimeGetCurrent() - self.launchStartTime
+            Logger.app.info("Launch completed in \(launchTime)s")
         }
+
+        return true
     }
 
-    private func fetchNewData() async throws -> Bool {
-        // Fetch data from server
-        return false
-    }
-}
-```
-
-### Background URL Sessions
-
-```swift
-class BackgroundDownloadManager: NSObject {
-    static let shared = BackgroundDownloadManager()
-
-    private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.background(
-            withIdentifier: "com.app.backgroundSession"
-        )
-        config.sessionSendsLaunchEvents = true
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
-    }()
-
-    func startDownload(url: URL) {
-        let task = session.downloadTask(with: url)
-        task.resume()
-    }
-}
-
-extension BackgroundDownloadManager: URLSessionDownloadDelegate {
-    func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didFinishDownloadingTo location: URL
-    ) {
-        print("Download completed: \(location)")
-        // Move file to permanent location
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didCompleteWithError error: Error?
-    ) {
-        if let error = error {
-            print("Download failed: \(error)")
+    private func completePostLaunchSetup() {
+        // Analytics, feature flags, etc.
+        Task.detached(priority: .utility) {
+            Analytics.initialize()
+            FeatureFlags.refresh()
         }
     }
 }
-
-// AppDelegate
-func application(
-    _ application: UIApplication,
-    handleEventsForBackgroundURLSession identifier: String,
-    completionHandler: @escaping () -> Void
-) {
-    // Store completion handler
-    BackgroundDownloadManager.shared.completionHandler = completionHandler
-}
 ```
 
-## Memory Warnings
+---
 
-### Handle Low Memory
+## Quick Reference
 
-```swift
-// UIViewController
-override func didReceiveMemoryWarning() {
-    super.didReceiveMemoryWarning()
+### Lifecycle Events Order
 
-    // Free up resources
-    imageCache.removeAll()
-    cancelPendingRequests()
-}
+| Event | When | Use For |
+|-------|------|---------|
+| willFinishLaunching | Before UI | Crash reporting only |
+| didFinishLaunching | UI ready | Critical setup |
+| sceneWillEnterForeground | Coming to front | Undo background changes |
+| sceneDidBecomeActive | Fully active | Refresh, restart tasks |
+| sceneWillResignActive | Losing focus | Pause playback |
+| sceneDidEnterBackground | In background | Save state, start bg task |
+| sceneDidDisconnect | Scene released | Save scene state |
 
-// SwiftUI
-struct ContentView: View {
-    @State private var images: [UIImage] = []
+### Background Task Limits
 
-    var body: some View {
-        ScrollView {
-            // Content
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
-            handleMemoryWarning()
-        }
-    }
+| Task Type | Time Limit | When Runs |
+|-----------|-----------|-----------|
+| beginBackgroundTask | ~30 seconds | Immediately |
+| BGAppRefreshTask | ~30 seconds | System discretion |
+| BGProcessingTask | Minutes | Charging, overnight |
+| Background URL Session | Unlimited | System managed |
 
-    private func handleMemoryWarning() {
-        images.removeAll()
-        // Clear caches
-    }
-}
+### State Restoration Options
 
-// Monitor memory usage
-class MemoryMonitor {
-    static func currentMemoryUsage() -> UInt64 {
-        var taskInfo = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
-        let result = withUnsafeMutablePointer(to: &taskInfo) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-            }
-        }
+| Approach | Scope | Types | Auto-save |
+|----------|-------|-------|-----------|
+| @SceneStorage | Per-scene | Codable | Yes |
+| @AppStorage | App-wide | Primitives | Yes |
+| Restoration ID | Per-VC | Custom | Manual |
 
-        return result == KERN_SUCCESS ? taskInfo.resident_size : 0
-    }
-}
-```
+### Red Flags
 
-## App Termination
-
-### Clean Shutdown
-
-```swift
-func applicationWillTerminate(_ application: UIApplication) {
-    // Save critical data
-    UserDefaults.standard.synchronize()
-
-    // Cancel network requests
-    URLSession.shared.invalidateAndCancel()
-
-    // Clear temporary files
-    clearTempFiles()
-
-    // Notify backend
-    Task {
-        await notifyBackendOfTermination()
-    }
-}
-
-private func clearTempFiles() {
-    let tmpDirectory = FileManager.default.temporaryDirectory
-    try? FileManager.default.removeItem(at: tmpDirectory)
-}
-```
-
-## Universal Links
-
-### Handle Universal Links
-
-```swift
-// SceneDelegate
-func scene(
-    _ scene: UIScene,
-    continue userActivity: NSUserActivity
-) {
-    guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
-          let url = userActivity.webpageURL else {
-        return
-    }
-
-    handleUniversalLink(url)
-}
-
-private func handleUniversalLink(_ url: URL) {
-    // Parse URL and navigate
-    if url.pathComponents.contains("user") {
-        let userId = url.lastPathComponent
-        navigateToUser(id: userId)
-    }
-}
-
-// Associated domains entitlement
-// Add to Xcode: Signing & Capabilities → Associated Domains
-// applinks:example.com
-```
-
-## Best Practices
-
-### 1. Minimize Launch Time
-
-```swift
-// ✅ Good: Defer non-critical setup
-func application(...didFinishLaunchingWithOptions...) -> Bool {
-    setupCriticalServices()
-
-    DispatchQueue.global().async {
-        self.setupNonCriticalServices()
-    }
-
-    return true
-}
-
-// ❌ Avoid: Heavy work on main thread
-func application(...didFinishLaunchingWithOptions...) -> Bool {
-    setupEverything()  // Blocks UI!
-    return true
-}
-```
-
-### 2. Save State on Background
-
-```swift
-func sceneDidEnterBackground(_ scene: UIScene) {
-    // Save immediately
-    saveUserData()
-
-    // Request extended time if needed
-    var backgroundTask: UIBackgroundTaskIdentifier = .invalid
-    backgroundTask = UIApplication.shared.beginBackgroundTask {
-        UIApplication.shared.endBackgroundTask(backgroundTask)
-    }
-
-    Task {
-        await performBackgroundSync()
-        UIApplication.shared.endBackgroundTask(backgroundTask)
-    }
-}
-```
-
-### 3. Handle Termination Gracefully
-
-```swift
-// Save state on scene disconnect
-func sceneDidDisconnect(_ scene: UIScene) {
-    saveApplicationState()
-}
-
-// Also save periodically
-Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-    saveApplicationState()
-}
-```
-
-## References
-
-- [App Lifecycle](https://developer.apple.com/documentation/uikit/app_and_environment/managing_your_app_s_life_cycle)
-- [Scene Lifecycle](https://developer.apple.com/documentation/uikit/app_and_environment/scenes)
-- [State Restoration](https://developer.apple.com/documentation/uikit/view_controllers/preserving_your_app_s_ui_across_launches)
-- [Background Execution](https://developer.apple.com/documentation/backgroundtasks)
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| Sync network in launch | Blocked UI | Async + skeleton UI |
+| All SDKs in didFinish | Slow launch | Prioritize + defer |
+| No beginBackgroundTask | Work may not complete | Always request time |
+| Missing endBackgroundTask | Leaked task | Use defer |
+| Heavy work in willResignActive | Laggy app switcher | Move to didEnterBackground |
+| Trust applicationWillTerminate | May not be called | Save on background |
+| Confuse sceneDidDisconnect | Scene != app termination | Save scene state only |

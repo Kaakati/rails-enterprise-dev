@@ -1,604 +1,467 @@
 ---
-name: "Core Data Patterns"
-description: "Core Data persistence patterns for iOS/tvOS including NSPersistentContainer, fetch requests, relationships, and SwiftUI integration"
-version: "2.0.0"
+name: core-data-patterns
+description: "Expert Core Data decisions for iOS/tvOS: when Core Data vs alternatives, context architecture for multi-threading, migration strategy selection, and performance optimization trade-offs. Use when choosing persistence layer, debugging save failures, or optimizing fetch performance. Trigger keywords: Core Data, NSManagedObject, NSPersistentContainer, NSFetchRequest, FetchRequest, migration, lightweight migration, background context, merge policy, faulting"
+version: "3.0.0"
 ---
 
-# Core Data Patterns for iOS/tvOS
+# Core Data Patterns — Expert Decisions
 
-Complete guide to Core Data persistence in iOS/tvOS applications including setup, CRUD operations, relationships, migration, and SwiftUI integration.
+Expert decision frameworks for Core Data choices. Claude knows NSPersistentContainer and fetch requests — this skill provides judgment calls for when Core Data fits and architecture trade-offs.
 
-## Core Data Stack Setup
+---
 
-### NSPersistentContainer
+## Decision Trees
+
+### Core Data vs Alternatives
+
+```
+What's your persistence need?
+├─ Simple key-value storage
+│  └─ UserDefaults or @AppStorage
+│     Don't use Core Data for preferences
+│
+├─ Flat list of Codable objects
+│  └─ Is query complexity needed?
+│     ├─ NO → File-based (JSON/Plist) or SwiftData
+│     └─ YES → Core Data or SQLite
+│
+├─ Complex relationships + queries
+│  └─ How many objects?
+│     ├─ < 10,000 → SwiftData (simpler) or Core Data
+│     └─ > 10,000 → Core Data (more control)
+│
+├─ iCloud sync required
+│  └─ NSPersistentCloudKitContainer
+│     Built-in sync with Core Data
+│
+└─ Cross-platform (non-Apple)
+   └─ SQLite directly or Realm
+      Core Data is Apple-only
+```
+
+**The trap**: Using Core Data for simple lists. If you don't need relationships, queries, or undo, consider simpler options like SwiftData or file storage.
+
+### Context Architecture
+
+```
+How many contexts do you need?
+├─ Simple app, UI-only operations
+│  └─ viewContext only
+│     Single context for reads and small writes
+│
+├─ Background imports/exports
+│  └─ viewContext + newBackgroundContext()
+│     Background for writes, viewContext for UI
+│
+├─ Complex with multiple writers
+│  └─ Parent-child context hierarchy
+│     Rarely needed — adds complexity
+│
+└─ Sync with server
+   └─ Dedicated sync context
+      performBackgroundTask for sync operations
+```
+
+### Migration Strategy
+
+```
+What changed in your model?
+├─ Added optional attribute
+│  └─ Lightweight migration (automatic)
+│
+├─ Renamed attribute/entity
+│  └─ Lightweight with mapping model hints
+│     Set renaming identifier in model
+│
+├─ Changed attribute type
+│  └─ Depends on conversion possibility
+│     Int → String: lightweight
+│     String → Date: may need custom
+│
+├─ Added required attribute (no default)
+│  └─ Custom migration required
+│     Or add default value to make lightweight
+│
+└─ Complex schema restructuring
+   └─ Staged migration
+      Multiple model versions, migrate step by step
+```
+
+### Merge Policy Selection
+
+```
+What happens on save conflicts?
+├─ UI context always wins
+│  └─ NSMergeByPropertyObjectTrumpMergePolicy
+│     Most common for view context
+│
+├─ Store (persisted) always wins
+│  └─ NSMergeByPropertyStoreTrumpMergePolicy
+│     For background sync contexts
+│
+├─ Need custom resolution
+│  └─ Custom merge policy
+│     Complex — avoid if possible
+│
+└─ Fail on conflict
+   └─ NSErrorMergePolicy (default)
+      Rarely want this
+```
+
+---
+
+## NEVER Do
+
+### Context Management
+
+**NEVER** use viewContext for heavy operations:
+```swift
+// ❌ Blocks main thread during import
+func importUsers(_ data: [UserData]) {
+    let context = persistenceController.container.viewContext
+    for item in data {
+        let user = User(context: context)
+        user.name = item.name
+    }
+    try? context.save()  // UI frozen!
+}
+
+// ✅ Use background context
+func importUsers(_ data: [UserData]) async throws {
+    try await persistenceController.container.performBackgroundTask { context in
+        for item in data {
+            let user = User(context: context)
+            user.name = item.name
+        }
+        try context.save()
+    }
+}
+```
+
+**NEVER** pass NSManagedObjects between contexts:
+```swift
+// ❌ Object belongs to different context — crash or undefined behavior
+let user = fetchUser(in: backgroundContext)
+viewContext.delete(user)  // Wrong context!
+
+// ✅ Re-fetch in target context using objectID
+let user = fetchUser(in: backgroundContext)
+let userInViewContext = viewContext.object(with: user.objectID) as! User
+viewContext.delete(userInViewContext)
+```
+
+**NEVER** access managed objects off their context's queue:
+```swift
+// ❌ Thread violation — data corruption possible
+let user = fetchUser(in: backgroundContext)
+DispatchQueue.main.async {
+    print(user.name)  // Accessing background object on main thread!
+}
+
+// ✅ Use context.perform for thread-safe access
+backgroundContext.perform {
+    let user = fetchUser(in: backgroundContext)
+    let name = user.name
+    DispatchQueue.main.async {
+        print(name)  // Safe — using local copy
+    }
+}
+```
+
+### Save Operations
+
+**NEVER** ignore save errors:
+```swift
+// ❌ Silent data loss
+try? context.save()
+
+// ✅ Handle errors properly
+do {
+    try context.save()
+} catch {
+    context.rollback()
+    Logger.coreData.error("Save failed: \(error)")
+    throw error
+}
+```
+
+**NEVER** save after every single change:
+```swift
+// ❌ Performance disaster — disk I/O per object
+for item in largeDataset {
+    let entity = Entity(context: context)
+    entity.value = item
+    try context.save()  // 10,000 saves!
+}
+
+// ✅ Batch changes, save once (or periodically)
+for (index, item) in largeDataset.enumerated() {
+    let entity = Entity(context: context)
+    entity.value = item
+
+    // Save every 1000 objects to manage memory
+    if index % 1000 == 0 {
+        try context.save()
+        context.reset()  // Release memory
+    }
+}
+try context.save()  // Final batch
+```
+
+**NEVER** call save on context with no changes:
+```swift
+// ❌ Unnecessary disk I/O
+func periodicSave() {
+    try? context.save()  // No-op but still has overhead
+}
+
+// ✅ Check for changes first
+func saveIfNeeded() throws {
+    guard context.hasChanges else { return }
+    try context.save()
+}
+```
+
+### Fetch Optimization
+
+**NEVER** fetch all objects when you need a count:
+```swift
+// ❌ Loads all objects into memory just to count
+let users = try context.fetch(User.fetchRequest())
+let count = users.count  // May fetch thousands!
+
+// ✅ Use count fetch
+let request = User.fetchRequest()
+let count = try context.count(for: request)
+```
+
+**NEVER** fetch everything without limits:
+```swift
+// ❌ May load entire database
+let request = User.fetchRequest()
+let allUsers = try context.fetch(request)
+
+// ✅ Set appropriate limits
+let request = User.fetchRequest()
+request.fetchLimit = 50
+request.fetchBatchSize = 20  // Loads in batches
+```
+
+**NEVER** forget to prefetch relationships you'll access:
+```swift
+// ❌ N+1 problem — each post access triggers fault
+let request = User.fetchRequest()
+let users = try context.fetch(request)
+for user in users {
+    print(user.posts.count)  // Separate fetch per user!
+}
+
+// ✅ Prefetch relationships
+let request = User.fetchRequest()
+request.relationshipKeyPathsForPrefetching = ["posts"]
+let users = try context.fetch(request)
+```
+
+### Migration
+
+**NEVER** assume lightweight migration will work:
+```swift
+// ❌ Crashes on incompatible changes
+container.loadPersistentStores { _, error in
+    if let error = error {
+        fatalError("Failed: \(error)")  // User data lost!
+    }
+}
+
+// ✅ Handle migration failure gracefully
+container.loadPersistentStores { description, error in
+    if let error = error as NSError? {
+        if error.code == NSMigrationMissingSourceModelError {
+            // Offer data reset or crash gracefully
+            Self.resetStore()
+        }
+    }
+}
+```
+
+---
+
+## Essential Patterns
+
+### Modern Persistence Controller
 
 ```swift
-import CoreData
-
+@MainActor
 final class PersistenceController {
     static let shared = PersistenceController()
+    static let preview = PersistenceController(inMemory: true)
 
     let container: NSPersistentContainer
 
     init(inMemory: Bool = false) {
-        container = NSPersistentContainer(name: "AppModel")
+        container = NSPersistentContainer(name: "Model")
 
         if inMemory {
             container.persistentStoreDescriptions.first?.url = URL(fileURLWithPath: "/dev/null")
         }
 
-        container.loadPersistentStores { description, error in
+        // Enable lightweight migration
+        let description = container.persistentStoreDescriptions.first
+        description?.shouldMigrateStoreAutomatically = true
+        description?.shouldInferMappingModelAutomatically = true
+
+        container.loadPersistentStores { _, error in
             if let error = error {
-                fatalError("Core Data failed to load: \(error.localizedDescription)")
+                // In production: log and handle gracefully
+                fatalError("Core Data load failed: \(error)")
             }
         }
 
+        // View context configuration
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        container.viewContext.undoManager = nil  // Disable if not needed
     }
 
-    // Preview helper
-    static var preview: PersistenceController = {
-        let controller = PersistenceController(inMemory: true)
-        let context = controller.container.viewContext
+    func saveViewContext() {
+        let context = container.viewContext
+        guard context.hasChanges else { return }
 
-        // Create sample data
-        for i in 0..<10 {
-            let user = User(context: context)
-            user.id = UUID()
-            user.name = "User \(i)"
-            user.email = "user\(i)@example.com"
-        }
-
-        try? context.save()
-        return controller
-    }()
-}
-```
-
-### SwiftUI Integration
-
-```swift
-@main
-struct MyApp: App {
-    let persistenceController = PersistenceController.shared
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+        do {
+            try context.save()
+        } catch {
+            Logger.coreData.error("View context save failed: \(error)")
         }
     }
 }
 ```
 
-## Data Model
-
-### Entity Definition
+### Background Import Pattern
 
 ```swift
-// User+CoreDataClass.swift
-import CoreData
+extension PersistenceController {
+    func importData<T: Decodable>(
+        _ items: [T],
+        transform: @escaping (T, NSManagedObjectContext) -> Void
+    ) async throws {
+        try await container.performBackgroundTask { context in
+            context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
 
-@objc(User)
-public class User: NSManagedObject {
-    @NSManaged public var id: UUID
-    @NSManaged public var name: String
-    @NSManaged public var email: String
-    @NSManaged public var age: Int16
-    @NSManaged public var createdAt: Date
-    @NSManaged public var posts: NSSet?
-}
+            for (index, item) in items.enumerated() {
+                transform(item, context)
 
-// Relationships
-extension User {
-    @objc(addPostsObject:)
-    @NSManaged public func addToPosts(_ value: Post)
+                // Batch save to manage memory
+                if index > 0 && index % 500 == 0 {
+                    try context.save()
+                    context.reset()
+                }
+            }
 
-    @objc(removePostsObject:)
-    @NSManaged public func removeFromPosts(_ value: Post)
-
-    @objc(addPosts:)
-    @NSManaged public func addToPosts(_ values: NSSet)
-
-    @objc(removePosts:)
-    @NSManaged public func removeFromPosts(_ values: NSSet)
-}
-
-// Convenience extensions
-extension User {
-    static func fetchRequest() -> NSFetchRequest<User> {
-        NSFetchRequest<User>(entityName: "User")
-    }
-
-    var postsArray: [Post] {
-        let set = posts as? Set<Post> ?? []
-        return set.sorted { $0.createdAt < $1.createdAt }
+            if context.hasChanges {
+                try context.save()
+            }
+        }
     }
 }
-```
 
-## CRUD Operations
-
-### Create
-
-```swift
-func createUser(name: String, email: String, in context: NSManagedObjectContext) throws -> User {
+// Usage
+try await persistenceController.importData(userDTOs) { dto, context in
     let user = User(context: context)
-    user.id = UUID()
-    user.name = name
-    user.email = email
-    user.age = 0
-    user.createdAt = Date()
-
-    try context.save()
-    return user
-}
-
-// SwiftUI
-struct CreateUserView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @State private var name = ""
-    @State private var email = ""
-
-    var body: some View {
-        Form {
-            TextField("Name", text: $name)
-            TextField("Email", text: $email)
-
-            Button("Save") {
-                saveUser()
-            }
-        }
-    }
-
-    private func saveUser() {
-        withAnimation {
-            let user = User(context: viewContext)
-            user.id = UUID()
-            user.name = name
-            user.email = email
-            user.createdAt = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                print("Error saving: \(error)")
-            }
-        }
-    }
+    user.id = dto.id
+    user.name = dto.name
 }
 ```
 
-### Read (Fetch Requests)
-
-```swift
-// Basic fetch
-func fetchAllUsers(in context: NSManagedObjectContext) throws -> [User] {
-    let request = User.fetchRequest()
-    return try context.fetch(request)
-}
-
-// Fetch with predicate
-func fetchUsers(named name: String, in context: NSManagedObjectContext) throws -> [User] {
-    let request = User.fetchRequest()
-    request.predicate = NSPredicate(format: "name CONTAINS[cd] %@", name)
-    return try context.fetch(request)
-}
-
-// Fetch with sort
-func fetchUsersSorted(in context: NSManagedObjectContext) throws -> [User] {
-    let request = User.fetchRequest()
-    request.sortDescriptors = [
-        NSSortDescriptor(keyPath: \User.name, ascending: true)
-    ]
-    return try context.fetch(request)
-}
-
-// Fetch with limit
-func fetchRecentUsers(limit: Int, in context: NSManagedObjectContext) throws -> [User] {
-    let request = User.fetchRequest()
-    request.sortDescriptors = [NSSortDescriptor(keyPath: \User.createdAt, ascending: false)]
-    request.fetchLimit = limit
-    return try context.fetch(request)
-}
-
-// Complex predicate
-func fetchActiveUsers(minAge: Int16, in context: NSManagedObjectContext) throws -> [User] {
-    let request = User.fetchRequest()
-    request.predicate = NSPredicate(
-        format: "age >= %d AND email != nil",
-        minAge
-    )
-    return try context.fetch(request)
-}
-```
-
-### Update
-
-```swift
-func updateUser(_ user: User, name: String? = nil, email: String? = nil, in context: NSManagedObjectContext) throws {
-    if let name = name {
-        user.name = name
-    }
-
-    if let email = email {
-        user.email = email
-    }
-
-    try context.save()
-}
-
-// Batch update
-func deactivateOldUsers(in context: NSManagedObjectContext) throws {
-    let request = NSBatchUpdateRequest(entityName: "User")
-    request.predicate = NSPredicate(
-        format: "createdAt < %@",
-        Calendar.current.date(byAdding: .year, value: -1, to: Date())! as NSDate
-    )
-    request.propertiesToUpdate = ["isActive": false]
-
-    try context.execute(request)
-}
-```
-
-### Delete
-
-```swift
-func deleteUser(_ user: User, in context: NSManagedObjectContext) throws {
-    context.delete(user)
-    try context.save()
-}
-
-// Batch delete
-func deleteInactiveUsers(in context: NSManagedObjectContext) throws {
-    let fetchRequest: NSFetchRequest<NSFetchRequestResult> = User.fetchRequest()
-    fetchRequest.predicate = NSPredicate(format: "isActive == NO")
-
-    let batchDelete = NSBatchDeleteRequest(fetchRequest: fetchRequest)
-    try context.execute(batchDelete)
-}
-```
-
-## SwiftUI @FetchRequest
-
-### Basic Fetch
+### Efficient Fetch with @FetchRequest
 
 ```swift
 struct UserListView: View {
+    // Basic fetch — automatically updates on changes
     @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \User.name, ascending: true)],
+        sortDescriptors: [SortDescriptor(\.name)],
         animation: .default
     )
     private var users: FetchedResults<User>
 
     var body: some View {
         List(users) { user in
-            Text(user.name)
+            Text(user.name ?? "Unknown")
         }
     }
 }
-```
 
-### Dynamic Fetch Request
-
-```swift
-struct FilteredUserListView: View {
-    @State private var searchText = ""
-
-    var body: some View {
-        UserListView(searchText: searchText)
-    }
-}
-
-struct UserListView: View {
+// Dynamic predicate fetch
+struct FilteredUserList: View {
     @FetchRequest private var users: FetchedResults<User>
 
     init(searchText: String) {
-        let predicate: NSPredicate? = searchText.isEmpty ? nil : NSPredicate(
-            format: "name CONTAINS[cd] %@",
-            searchText
-        )
-
         _users = FetchRequest(
-            sortDescriptors: [NSSortDescriptor(keyPath: \User.name, ascending: true)],
-            predicate: predicate,
+            sortDescriptors: [SortDescriptor(\.name)],
+            predicate: searchText.isEmpty ? nil : NSPredicate(
+                format: "name CONTAINS[cd] %@", searchText
+            ),
             animation: .default
         )
     }
 
     var body: some View {
         List(users) { user in
-            VStack(alignment: .leading) {
-                Text(user.name)
-                Text(user.email).font(.caption)
-            }
+            Text(user.name ?? "")
         }
     }
 }
 ```
 
-## Relationships
-
-### One-to-Many
-
-```swift
-// User (one) → Posts (many)
-
-// Create relationship
-func addPost(to user: User, title: String, in context: NSManagedObjectContext) throws {
-    let post = Post(context: context)
-    post.id = UUID()
-    post.title = title
-    post.content = ""
-    post.createdAt = Date()
-    post.author = user
-
-    try context.save()
-}
-
-// Fetch with relationship
-func fetchUsersWithPosts(in context: NSManagedObjectContext) throws -> [User] {
-    let request = User.fetchRequest()
-    request.predicate = NSPredicate(format: "posts.@count > 0")
-    request.relationshipKeyPathsForPrefetching = ["posts"]
-    return try context.fetch(request)
-}
-```
-
-### Many-to-Many
-
-```swift
-// User (many) ← → Groups (many)
-
-// Create relationship
-func addUserToGroup(_ user: User, group: Group, in context: NSManagedObjectContext) throws {
-    user.addToGroups(group)
-    try context.save()
-}
-
-// Remove relationship
-func removeUserFromGroup(_ user: User, group: Group, in context: NSManagedObjectContext) throws {
-    user.removeFromGroups(group)
-    try context.save()
-}
-```
-
-## Background Context
-
-### Performing Background Operations
-
-```swift
-func importData(_ data: [UserData]) {
-    let context = PersistenceController.shared.container.newBackgroundContext()
-
-    context.perform {
-        for userData in data {
-            let user = User(context: context)
-            user.id = UUID()
-            user.name = userData.name
-            user.email = userData.email
-        }
-
-        do {
-            try context.save()
-        } catch {
-            print("Error saving: \(error)")
-        }
-    }
-}
-
-// Async background operation
-func importDataAsync(_ data: [UserData]) async throws {
-    let context = PersistenceController.shared.container.newBackgroundContext()
-
-    try await context.perform {
-        for userData in data {
-            let user = User(context: context)
-            user.id = UUID()
-            user.name = userData.name
-            user.email = userData.email
-        }
-
-        try context.save()
-    }
-}
-```
-
-## Migration
-
-### Lightweight Migration
-
-```swift
-let container = NSPersistentContainer(name: "AppModel")
-
-let description = container.persistentStoreDescriptions.first
-description?.shouldInferMappingModelAutomatically = true
-description?.shouldMigrateStoreAutomatically = true
-
-container.loadPersistentStores { description, error in
-    if let error = error {
-        fatalError("Migration failed: \(error)")
-    }
-}
-```
-
-### Custom Migration
-
-```swift
-// Create new model version in Xcode
-// Add mapping model if needed
-
-class MigrationManager {
-    static func migrateStoreIfNeeded(at storeURL: URL) throws {
-        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
-            ofType: NSSQLiteStoreType,
-            at: storeURL
-        )
-
-        let model = NSManagedObjectModel.mergedModel(from: [Bundle.main])!
-
-        if !model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) {
-            try performMigration(at: storeURL, to: model)
-        }
-    }
-
-    private static func performMigration(at storeURL: URL, to model: NSManagedObjectModel) throws {
-        let migrationManager = NSMigrationManager(
-            sourceModel: /* source model */,
-            destinationModel: model
-        )
-
-        let mappingModel = NSMappingModel(
-            from: [Bundle.main],
-            forSourceModel: /* source */,
-            destinationModel: model
-        )!
-
-        try migrationManager.migrateStore(
-            from: storeURL,
-            sourceType: NSSQLiteStoreType,
-            options: nil,
-            with: mappingModel,
-            toDestinationURL: /* temp URL */,
-            destinationType: NSSQLiteStoreType,
-            destinationOptions: nil
-        )
-    }
-}
-```
-
-## Performance Optimization
-
-### Faulting
-
-```swift
-// Faulting: Objects are placeholders until accessed
-let request = User.fetchRequest()
-request.returnsObjectsAsFaults = true  // Default
-let users = try context.fetch(request)
-
-// user.name triggers fault and loads data
-
-// Prefetch to avoid faulting
-request.returnsObjectsAsFaults = false
-```
-
-### Batch Faulting
-
-```swift
-// Fetch with batch size
-let request = User.fetchRequest()
-request.fetchBatchSize = 20  // Load 20 objects at a time
-
-let users = try context.fetch(request)
-
-for user in users {
-    // Automatically loads in batches of 20
-    print(user.name)
-}
-```
-
-### Prefetching Relationships
-
-```swift
-let request = User.fetchRequest()
-request.relationshipKeyPathsForPrefetching = ["posts", "groups"]
-
-let users = try context.fetch(request)
-// Posts and groups are eagerly loaded
-```
-
-## Best Practices
-
-### 1. Use Background Contexts
-
-```swift
-// ✅ Good: Heavy operations on background
-let backgroundContext = container.newBackgroundContext()
-backgroundContext.perform {
-    // Heavy import/processing
-    try? backgroundContext.save()
-}
-
-// ❌ Avoid: Blocking main thread
-let users = try viewContext.fetch(/* large fetch */)  // Blocks UI!
-```
-
-### 2. Batch Operations
-
-```swift
-// ✅ Good: Batch delete
-let batchDelete = NSBatchDeleteRequest(fetchRequest: request)
-try context.execute(batchDelete)
-
-// ❌ Avoid: Individual deletes
-users.forEach { context.delete($0) }  // Slow for large datasets
-try context.save()
-```
-
-### 3. Limit Fetch Results
-
-```swift
-// ✅ Good: Fetch only what you need
-request.fetchLimit = 50
-request.propertiesToFetch = ["name", "email"]
-
-// ❌ Avoid: Fetching everything
-let allUsers = try context.fetch(User.fetchRequest())  // Could be thousands!
-```
-
-### 4. Error Handling
-
-```swift
-// ✅ Good: Handle save errors
-do {
-    try context.save()
-} catch let error as NSError {
-    print("Save error: \(error), \(error.userInfo)")
-    context.rollback()
-}
-
-// ❌ Avoid: Ignoring errors
-try? context.save()  // Silently fails
-```
-
-## Testing Core Data
-
-### In-Memory Store
-
-```swift
-final class CoreDataTests: XCTestCase {
-    var persistenceController: PersistenceController!
-
-    override func setUp() {
-        super.setUp()
-        persistenceController = PersistenceController(inMemory: true)
-    }
-
-    func testCreateUser() throws {
-        let context = persistenceController.container.viewContext
-
-        let user = User(context: context)
-        user.id = UUID()
-        user.name = "Test User"
-        user.email = "test@example.com"
-
-        try context.save()
-
-        let request = User.fetchRequest()
-        let users = try context.fetch(request)
-
-        XCTAssertEqual(users.count, 1)
-        XCTAssertEqual(users.first?.name, "Test User")
-    }
-}
-```
-
-## References
-
-- [Core Data Programming Guide](https://developer.apple.com/documentation/coredata)
-- [NSPersistentContainer](https://developer.apple.com/documentation/coredata/nspersistentcontainer)
-- [Core Data Performance](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreData/Performance.html)
-- [SwiftUI Core Data Integration](https://developer.apple.com/documentation/coredata/loading_and_displaying_a_large_data_feed)
+---
+
+## Quick Reference
+
+### Core Data vs Alternatives
+
+| Need | Solution |
+|------|----------|
+| Simple preferences | UserDefaults |
+| Small Codable lists | JSON file or SwiftData |
+| Complex queries + relationships | Core Data |
+| iCloud sync | NSPersistentCloudKitContainer |
+| Cross-platform | SQLite or Realm |
+
+### Context Types
+
+| Context | Use For | Thread |
+|---------|---------|--------|
+| viewContext | UI reads, small writes | Main |
+| newBackgroundContext() | Heavy writes, imports | Background |
+| performBackgroundTask | One-off background work | Background |
+
+### Merge Policies
+
+| Policy | Winner | Use Case |
+|--------|--------|----------|
+| ObjectTrump | In-memory changes | View context |
+| StoreTrump | Persisted data | Sync context |
+| ErrorMerge | Neither (fails) | Rarely wanted |
+
+### Lightweight Migration Support
+
+| Change | Automatic? |
+|--------|------------|
+| Add optional attribute | ✅ Yes |
+| Add attribute with default | ✅ Yes |
+| Remove attribute | ✅ Yes |
+| Rename (with identifier) | ✅ Yes |
+| Change type (compatible) | ✅ Maybe |
+| Add required (no default) | ❌ No |
+| Change relationship type | ❌ No |
+
+### Red Flags
+
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| viewContext for imports | Main thread blocked | Use background context |
+| NSManagedObject across contexts | Wrong thread access | Re-fetch via objectID |
+| try? context.save() | Silent data loss | Handle errors |
+| Save per object in loop | Disk I/O explosion | Batch saves |
+| fetch() for count | Memory waste | context.count(for:) |
+| No fetchLimit | Loads entire DB | Set reasonable limits |
+| Missing prefetch | N+1 fetches | relationshipKeyPathsForPrefetching |

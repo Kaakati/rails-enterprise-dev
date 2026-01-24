@@ -1,830 +1,468 @@
 ---
-name: "Model Patterns"
-description: "Comprehensive model design patterns for iOS/tvOS using Codable, custom decoding, DTO mapping, and immutable structs"
-version: "2.0.0"
+name: model-patterns
+description: "Expert model design decisions for iOS/tvOS: when DTO separation adds value vs overkill, validation strategy selection, immutability trade-offs, and custom Codable decoder design. Use when designing data models, implementing API contracts, or debugging decoding failures. Trigger keywords: Codable, DTO, domain model, CodingKeys, custom decoder, validation, immutable, struct, mapping, JSON decoding"
+version: "3.0.0"
 ---
 
-# Model Patterns for iOS/tvOS
+# Model Patterns — Expert Decisions
 
-Complete guide to designing robust data models in Swift using Codable protocol, custom decoding strategies, DTO-to-Domain mapping, and immutable struct patterns.
+Expert decision frameworks for model design choices. Claude knows Codable syntax — this skill provides judgment calls for when to separate DTOs, validation strategies, and immutability trade-offs.
 
-## Codable Protocol Basics
+---
 
-### Simple Codable Model
+## Decision Trees
 
+### DTO vs Single Model
+
+```
+Does API response match your domain needs?
+├─ YES (1:1 mapping)
+│  └─ Is API contract stable?
+│     ├─ YES → Single Codable model is fine
+│     └─ NO → DTO protects against API changes
+│
+├─ NO (needs transformation)
+│  └─ DTO + Domain model
+│     DTO: matches API exactly
+│     Domain: matches app needs
+│
+└─ Multiple APIs for same domain concept?
+   └─ Separate DTOs per API
+      Single domain model aggregates
+```
+
+**The trap**: DTO for everything. If your API matches your domain and is stable, a single Codable struct is simpler. Add DTO layer when it solves a real problem.
+
+### Validation Strategy Selection
+
+```
+When should validation happen?
+├─ External data (API, user input)
+│  └─ Validate at boundary (init or factory)
+│     Fail fast with clear errors
+│
+├─ Internal data (already validated)
+│  └─ Trust it (no re-validation)
+│     Validation at boundary is sufficient
+│
+└─ Critical invariants (money, permissions)
+   └─ Type-level enforcement
+      Email type, not String
+      Money type, not Double
+```
+
+### Struct vs Class Decision
+
+```
+What are your requirements?
+├─ Simple data container
+│  └─ Struct (value semantics)
+│     Passed by copy, immutable by default
+│
+├─ Shared mutable state needed?
+│  └─ Really? Reconsider design
+│     └─ If truly needed → Class with @Observable
+│
+├─ Identity matters (same instance)?
+│  └─ Class (reference semantics)
+│     But consider if ID equality suffices
+│
+└─ Inheritance needed?
+   └─ Class (but prefer composition)
+```
+
+### Custom Decoder Complexity
+
+```
+How much custom decoding?
+├─ Just key mapping (snake_case → camelCase)
+│  └─ Use keyDecodingStrategy
+│     decoder.keyDecodingStrategy = .convertFromSnakeCase
+│
+├─ Few fields need transformation
+│  └─ Custom init(from decoder:)
+│     Transform specific fields only
+│
+├─ Complex nested structure flattening
+│  └─ Custom init(from decoder:) with nested containers
+│     Or intermediate DTO + mapping
+│
+└─ Polymorphic decoding (type field determines struct)
+   └─ Type-discriminated enum with associated values
+      Or AnyDecodable wrapper
+```
+
+---
+
+## NEVER Do
+
+### DTO Design
+
+**NEVER** make DTOs mutable:
 ```swift
-// Struct that conforms to Codable
-struct User: Codable {
+// ❌ DTO can be modified after decoding
+struct UserDTO: Codable {
+    var id: String
+    var name: String  // var allows mutation
+}
+
+// ✅ DTOs are immutable snapshots of API response
+struct UserDTO: Codable {
     let id: String
-    let name: String
-    let email: String
-    let createdAt: Date
-}
-
-// Encoding to JSON
-let user = User(id: "123", name: "John", email: "john@example.com", createdAt: Date())
-let encoder = JSONEncoder()
-let jsonData = try encoder.encode(user)
-
-// Decoding from JSON
-let decoder = JSONDecoder()
-let decodedUser = try decoder.decode(User.self, from: jsonData)
-```
-
-### Automatic Synthesis
-
-```swift
-// Codable is automatically synthesized when all properties are Codable
-struct Product: Codable {
-    let id: String
-    let name: String
-    let price: Double
-    let inStock: Bool
-}
-
-// Codable = Encodable + Decodable
-typealias Codable = Encodable & Decodable
-```
-
-## CodingKeys Enum Pattern
-
-### Custom Property Names
-
-```swift
-struct User: Codable {
-    let id: String
-    let firstName: String
-    let lastName: String
-    let emailAddress: String
-
-    // Map Swift property names to JSON keys
-    enum CodingKeys: String, CodingKey {
-        case id
-        case firstName = "first_name"
-        case lastName = "last_name"
-        case emailAddress = "email"
-    }
-}
-
-// JSON: {"id": "123", "first_name": "John", "last_name": "Doe", "email": "john@example.com"}
-// Swift: User(id: "123", firstName: "John", lastName: "John", emailAddress: "john@example.com")
-```
-
-### Excluding Properties from Encoding/Decoding
-
-```swift
-struct User: Codable {
-    let id: String
-    let name: String
-    let email: String
-
-    // Computed property - not encoded/decoded
-    var displayName: String {
-        name.isEmpty ? email : name
-    }
-
-    // Only include specific properties in CodingKeys
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case email
-        // displayName is excluded
-    }
+    let name: String  // let enforces immutability
 }
 ```
 
-### Nested JSON Structures
-
+**NEVER** add business logic to DTOs:
 ```swift
-struct UserResponse: Codable {
-    let user: User
-    let metadata: Metadata
-
-    struct User: Codable {
-        let id: String
-        let name: String
-    }
-
-    struct Metadata: Codable {
-        let timestamp: Date
-        let version: String
-    }
-}
-
-// JSON:
-// {
-//   "user": {"id": "123", "name": "John"},
-//   "metadata": {"timestamp": "2024-01-01T00:00:00Z", "version": "1.0"}
-// }
-```
-
-## Custom init(from decoder:) Patterns
-
-### Custom Decoding Logic
-
-```swift
-struct User: Codable {
-    let id: String
-    let fullName: String
-    let email: String
-    let age: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case firstName = "first_name"
-        case lastName = "last_name"
-        case email
-        case age
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        // Standard decoding
-        id = try container.decode(String.self, forKey: .id)
-        email = try container.decode(String.self, forKey: .email)
-
-        // Combine first and last name
-        let firstName = try container.decode(String.self, forKey: .firstName)
-        let lastName = try container.decode(String.self, forKey: .lastName)
-        fullName = "\(firstName) \(lastName)"
-
-        // Optional decoding with default value
-        age = try container.decodeIfPresent(Int.self, forKey: .age)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-
-        try container.encode(id, forKey: .id)
-        try container.encode(email, forKey: .email)
-
-        // Split full name back to first and last
-        let nameParts = fullName.components(separatedBy: " ")
-        try container.encode(nameParts.first ?? "", forKey: .firstName)
-        try container.encode(nameParts.dropFirst().joined(separator: " "), forKey: .lastName)
-
-        try container.encodeIfPresent(age, forKey: .age)
-    }
-}
-```
-
-### Handling Missing or Invalid Data
-
-```swift
-struct Product: Codable {
-    let id: String
-    let name: String
-    let price: Double
-    let status: Status
-
-    enum Status: String, Codable {
-        case available
-        case outOfStock
-        case discontinued
-        case unknown
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, price, status
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        id = try container.decode(String.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-
-        // Handle invalid price as 0
-        price = (try? container.decode(Double.self, forKey: .price)) ?? 0.0
-
-        // Handle unknown status gracefully
-        let statusString = try container.decode(String.self, forKey: .status)
-        status = Status(rawValue: statusString) ?? .unknown
-    }
-}
-```
-
-## Date and URL Decoding Strategies
-
-### Date Decoding Strategies
-
-```swift
-// ISO8601 Date Strategy
-let decoder = JSONDecoder()
-decoder.dateDecodingStrategy = .iso8601
-
-// Custom Date Formatter
-let dateFormatter = DateFormatter()
-dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
-decoder.dateDecodingStrategy = .formatted(dateFormatter)
-
-// Unix Timestamp (seconds since 1970)
-decoder.dateDecodingStrategy = .secondsSince1970
-
-// Unix Timestamp (milliseconds)
-decoder.dateDecodingStrategy = .millisecondsSince1970
-
-// Custom Date Decoding
-decoder.dateDecodingStrategy = .custom { decoder in
-    let container = try decoder.singleValueContainer()
-    let dateString = try container.decode(String.self)
-
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd"
-
-    guard let date = formatter.date(from: dateString) else {
-        throw DecodingError.dataCorruptedError(
-            in: container,
-            debugDescription: "Invalid date format: \(dateString)"
-        )
-    }
-
-    return date
-}
-```
-
-### URL Decoding
-
-```swift
-struct ImageModel: Codable {
-    let id: String
-    let imageURL: URL?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case imageURL = "image_url"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        id = try container.decode(String.self, forKey: .id)
-
-        // Safely decode URL
-        if let urlString = try container.decodeIfPresent(String.self, forKey: .imageURL) {
-            imageURL = URL(string: urlString)
-        } else {
-            imageURL = nil
-        }
-    }
-}
-```
-
-## Nested Model Structures
-
-### Complex Nested Models
-
-```swift
-struct Order: Codable {
-    let id: String
-    let customer: Customer
-    let items: [OrderItem]
-    let payment: Payment
-    let shipping: Shipping
-
-    struct Customer: Codable {
-        let id: String
-        let name: String
-        let email: String
-        let address: Address
-
-        struct Address: Codable {
-            let street: String
-            let city: String
-            let state: String
-            let zipCode: String
-            let country: String
-        }
-    }
-
-    struct OrderItem: Codable {
-        let productId: String
-        let productName: String
-        let quantity: Int
-        let unitPrice: Double
-
-        var totalPrice: Double {
-            Double(quantity) * unitPrice
-        }
-    }
-
-    struct Payment: Codable {
-        let method: PaymentMethod
-        let status: PaymentStatus
-        let transactionId: String?
-
-        enum PaymentMethod: String, Codable {
-            case creditCard = "credit_card"
-            case debitCard = "debit_card"
-            case paypal
-            case applePay = "apple_pay"
-        }
-
-        enum PaymentStatus: String, Codable {
-            case pending
-            case completed
-            case failed
-            case refunded
-        }
-    }
-
-    struct Shipping: Codable {
-        let address: Customer.Address
-        let method: ShippingMethod
-        let trackingNumber: String?
-
-        enum ShippingMethod: String, Codable {
-            case standard
-            case express
-            case overnight
-        }
-    }
-}
-```
-
-### Array of Different Types (Type Erasure)
-
-```swift
-enum MediaType: String, Codable {
-    case image
-    case video
-    case document
-}
-
-protocol Media: Codable {
-    var type: MediaType { get }
-}
-
-struct ImageMedia: Media {
-    let type: MediaType = .image
-    let url: URL
-    let width: Int
-    let height: Int
-}
-
-struct VideoMedia: Media {
-    let type: MediaType = .video
-    let url: URL
-    let duration: TimeInterval
-    let thumbnail: URL
-}
-
-struct Post: Codable {
-    let id: String
-    let title: String
-    let mediaItems: [AnyMedia]
-
-    struct AnyMedia: Codable {
-        let media: Media
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            let type = try container.decode(MediaType.self, forKey: .type)
-
-            switch type {
-            case .image:
-                media = try ImageMedia(from: decoder)
-            case .video:
-                media = try VideoMedia(from: decoder)
-            case .document:
-                fatalError("Document type not implemented")
-            }
-        }
-
-        func encode(to encoder: Encoder) throws {
-            try media.encode(to: encoder)
-        }
-
-        enum CodingKeys: String, CodingKey {
-            case type
-        }
-    }
-}
-```
-
-## Model Mapping (DTO → Domain)
-
-### Data Transfer Object (DTO) Pattern
-
-```swift
-// DTO: Matches API response exactly
+// ❌ DTO has behavior
 struct UserDTO: Codable {
     let id: String
     let firstName: String
     let lastName: String
-    let email: String
-    let profileImageURL: String?
-    let createdAt: String
-    let isActive: Bool
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case firstName = "first_name"
-        case lastName = "last_name"
-        case email
-        case profileImageURL = "profile_image_url"
-        case createdAt = "created_at"
-        case isActive = "is_active"
+    func sendWelcomeEmail() { ... }  // Business logic in DTO!
+
+    var isAdmin: Bool {
+        roles.contains("admin")  // Business rule in DTO
     }
 }
 
-// Domain Model: Application's internal representation
+// ✅ DTO is pure data; logic in domain model or service
+struct UserDTO: Codable {
+    let id: String
+    let firstName: String
+    let lastName: String
+}
+
 struct User {
     let id: String
     let fullName: String
-    let email: String
-    let profileImageURL: URL?
-    let createdAt: Date
-    let isActive: Bool
+    let isAdmin: Bool
 
-    // Computed properties
-    var displayName: String {
-        fullName.isEmpty ? email : fullName
-    }
-
-    var initials: String {
-        let names = fullName.components(separatedBy: " ")
-        let firstInitial = names.first?.prefix(1) ?? ""
-        let lastInitial = names.last?.prefix(1) ?? ""
-        return "\(firstInitial)\(lastInitial)".uppercased()
+    init(from dto: UserDTO, roles: [String]) {
+        // Mapping and business logic here
     }
 }
-
-// Mapper: DTO → Domain
-extension User {
-    init(from dto: UserDTO) {
-        self.id = dto.id
-        self.fullName = "\(dto.firstName) \(dto.lastName)"
-        self.email = dto.email
-        self.profileImageURL = dto.profileImageURL.flatMap { URL(string: $0) }
-        self.isActive = dto.isActive
-
-        // Parse date
-        let formatter = ISO8601DateFormatter()
-        self.createdAt = formatter.date(from: dto.createdAt) ?? Date()
-    }
-}
-
-// Usage
-let userDTO = try decoder.decode(UserDTO.self, from: jsonData)
-let user = User(from: userDTO)
 ```
 
-### Mapper Protocol
-
+**NEVER** expose DTOs to UI layer:
 ```swift
-protocol DTOConvertible {
-    associatedtype DTO: Codable
+// ❌ View depends on API contract
+struct UserView: View {
+    let user: UserDTO  // If API changes, UI breaks
 
-    init(from dto: DTO)
-    func toDTO() -> DTO
+    var body: some View {
+        Text(user.first_name)  // Snake_case in UI!
+    }
 }
 
-// Example implementation
-struct Product: DTOConvertible {
-    let id: String
-    let name: String
-    let price: Double
+// ✅ View uses domain model
+struct UserView: View {
+    let user: User  // Stable domain model
 
-    struct DTO: Codable {
-        let id: String
-        let name: String
-        let priceInCents: Int
+    var body: some View {
+        Text(user.fullName)  // Clean API
     }
+}
+```
 
-    init(from dto: DTO) {
-        self.id = dto.id
-        self.name = dto.name
-        self.price = Double(dto.priceInCents) / 100.0
-    }
+### Codable Implementation
 
-    func toDTO() -> DTO {
-        DTO(
-            id: id,
-            name: name,
-            priceInCents: Int(price * 100)
+**NEVER** force-unwrap in custom decoders:
+```swift
+// ❌ Crashes on unexpected data
+init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let urlString = try container.decode(String.self, forKey: .imageURL)
+    imageURL = URL(string: urlString)!  // Crashes if invalid URL!
+}
+
+// ✅ Handle invalid data gracefully
+init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let urlString = try container.decode(String.self, forKey: .imageURL)
+    guard let url = URL(string: urlString) else {
+        throw DecodingError.dataCorrupted(
+            .init(codingPath: [CodingKeys.imageURL],
+                  debugDescription: "Invalid URL: \(urlString)")
         )
     }
+    imageURL = url
 }
 ```
 
-## Computed Properties
-
-### Derived Values
-
+**NEVER** silently default invalid data:
 ```swift
-struct Rectangle: Codable {
-    let width: Double
-    let height: Double
+// ❌ Hides data problems
+init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    // Silently uses 0 for invalid price — masks bugs!
+    price = (try? container.decode(Double.self, forKey: .price)) ?? 0.0
+}
 
-    // Computed properties
-    var area: Double {
-        width * height
-    }
-
-    var perimeter: Double {
-        2 * (width + height)
-    }
-
-    var aspectRatio: Double {
-        width / height
-    }
-
-    var isSquare: Bool {
-        width == height
+// ✅ Fail or default with logging
+init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    do {
+        price = try container.decode(Double.self, forKey: .price)
+    } catch {
+        Logger.api.warning("Invalid price, defaulting to 0: \(error)")
+        price = 0.0  // Intentional default, logged
     }
 }
 ```
 
-### Lazy Properties
-
+**NEVER** use String for typed values:
 ```swift
-struct Article: Codable {
-    let id: String
-    let title: String
-    let body: String
-    let tags: [String]
-
-    // Lazy computed property
-    lazy var wordCount: Int = {
-        body.components(separatedBy: .whitespacesAndNewlines).count
-    }()
-
-    lazy var readingTimeMinutes: Int = {
-        // Average reading speed: 200 words per minute
-        max(1, wordCount / 200)
-    }()
-}
-```
-
-## Immutable Struct Patterns
-
-### Value Semantics
-
-```swift
-// Immutable struct with `let` properties
-struct User {
-    let id: String
-    let name: String
-    let email: String
-
-    // Create new instance with modified property
-    func withName(_ newName: String) -> User {
-        User(id: id, name: newName, email: email)
-    }
-
-    func withEmail(_ newEmail: String) -> User {
-        User(id: id, name: name, email: newEmail)
-    }
+// ❌ No type safety
+struct User: Codable {
+    let email: String  // Any string allowed
+    let status: String  // "active", "inactive"... or typo?
 }
 
-// Usage
-let user = User(id: "123", name: "John", email: "john@example.com")
-let updatedUser = user.withName("John Doe")  // Creates new instance
-```
-
-### Builder Pattern for Complex Models
-
-```swift
-struct User {
-    let id: String
-    let name: String
-    let email: String
-    let phoneNumber: String?
-    let address: Address?
-    let preferences: Preferences
-
-    struct Address {
-        let street: String
-        let city: String
-        let zipCode: String
-    }
-
-    struct Preferences {
-        let notifications: Bool
-        let theme: String
-    }
-
-    // Builder for complex initialization
-    struct Builder {
-        var id: String = UUID().uuidString
-        var name: String = ""
-        var email: String = ""
-        var phoneNumber: String?
-        var address: Address?
-        var preferences: Preferences = Preferences(notifications: true, theme: "light")
-
-        func build() -> User {
-            User(
-                id: id,
-                name: name,
-                email: email,
-                phoneNumber: phoneNumber,
-                address: address,
-                preferences: preferences
-            )
-        }
-    }
-}
-
-// Usage
-let user = User.Builder()
-    .with(\.name, "John Doe")
-    .with(\.email, "john@example.com")
-    .build()
-```
-
-## Model Validation
-
-### Validation at Initialization
-
-```swift
+// ✅ Type-safe wrappers
 struct Email {
     let value: String
-
     init?(_ value: String) {
-        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
-        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
-
-        guard emailPredicate.evaluate(with: value) else {
-            return nil
-        }
-
+        guard value.contains("@") else { return nil }
         self.value = value
     }
 }
 
+enum UserStatus: String, Codable {
+    case active, inactive, suspended
+}
+
 struct User {
-    let id: String
-    let name: String
     let email: Email
+    let status: UserStatus
+}
+```
 
-    init?(id: String, name: String, email: String) {
-        guard !id.isEmpty, !name.isEmpty else {
-            return nil
-        }
+### Validation
 
+**NEVER** validate in multiple places:
+```swift
+// ❌ Validation scattered
+func saveUser(_ user: User) {
+    guard user.email.contains("@") else { return }  // Duplicate!
+    // ...
+}
+
+func displayUser(_ user: User) {
+    guard user.email.contains("@") else { return }  // Duplicate!
+    // ...
+}
+
+// ✅ Validate once at creation
+struct User {
+    let email: Email  // Email type guarantees validity
+
+    init(email: String) throws {
         guard let validEmail = Email(email) else {
-            return nil
+            throw ValidationError.invalidEmail
         }
-
-        self.id = id
-        self.name = name
         self.email = validEmail
+        // All downstream code trusts email is valid
     }
 }
 ```
 
-### Throwing Initializer
-
+**NEVER** throw generic errors from validation:
 ```swift
-enum ValidationError: Error, LocalizedError {
-    case emptyField(String)
-    case invalidFormat(String)
-    case outOfRange(String, min: Int, max: Int)
+// ❌ Caller can't determine what's wrong
+init(name: String, email: String, age: Int) throws {
+    guard !name.isEmpty else { throw NSError(domain: "error", code: -1) }
+    guard email.contains("@") else { throw NSError(domain: "error", code: -1) }
+    // Same error for different problems!
+}
+
+// ✅ Specific validation errors
+enum ValidationError: LocalizedError {
+    case emptyName
+    case invalidEmail(String)
+    case ageOutOfRange(Int)
 
     var errorDescription: String? {
         switch self {
-        case .emptyField(let field):
-            return "\(field) cannot be empty"
-        case .invalidFormat(let field):
-            return "\(field) has invalid format"
-        case .outOfRange(let field, let min, let max):
-            return "\(field) must be between \(min) and \(max)"
+        case .emptyName: return "Name cannot be empty"
+        case .invalidEmail(let email): return "Invalid email: \(email)"
+        case .ageOutOfRange(let age): return "Age \(age) is out of valid range"
         }
     }
 }
+```
 
-struct User {
+---
+
+## Essential Patterns
+
+### DTO with Domain Mapping
+
+```swift
+// DTO: Exact API contract
+struct UserDTO: Codable {
     let id: String
-    let name: String
+    let first_name: String
+    let last_name: String
     let email: String
-    let age: Int
-
-    init(id: String, name: String, email: String, age: Int) throws {
-        guard !id.isEmpty else {
-            throw ValidationError.emptyField("id")
-        }
-
-        guard !name.isEmpty else {
-            throw ValidationError.emptyField("name")
-        }
-
-        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
-        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
-        guard emailPredicate.evaluate(with: email) else {
-            throw ValidationError.invalidFormat("email")
-        }
-
-        guard age >= 0 && age <= 150 else {
-            throw ValidationError.outOfRange("age", min: 0, max: 150)
-        }
-
-        self.id = id
-        self.name = name
-        self.email = email
-        self.age = age
-    }
+    let avatar_url: String?
+    let created_at: String
+    let is_verified: Bool
 }
-```
 
-## Best Practices
-
-### 1. Use Structs for Models
-
-```swift
-// ✅ Good: Immutable struct
-struct User: Codable {
+// Domain: App's representation
+struct User: Identifiable {
     let id: String
-    let name: String
-}
+    let fullName: String
+    let email: Email
+    let avatarURL: URL?
+    let createdAt: Date
+    let isVerified: Bool
 
-// ❌ Avoid: Classes for simple data models
-class User: Codable {
-    var id: String
-    var name: String
-}
-```
-
-### 2. Separate DTO from Domain Models
-
-```swift
-// ✅ Good: Separate DTO and domain models
-struct UserDTO: Codable { /* API contract */ }
-struct User { /* Domain model */ }
-
-// ❌ Avoid: Using API response directly
-// Makes code fragile to API changes
-```
-
-### 3. Use CodingKeys for Clarity
-
-```swift
-// ✅ Good: Explicit CodingKeys
-enum CodingKeys: String, CodingKey {
-    case userId = "user_id"
-    case userName = "user_name"
-}
-
-// ❌ Avoid: Snake_case in Swift
-// Violates Swift naming conventions
-```
-
-### 4. Handle Optional Values Gracefully
-
-```swift
-// ✅ Good: Provide sensible defaults
-let name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown"
-
-// ❌ Avoid: Force unwrapping
-let name = try container.decode(String.self, forKey: .name)  // Crashes if missing
-```
-
-## Testing Model Decoding
-
-### Unit Tests
-
-```swift
-final class UserModelTests: XCTestCase {
-    func testUserDecoding() throws {
-        // Given
-        let json = """
-        {
-            "id": "123",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john@example.com"
-        }
-        """
-
-        let data = json.data(using: .utf8)!
-        let decoder = JSONDecoder()
-
-        // When
-        let user = try decoder.decode(UserDTO.self, from: data)
-
-        // Then
-        XCTAssertEqual(user.id, "123")
-        XCTAssertEqual(user.firstName, "John")
-        XCTAssertEqual(user.lastName, "Doe")
-        XCTAssertEqual(user.email, "john@example.com")
+    var initials: String {
+        fullName.split(separator: " ")
+            .compactMap { $0.first }
+            .map(String.init)
+            .joined()
     }
+}
 
-    func testInvalidEmailThrowsError() {
-        // Given/When/Then
-        XCTAssertThrowsError(
-            try User(id: "123", name: "John", email: "invalid-email", age: 30)
-        ) { error in
-            XCTAssertEqual(error as? ValidationError, .invalidFormat("email"))
+// Mapping extension
+extension User {
+    init(from dto: UserDTO) throws {
+        self.id = dto.id
+        self.fullName = "\(dto.first_name) \(dto.last_name)"
+
+        guard let email = Email(dto.email) else {
+            throw MappingError.invalidEmail(dto.email)
         }
+        self.email = email
+
+        self.avatarURL = dto.avatar_url.flatMap(URL.init)
+        self.createdAt = ISO8601DateFormatter().date(from: dto.created_at) ?? Date()
+        self.isVerified = dto.is_verified
     }
 }
 ```
 
-## References
+### Type-Safe Wrapper Pattern
 
-- [Codable Documentation](https://developer.apple.com/documentation/swift/codable)
-- [JSONEncoder/JSONDecoder](https://developer.apple.com/documentation/foundation/jsonencoder)
-- [CodingKeys Protocol](https://developer.apple.com/documentation/swift/codingkey)
-- [Advanced Encoding and Decoding](https://developer.apple.com/documentation/foundation/archives_and_serialization/encoding_and_decoding_custom_types)
+```swift
+struct Email: Codable, Hashable {
+    let value: String
+
+    init?(_ value: String) {
+        let regex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i
+        guard value.wholeMatch(of: regex) != nil else { return nil }
+        self.value = value
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        guard let email = Email(rawValue) else {
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: container.codingPath,
+                      debugDescription: "Invalid email: \(rawValue)")
+            )
+        }
+        self = email
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
+}
+
+// Usage: compiler enforces email validity
+func sendEmail(to: Email) { ... }  // Can't pass arbitrary String
+```
+
+### Polymorphic Decoding
+
+```swift
+enum MediaItem: Codable {
+    case image(ImageMedia)
+    case video(VideoMedia)
+    case document(DocumentMedia)
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+
+        switch type {
+        case "image":
+            self = .image(try ImageMedia(from: decoder))
+        case "video":
+            self = .video(try VideoMedia(from: decoder))
+        case "document":
+            self = .document(try DocumentMedia(from: decoder))
+        default:
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: [CodingKeys.type],
+                      debugDescription: "Unknown media type: \(type)")
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case .image(let media): try media.encode(to: encoder)
+        case .video(let media): try media.encode(to: encoder)
+        case .document(let media): try media.encode(to: encoder)
+        }
+    }
+}
+```
+
+---
+
+## Quick Reference
+
+### When to Use DTO Separation
+
+| Scenario | Use DTO? |
+|----------|----------|
+| API matches domain exactly | No |
+| API likely to change | Yes |
+| Need transformation (flatten, combine) | Yes |
+| Multiple APIs for same concept | Yes |
+| Single stable internal API | No |
+
+### Validation Strategy by Layer
+
+| Layer | Validation Type |
+|-------|-----------------|
+| API boundary (DTO init) | Structure validity |
+| Domain model init | Business rules |
+| Type wrappers | Format enforcement |
+| UI | Already validated |
+
+### Red Flags
+
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| `var` in DTO | Mutable snapshot | Use `let` |
+| Business logic in DTO | Wrong layer | Move to domain model |
+| DTO in View | Coupling | Map to domain model |
+| Force-unwrap in decoder | Crash risk | Throw or optional |
+| String for typed values | No safety | Type wrappers |
+| Same validation in multiple places | DRY violation | Validate at creation |
+| Generic validation errors | Poor UX | Specific error cases |
+
+### Decoder Strategy Selection
+
+| Need | Solution |
+|------|----------|
+| snake_case → camelCase | `keyDecodingStrategy` |
+| Custom date format | `dateDecodingStrategy` |
+| Single field transformation | Custom `init(from:)` |
+| Nested structure flattening | Nested containers |
+| Type-discriminated union | Enum with associated values |

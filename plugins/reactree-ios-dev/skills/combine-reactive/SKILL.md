@@ -1,452 +1,327 @@
 ---
-name: "Combine Reactive"
-description: "Combine framework for reactive programming in iOS/tvOS with publishers, operators, and integration with async/await"
-version: "2.0.0"
+name: combine-reactive
+description: "Expert Combine decisions for iOS/tvOS: when Combine vs async/await, Subject selection trade-offs, operator chain design, and memory management patterns. Use when implementing reactive streams, choosing between concurrency models, or debugging Combine memory leaks. Trigger keywords: Combine, Publisher, Subscriber, Subject, PassthroughSubject, CurrentValueSubject, async/await, AnyCancellable, sink, operators, reactive"
+version: "3.0.0"
 ---
 
-# Combine Framework for iOS/tvOS
+# Combine Reactive — Expert Decisions
 
-Complete guide to reactive programming with Combine framework, including publishers, subscribers, operators, and migration strategies to async/await.
+Expert decision frameworks for Combine choices. Claude knows Combine syntax — this skill provides judgment calls for when Combine adds value vs async/await and how to avoid common pitfalls.
 
-## Core Concepts
+---
 
-### Publishers and Subscribers
+## Decision Trees
 
-```swift
-import Combine
+### Combine vs Async/Await
 
-// Publisher emits values
-let publisher = Just("Hello")
-
-// Subscriber receives values
-let subscriber = publisher.sink { value in
-    print("Received: \(value)")
-}
-
-// Publisher types
-let justPublisher = Just(42)  // Emits single value
-let futurePublisher = Future<String, Never> { promise in
-    promise(.success("Value"))
-}
-let passthrough = PassthroughSubject<String, Never>()  // Manual emission
-let currentValue = CurrentValueSubject<Int, Never>(0)  // Stores current value
+```
+What's your data flow pattern?
+├─ Single async operation (fetch once)
+│  └─ async/await
+│     Simpler, built into language
+│
+├─ Stream of values over time
+│  └─ Is it UI-driven (user events)?
+│     ├─ YES → Combine (debounce, throttle shine here)
+│     └─ NO → AsyncSequence may suffice
+│
+├─ Combining multiple data sources
+│  └─ How many sources?
+│     ├─ 2-3 → Combine's CombineLatest, Zip
+│     └─ Many → Consider structured concurrency (TaskGroup)
+│
+└─ Existing codebase uses Combine?
+   └─ Maintain consistency unless migrating
 ```
 
-### Subscriptions and Cancellation
+**The trap**: Using Combine for simple one-shot async. `async/await` is cleaner and doesn't need cancellable management.
 
+### Subject Type Selection
+
+```
+Do you need to access current value?
+├─ YES → CurrentValueSubject
+│  Can read .value synchronously
+│  New subscribers get current value immediately
+│
+└─ NO → Is it event-based (discrete occurrences)?
+   ├─ YES → PassthroughSubject
+   │  No stored value, subscribers only get new emissions
+   │
+   └─ NO (need replay of past values) →
+      Consider external state management
+      Combine has no built-in ReplaySubject
+```
+
+### Operator Chain Design
+
+```
+What transformation is needed?
+├─ Value transformation
+│  └─ map (simple), compactMap (filter nils), flatMap (nested publishers)
+│
+├─ Filtering
+│  └─ filter, removeDuplicates, first, dropFirst
+│
+├─ Timing
+│  └─ User input → debounce (wait for pause)
+│     Scrolling → throttle (rate limit)
+│
+├─ Error handling
+│  └─ Can provide fallback? → catch, replaceError
+│     Need retry? → retry(n)
+│
+└─ Combining streams
+   └─ Need all values paired? → zip
+      Need latest from each? → combineLatest
+      Merge into one stream? → merge
+```
+
+---
+
+## NEVER Do
+
+### Subscription Management
+
+**NEVER** forget to store subscriptions:
 ```swift
+// ❌ Subscription cancelled immediately
+func loadData() {
+    publisher.sink { value in
+        self.data = value  // Never called!
+    }
+    // sink returns AnyCancellable that's immediately deallocated
+}
+
+// ✅ Store in Set<AnyCancellable>
+private var cancellables = Set<AnyCancellable>()
+
+func loadData() {
+    publisher.sink { value in
+        self.data = value
+    }
+    .store(in: &cancellables)
+}
+```
+
+**NEVER** capture self strongly in sink closures:
+```swift
+// ❌ Retain cycle — ViewModel never deallocates
+publisher
+    .sink { value in
+        self.updateUI(value)  // Strong capture!
+    }
+    .store(in: &cancellables)
+
+// ✅ Use [weak self]
+publisher
+    .sink { [weak self] value in
+        self?.updateUI(value)
+    }
+    .store(in: &cancellables)
+```
+
+**NEVER** use assign(to:on:) with classes:
+```swift
+// ❌ Strong reference to self — retain cycle
+publisher
+    .assign(to: \.text, on: self)  // Retains self!
+    .store(in: &cancellables)
+
+// ✅ Use sink with weak self
+publisher
+    .sink { [weak self] value in
+        self?.text = value
+    }
+    .store(in: &cancellables)
+
+// Or use assign(to:) with @Published (no retain cycle)
+publisher
+    .assign(to: &$text)  // Safe — doesn't return cancellable
+```
+
+### Subject Misuse
+
+**NEVER** expose subjects directly:
+```swift
+// ❌ External code can send values
 class ViewModel {
-    private var cancellables = Set<AnyCancellable>()
+    let users = PassthroughSubject<[User], Never>()  // Public subject!
+}
 
-    func loadData() {
-        fetchUser()
-            .sink(
-                receiveCompletion: { completion in
-                    switch completion {
-                    case .finished:
-                        print("Completed")
-                    case .failure(let error):
-                        print("Error: \(error)")
-                    }
-                },
-                receiveValue: { user in
-                    print("User: \(user)")
-                }
-            )
-            .store(in: &cancellables)
-    }
+// External code:
+viewModel.users.send([])  // Breaks encapsulation
 
-    // Automatic cancellation on deinit
-    deinit {
-        cancellables.forEach { $0.cancel() }
+// ✅ Expose as Publisher
+class ViewModel {
+    private let usersSubject = PassthroughSubject<[User], Never>()
+
+    var users: AnyPublisher<[User], Never> {
+        usersSubject.eraseToAnyPublisher()
     }
 }
 ```
 
-## @Published Property Wrapper
+**NEVER** send on subject from multiple threads without care:
+```swift
+// ❌ Race condition — undefined behavior
+DispatchQueue.global().async {
+    subject.send(value1)
+}
+DispatchQueue.global().async {
+    subject.send(value2)
+}
 
-### Observable Properties
+// ✅ Serialize access
+let subject = PassthroughSubject<Value, Never>()
+let serialQueue = DispatchQueue(label: "subject.serial")
+
+serialQueue.async {
+    subject.send(value)
+}
+
+// Or use .receive(on:) to ensure delivery on specific scheduler
+```
+
+### Operator Mistakes
+
+**NEVER** use flatMap when you mean map:
+```swift
+// ❌ Confusing — flatMap for non-publisher transformation
+publisher
+    .flatMap { user -> AnyPublisher<String, Never> in
+        Just(user.name).eraseToAnyPublisher()  // Overkill!
+    }
+
+// ✅ Use map for simple transformation
+publisher
+    .map { user in user.name }
+```
+
+**NEVER** forget to handle errors in sink:
+```swift
+// ❌ Compiler allows this but errors are ignored
+publisher  // Has Error type
+    .sink { value in
+        // Only handles values, error terminates silently
+    }
+
+// ✅ Handle both completion and value
+publisher
+    .sink(
+        receiveCompletion: { completion in
+            if case .failure(let error) = completion {
+                handleError(error)
+            }
+        },
+        receiveValue: { value in
+            handleValue(value)
+        }
+    )
+```
+
+**NEVER** debounce without scheduler on main:
+```swift
+// ❌ Debouncing on background scheduler, updating UI
+searchText
+    .debounce(for: .milliseconds(300), scheduler: DispatchQueue.global())
+    .sink { [weak self] text in
+        self?.results = search(text)  // UI update on background thread!
+    }
+
+// ✅ Receive on main for UI updates
+searchText
+    .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+    .sink { [weak self] text in
+        self?.results = search(text)
+    }
+
+// Or explicitly receive on main
+searchText
+    .debounce(for: .milliseconds(300), scheduler: DispatchQueue.global())
+    .receive(on: DispatchQueue.main)
+    .sink { ... }
+```
+
+---
+
+## Essential Patterns
+
+### ViewModel with Combine
 
 ```swift
 @MainActor
-final class UserViewModel: ObservableObject {
-    @Published var users: [User] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
+final class SearchViewModel: ObservableObject {
+    @Published var searchText = ""
+    @Published private(set) var results: [SearchResult] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var error: Error?
 
+    private let searchService: SearchServiceProtocol
     private var cancellables = Set<AnyCancellable>()
 
-    func loadUsers() {
-        isLoading = true
-
-        userService.fetchUsers()
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] users in
-                    self?.users = users
-                }
-            )
-            .store(in: &cancellables)
-    }
-}
-
-// SwiftUI automatically observes @Published properties
-struct UserListView: View {
-    @StateObject private var viewModel = UserViewModel()
-
-    var body: some View {
-        List(viewModel.users) { user in
-            Text(user.name)
-        }
-        .onAppear {
-            viewModel.loadUsers()
-        }
-    }
-}
-```
-
-## Common Operators
-
-### Transforming Operators
-
-```swift
-// map: Transform values
-let numbers = [1, 2, 3, 4, 5]
-numbers.publisher
-    .map { $0 * 2 }
-    .sink { print($0) }  // 2, 4, 6, 8, 10
-
-// flatMap: Transform and flatten
-struct User {
-    let id: String
-}
-
-func fetchUser(id: String) -> AnyPublisher<User, Error> {
-    // Network request
-}
-
-userIds.publisher
-    .flatMap { userId in
-        fetchUser(id: userId)
-    }
-    .collect()
-    .sink(
-        receiveCompletion: { _ in },
-        receiveValue: { users in
-            print("All users: \(users)")
-        }
-    )
-
-// compactMap: Map and remove nils
-["1", "2", "three", "4"].publisher
-    .compactMap { Int($0) }
-    .sink { print($0) }  // 1, 2, 4
-
-// scan: Accumulate values
-[1, 2, 3, 4].publisher
-    .scan(0, +)
-    .sink { print($0) }  // 1, 3, 6, 10
-```
-
-### Filtering Operators
-
-```swift
-// filter: Keep values that match predicate
-[1, 2, 3, 4, 5, 6].publisher
-    .filter { $0 % 2 == 0 }
-    .sink { print($0) }  // 2, 4, 6
-
-// removeDuplicates: Remove consecutive duplicates
-[1, 1, 2, 2, 3, 3].publisher
-    .removeDuplicates()
-    .sink { print($0) }  // 1, 2, 3
-
-// first: Emit only first value
-[1, 2, 3].publisher
-    .first()
-    .sink { print($0) }  // 1
-
-// dropFirst: Skip first n values
-[1, 2, 3, 4].publisher
-    .dropFirst(2)
-    .sink { print($0) }  // 3, 4
-```
-
-### Combining Operators
-
-```swift
-// combineLatest: Combine latest values from multiple publishers
-let namePublisher = PassthroughSubject<String, Never>()
-let agePublisher = PassthroughSubject<Int, Never>()
-
-Publishers.CombineLatest(namePublisher, agePublisher)
-    .sink { name, age in
-        print("\(name) is \(age) years old")
-    }
-
-namePublisher.send("John")
-agePublisher.send(30)  // Prints: "John is 30 years old"
-
-// merge: Merge multiple publishers
-let publisher1 = [1, 2, 3].publisher
-let publisher2 = [4, 5, 6].publisher
-
-publisher1.merge(with: publisher2)
-    .sink { print($0) }  // 1, 2, 3, 4, 5, 6 (order may vary)
-
-// zip: Pair values from publishers
-let numbers = [1, 2, 3].publisher
-let letters = ["A", "B", "C"].publisher
-
-numbers.zip(letters)
-    .sink { number, letter in
-        print("\(number)-\(letter)")  // 1-A, 2-B, 3-C
-    }
-```
-
-### Timing Operators
-
-```swift
-// debounce: Wait for pause in emissions
-searchTextField.textPublisher
-    .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
-    .sink { searchText in
-        performSearch(searchText)
-    }
-
-// throttle: Limit emission rate
-scrollView.contentOffsetPublisher
-    .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
-    .sink { offset in
-        updateUI(for: offset)
-    }
-
-// delay: Delay emissions
-publisher
-    .delay(for: .seconds(2), scheduler: DispatchQueue.main)
-    .sink { value in
-        print("Delayed: \(value)")
-    }
-```
-
-## Error Handling
-
-### Catch and Retry
-
-```swift
-// catch: Replace error with fallback publisher
-fetchUser(id: "123")
-    .catch { error -> AnyPublisher<User, Never> in
-        print("Error: \(error)")
-        return Just(User.placeholder).eraseToAnyPublisher()
-    }
-    .sink { user in
-        print("User: \(user)")
-    }
-
-// retry: Retry on failure
-fetchUser(id: "123")
-    .retry(3)
-    .catch { _ in Just(User.placeholder) }
-    .sink { user in
-        print("User: \(user)")
-    }
-
-// replaceError: Replace error with value
-fetchUser(id: "123")
-    .replaceError(with: User.placeholder)
-    .sink { user in
-        print("User: \(user)")
-    }
-```
-
-## Subjects
-
-### PassthroughSubject
-
-```swift
-// Manual value emission
-final class EventBus {
-    let userLoggedIn = PassthroughSubject<User, Never>()
-    let userLoggedOut = PassthroughSubject<Void, Never>()
-
-    func notifyLogin(user: User) {
-        userLoggedIn.send(user)
-    }
-
-    func notifyLogout() {
-        userLoggedOut.send()
-    }
-}
-
-// Usage
-let eventBus = EventBus()
-
-eventBus.userLoggedIn
-    .sink { user in
-        print("User logged in: \(user.name)")
-    }
-    .store(in: &cancellables)
-
-eventBus.notifyLogin(user: User(name: "John"))
-```
-
-### CurrentValueSubject
-
-```swift
-// Stores and emits current value
-final class SettingsManager {
-    let theme = CurrentValueSubject<Theme, Never>(.light)
-    let fontSize = CurrentValueSubject<Int, Never>(14)
-
-    func updateTheme(_ theme: Theme) {
-        self.theme.send(theme)
-    }
-
-    var currentTheme: Theme {
-        theme.value  // Access current value
-    }
-}
-
-// Usage
-let settings = SettingsManager()
-
-settings.theme
-    .sink { theme in
-        applyTheme(theme)
-    }
-    .store(in: &cancellables)
-
-print("Current theme: \(settings.currentTheme)")
-settings.updateTheme(.dark)
-```
-
-## Combine with SwiftUI
-
-### TextField Binding
-
-```swift
-struct SearchView: View {
-    @State private var searchText = ""
-    @State private var results: [String] = []
-
-    private let searchPublisher = PassthroughSubject<String, Never>()
-    private var cancellables = Set<AnyCancellable>()
-
-    var body: some View {
-        VStack {
-            TextField("Search", text: $searchText)
-                .onChange(of: searchText) { oldValue, newValue in
-                    searchPublisher.send(newValue)
-                }
-
-            List(results, id: \.self) { result in
-                Text(result)
-            }
-        }
-        .onAppear {
-            setupSearch()
-        }
+    init(searchService: SearchServiceProtocol) {
+        self.searchService = searchService
+        setupSearch()
     }
 
     private func setupSearch() {
-        searchPublisher
+        $searchText
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .removeDuplicates()
-            .flatMap { query -> AnyPublisher<[String], Never> in
-                performSearch(query: query)
-            }
-            .sink { results in
-                self.results = results
-            }
-            .store(in: &cancellables)
-    }
-
-    private func performSearch(query: String) -> AnyPublisher<[String], Never> {
-        // Simulate search
-        Just(["Result 1", "Result 2"]).eraseToAnyPublisher()
-    }
-}
-```
-
-### Timer Publisher
-
-```swift
-struct CountdownView: View {
-    @State private var timeRemaining = 60
-    private var cancellables = Set<AnyCancellable>()
-
-    var body: some View {
-        Text("\(timeRemaining) seconds")
-            .onAppear {
-                startTimer()
-            }
-    }
-
-    private func startTimer() {
-        Timer.publish(every: 1, on: .main, in: .common)
-            .autoconnect()
-            .sink { _ in
-                if timeRemaining > 0 {
-                    timeRemaining -= 1
+            .filter { !$0.isEmpty }
+            .handleEvents(receiveOutput: { [weak self] _ in
+                self?.isLoading = true
+                self?.error = nil
+            })
+            .flatMap { [weak self] query -> AnyPublisher<[SearchResult], Never> in
+                guard let self = self else {
+                    return Just([]).eraseToAnyPublisher()
                 }
+                return self.searchService.search(query: query)
+                    .catch { [weak self] error -> Just<[SearchResult]> in
+                        self?.error = error
+                        return Just([])
+                    }
+                    .eraseToAnyPublisher()
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] results in
+                self?.results = results
+                self?.isLoading = false
             }
             .store(in: &cancellables)
     }
 }
 ```
 
-## Migrating to Async/Await
-
-### Future to Async
+### Combine to Async Bridge
 
 ```swift
-// Combine Future
-func fetchUser(id: String) -> Future<User, Error> {
-    Future { promise in
-        URLSession.shared.dataTask(with: url) { data, response, error in
-            // Handle response
-            if let error = error {
-                promise(.failure(error))
-            } else if let data = data {
-                let user = try! JSONDecoder().decode(User.self, from: data)
-                promise(.success(user))
-            }
-        }.resume()
-    }
-}
-
-// Async/await equivalent
-func fetchUser(id: String) async throws -> User {
-    let (data, _) = try await URLSession.shared.data(from: url)
-    return try JSONDecoder().decode(User.self, from: data)
-}
-
-// Bridge Combine to async
-extension Publisher {
-    func async() async throws -> Output where Failure == Error {
+extension Publisher where Failure == Error {
+    func async() async throws -> Output {
         try await withCheckedThrowingContinuation { continuation in
             var cancellable: AnyCancellable?
+            var didResume = false
 
             cancellable = first()
                 .sink(
                     receiveCompletion: { completion in
+                        guard !didResume else { return }
+                        didResume = true
+
                         switch completion {
                         case .finished:
-                            break
+                            break  // Value handled in receiveValue
                         case .failure(let error):
                             continuation.resume(throwing: error)
                         }
+                        cancellable?.cancel()
                     },
                     receiveValue: { value in
+                        guard !didResume else { return }
+                        didResume = true
                         continuation.resume(returning: value)
-                        cancellable?.cancel()
                     }
                 )
         }
@@ -455,112 +330,89 @@ extension Publisher {
 
 // Usage
 Task {
-    let user = try await fetchUserPublisher().async()
+    let user = try await fetchUserPublisher.async()
 }
 ```
 
-### AsyncSequence from Publisher
+### Event Bus Pattern
 
 ```swift
-extension Publisher {
-    var values: AsyncThrowingStream<Output, Error> {
-        AsyncThrowingStream { continuation in
-            let cancellable = self.sink(
-                receiveCompletion: { completion in
-                    switch completion {
-                    case .finished:
-                        continuation.finish()
-                    case .failure(let error):
-                        continuation.finish(throwing: error)
-                    }
-                },
-                receiveValue: { value in
-                    continuation.yield(value)
-                }
-            )
+final class EventBus {
+    static let shared = EventBus()
 
-            continuation.onTermination = { @Sendable _ in
-                cancellable.cancel()
-            }
-        }
+    // Private subjects
+    private let userLoggedInSubject = PassthroughSubject<User, Never>()
+    private let userLoggedOutSubject = PassthroughSubject<Void, Never>()
+    private let cartUpdatedSubject = PassthroughSubject<Cart, Never>()
+
+    // Public publishers (read-only)
+    var userLoggedIn: AnyPublisher<User, Never> {
+        userLoggedInSubject.eraseToAnyPublisher()
     }
-}
 
-// Usage
-for try await user in userPublisher.values {
-    print(user)
-}
-```
-
-## Best Practices
-
-### 1. Store Subscriptions
-
-```swift
-// ✅ Good: Store in Set<AnyCancellable>
-class ViewModel {
-    private var cancellables = Set<AnyCancellable>()
-
-    func load() {
-        publisher.sink { }.store(in: &cancellables)
+    var userLoggedOut: AnyPublisher<Void, Never> {
+        userLoggedOutSubject.eraseToAnyPublisher()
     }
-}
 
-// ❌ Avoid: Not storing (subscription cancelled immediately)
-func load() {
-    publisher.sink { }  // Cancelled right away!
-}
-```
-
-### 2. Use Weak Self in Closures
-
-```swift
-// ✅ Good: Weak self to prevent retain cycles
-publisher
-    .sink { [weak self] value in
-        self?.updateUI(value)
+    var cartUpdated: AnyPublisher<Cart, Never> {
+        cartUpdatedSubject.eraseToAnyPublisher()
     }
-    .store(in: &cancellables)
 
-// ❌ Avoid: Strong self capture
-publisher
-    .sink { value in
-        self.updateUI(value)  // Retain cycle!
+    // Send methods
+    func send(userLoggedIn user: User) {
+        userLoggedInSubject.send(user)
     }
-```
 
-### 3. Cancel on Deinit
+    func sendUserLoggedOut() {
+        userLoggedOutSubject.send()
+    }
 
-```swift
-// ✅ Good: Automatic cancellation
-class ViewModel {
-    private var cancellables = Set<AnyCancellable>()
-
-    deinit {
-        cancellables.forEach { $0.cancel() }
+    func send(cartUpdated cart: Cart) {
+        cartUpdatedSubject.send(cart)
     }
 }
 ```
 
-### 4. Type Erasure
+---
 
-```swift
-// ✅ Good: Use AnyPublisher for API boundaries
-func fetchData() -> AnyPublisher<Data, Error> {
-    URLSession.shared.dataTaskPublisher(for: url)
-        .map(\.data)
-        .eraseToAnyPublisher()
-}
+## Quick Reference
 
-// ❌ Avoid: Exposing complex publisher types
-func fetchData() -> Publishers.Map<URLSession.DataTaskPublisher, Data> {
-    // Complex type signature
-}
-```
+### Combine vs Async/Await Decision
 
-## References
+| Scenario | Prefer |
+|----------|--------|
+| Single async call | async/await |
+| Stream of values | Combine |
+| User input debouncing | Combine |
+| Combining multiple API calls | Either (async let or CombineLatest) |
+| Existing Combine codebase | Combine for consistency |
+| New project, simple needs | async/await |
 
-- [Combine Framework](https://developer.apple.com/documentation/combine)
-- [Using Combine](https://heckj.github.io/swiftui-notes/)
-- [Combine Operators](https://developer.apple.com/documentation/combine/publishers)
-- [Async/Await Migration](https://www.swiftbysundell.com/articles/calling-async-functions-within-a-combine-pipeline/)
+### Subject Comparison
+
+| Subject | Stores Value | New Subscribers Get |
+|---------|--------------|---------------------|
+| PassthroughSubject | No | Only new values |
+| CurrentValueSubject | Yes | Current + new values |
+
+### Common Operators
+
+| Category | Operators |
+|----------|-----------|
+| Transform | map, flatMap, compactMap, scan |
+| Filter | filter, removeDuplicates, first, dropFirst |
+| Combine | combineLatest, zip, merge |
+| Timing | debounce, throttle, delay |
+| Error | catch, retry, replaceError |
+
+### Red Flags
+
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| Subscription not stored | Immediate cancellation | .store(in: &cancellables) |
+| Strong self in sink | Retain cycle | [weak self] |
+| assign(to:on:self) | Retain cycle | Use sink or assign(to:&$property) |
+| Public Subject | Encapsulation broken | Expose as AnyPublisher |
+| flatMap for simple transform | Overkill | Use map |
+| Debounce on background, sink updates UI | Threading bug | receive(on: .main) |
+| Empty receiveCompletion | Errors ignored | Handle .failure case |

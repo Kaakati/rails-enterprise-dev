@@ -1,329 +1,292 @@
 ---
-name: "Localization iOS"
-description: "Comprehensive internationalization and localization patterns for iOS/tvOS applications"
-version: "2.0.0"
+name: localization-ios
+description: "Expert localization decisions for iOS/tvOS: when runtime language switching is needed vs system handling, pluralization rule complexity by language, RTL layout strategies, and string key architecture. Use when internationalizing apps, handling RTL languages, or debugging localization issues. Trigger keywords: localization, i18n, l10n, NSLocalizedString, Localizable.strings, stringsdict, plurals, RTL, Arabic, Hebrew, SwiftGen, language switching"
+version: "3.0.0"
 ---
 
-# Localization for iOS/tvOS
+# Localization iOS — Expert Decisions
 
-Complete guide to implementing internationalization (i18n) and localization (l10n) in SwiftUI and UIKit applications with support for multiple languages, RTL layouts, and SwiftGen integration.
+Expert decision frameworks for localization choices. Claude knows NSLocalizedString and .strings files — this skill provides judgment calls for architecture decisions and cross-language complexity.
 
-## Core Concepts
+---
 
-### Localization Architecture
+## Decision Trees
 
-**Key Components:**
-- `.lproj` directories for each supported language
-- `Localizable.strings` files for translated strings
-- `InfoPlist.strings` for app metadata
-- `LanguageManager` for runtime language switching
-- SwiftGen for type-safe string access
-
-**Supported Languages:**
-- LTR (Left-to-Right): English, Spanish, French, German, etc.
-- RTL (Right-to-Left): Arabic, Hebrew, Persian, Urdu
-
-### Directory Structure
+### Runtime Language Switching
 
 ```
-YourApp/
-├── Resources/
-│   ├── en.lproj/
-│   │   ├── Localizable.strings
-│   │   ├── InfoPlist.strings
-│   │   └── Localizable.stringsdict (plurals)
-│   ├── es.lproj/
-│   │   ├── Localizable.strings
-│   │   └── Localizable.stringsdict
-│   ├── ar.lproj/
-│   │   ├── Localizable.strings
-│   │   └── Localizable.stringsdict
-│   └── fr.lproj/
-│       ├── Localizable.strings
-│       └── Localizable.stringsdict
-└── Generated/
-    └── Strings.swift (SwiftGen generated)
+Do users need in-app language control?
+├─ NO (respect system language)
+│  └─ Standard localization
+│     NSLocalizedString, let iOS handle it
+│     Simplest and recommended
+│
+├─ YES (business requirement)
+│  └─ Does app restart work?
+│     ├─ YES → UserDefaults + AppleLanguages
+│     │  Simpler, more reliable
+│     └─ NO → Full runtime switching
+│        Complex: Bundle swizzling or custom lookup
+│
+└─ Single language override only (e.g., always English)
+   └─ Don't localize
+      Bundle.main with no .lproj
 ```
 
-## LanguageManager Pattern
+**The trap**: Implementing runtime language switching when system language suffices. It adds complexity and can break third-party SDKs that read system locale.
 
-### Singleton LanguageManager
+### String Key Architecture
 
+```
+How to structure your keys?
+├─ Small app (< 100 strings)
+│  └─ Flat keys with prefixes
+│     "login_title", "login_email_placeholder"
+│
+├─ Medium app
+│  └─ Hierarchical dot notation
+│     "auth.login.title", "auth.login.email"
+│
+├─ Large app with teams
+│  └─ Feature-based files
+│     Auth.strings, Profile.strings, etc.
+│     Each team owns their strings file
+│
+└─ Design system / component library
+   └─ Component-scoped keys
+      "button.primary.title", "input.error.required"
+```
+
+### Pluralization Complexity
+
+```
+Which languages do you support?
+├─ Western languages only (en, es, fr, de)
+│  └─ Simple plural rules
+│     one, other (maybe zero)
+│
+├─ Slavic languages (ru, pl, uk)
+│  └─ Complex plural rules
+│     one, few, many, other
+│     e.g., Russian: 1 файл, 2 файла, 5 файлов
+│
+├─ Arabic
+│  └─ Six plural forms!
+│     zero, one, two, few, many, other
+│     MUST use stringsdict
+│
+└─ East Asian (zh, ja, ko)
+   └─ No grammatical plural
+      But may need counters/classifiers
+```
+
+### RTL Support Level
+
+```
+Do you support RTL languages?
+├─ NO RTL languages planned
+│  └─ Still use leading/trailing
+│     Future-proof your layout
+│
+├─ Arabic only
+│  └─ Standard RTL support
+│     layoutDirection + leading/trailing
+│     Test thoroughly
+│
+├─ Arabic + Hebrew + Persian
+│  └─ Each has unique considerations
+│     Hebrew: different number handling
+│     Persian: different numerals (۱۲۳)
+│
+└─ Mixed LTR/RTL content
+   └─ Explicit direction per component
+      Force LTR for code, URLs, numbers
+```
+
+---
+
+## NEVER Do
+
+### String Management
+
+**NEVER** concatenate localized strings:
 ```swift
-@MainActor
-final class LanguageManager: ObservableObject {
-    static let shared = LanguageManager()
+// ❌ Breaks in languages with different word order
+let message = NSLocalizedString("hello", comment: "") + " " + userName
 
-    @Published private(set) var currentLanguage: Language = .english
-    @Published private(set) var isRTL: Bool = false
+// German: "Hallo" + " " + "Hans" = "Hallo Hans" ✓
+// Japanese: "こんにちは" + " " + "田中" = "こんにちは 田中" ✗
+// Should be "田中さん、こんにちは"
 
-    private let languageKey = "selectedLanguage"
+// ✅ Use format strings
+let format = NSLocalizedString("greeting.format", comment: "")
+let message = String(format: format, userName)
+// greeting.format = "Hello, %@!" (en)
+// greeting.format = "%@さん、こんにちは!" (ja)
+```
 
-    enum Language: String, CaseIterable, Identifiable {
-        case english = "en"
-        case spanish = "es"
-        case arabic = "ar"
-        case french = "fr"
-        case hebrew = "he"
+**NEVER** embed numbers in translation keys:
+```swift
+// ❌ Doesn't handle plural rules
+"items.1" = "1 item"
+"items.2" = "2 items"
+"items.3" = "3 items"
+// What about 0? 100? Arabic's 6 forms?
 
-        var id: String { rawValue }
+// ✅ Use stringsdict for plurals
+String.localizedStringWithFormat(
+    NSLocalizedString("items.count", comment: ""),
+    count
+)
+```
 
-        var displayName: String {
-            switch self {
-            case .english: return "English"
-            case .spanish: return "Español"
-            case .arabic: return "العربية"
-            case .french: return "Français"
-            case .hebrew: return "עברית"
-            }
-        }
+**NEVER** assume string length:
+```swift
+// ❌ German is ~30% longer than English
+.frame(width: 100)  // "Settings" fits, "Einstellungen" doesn't
 
-        var isRTL: Bool {
-            self == .arabic || self == .hebrew
-        }
+// ✅ Use flexible layouts
+.frame(minWidth: 80)
+// Or
+.fixedSize(horizontal: true, vertical: false)
+```
 
-        var locale: Locale {
-            Locale(identifier: rawValue)
-        }
-    }
+**NEVER** use left/right in layouts:
+```swift
+// ❌ Breaks in RTL
+.padding(.left, 16)
+.frame(alignment: .left)
 
-    private init() {
-        loadSavedLanguage()
-    }
+// ✅ Use leading/trailing
+.padding(.leading, 16)
+.frame(alignment: .leading)
+```
 
-    func setLanguage(_ language: Language) {
-        currentLanguage = language
-        isRTL = language.isRTL
+### Runtime Language
 
-        // Save preference
-        UserDefaults.standard.set(language.rawValue, forKey: languageKey)
+**NEVER** change AppleLanguages without restart:
+```swift
+// ❌ Partial UI update — inconsistent state
+UserDefaults.standard.set(["ar"], forKey: "AppleLanguages")
+// Some views updated, others not. Third-party SDKs broken.
 
-        // Update app language
-        UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
-        UserDefaults.standard.synchronize()
+// ✅ Require restart or use custom bundle
+UserDefaults.standard.set(["ar"], forKey: "AppleLanguages")
+showRestartRequiredAlert()  // User restarts app
+```
 
-        // Post notification for UI updates
-        NotificationCenter.default.post(name: .languageDidChange, object: nil)
-    }
+**NEVER** forget to set locale for formatters:
+```swift
+// ❌ Uses device locale, not app's selected language
+let formatter = DateFormatter()
+formatter.dateStyle = .medium
+let date = formatter.string(from: Date())  // Wrong language!
 
-    private func loadSavedLanguage() {
-        guard let savedLanguageCode = UserDefaults.standard.string(forKey: languageKey),
-              let language = Language(rawValue: savedLanguageCode) else {
-            // Use system language as default
-            currentLanguage = detectSystemLanguage()
-            isRTL = currentLanguage.isRTL
-            return
-        }
+// ✅ Set locale explicitly
+let formatter = DateFormatter()
+formatter.locale = Locale(identifier: selectedLanguage.rawValue)
+formatter.dateStyle = .medium
+```
 
-        currentLanguage = language
-        isRTL = language.isRTL
-    }
+### Pluralization
 
-    private func detectSystemLanguage() -> Language {
-        let preferredLanguage = Locale.preferredLanguages.first ?? "en"
-        let languageCode = String(preferredLanguage.prefix(2))
-
-        return Language(rawValue: languageCode) ?? .english
+**NEVER** use simple if/else for plurals:
+```swift
+// ❌ Fails for Russian, Arabic, etc.
+func itemsText(_ count: Int) -> String {
+    if count == 1 {
+        return "1 item"
+    } else {
+        return "\(count) items"
     }
 }
 
-extension Notification.Name {
-    static let languageDidChange = Notification.Name("languageDidChange")
+// Russian: 1 товар, 2 товара, 5 товаров, 21 товар, 22 товара...
+// This requires CLDR plural rules
+
+// ✅ Use stringsdict — iOS handles rules automatically
+```
+
+**NEVER** hardcode numeral systems:
+```swift
+// ❌ Arabic users may expect Arabic-Indic numerals
+Text("\(count) items")  // Shows "5 items" even in Arabic
+
+// ✅ Use NumberFormatter with locale
+let formatter = NumberFormatter()
+formatter.locale = Locale(identifier: "ar")
+formatter.string(from: count as NSNumber)  // "٥"
+```
+
+### RTL Layouts
+
+**NEVER** use fixed directional icons:
+```swift
+// ❌ Arrow points wrong way in RTL
+Image(systemName: "arrow.right")
+
+// ✅ Use semantic icons or flip
+Image(systemName: "arrow.forward")  // Semantic
+// Or
+Image(systemName: "arrow.right")
+    .flipsForRightToLeftLayoutDirection(true)
+```
+
+**NEVER** force layout direction globally when it should be per-component:
+```swift
+// ❌ Phone numbers, code, etc. should stay LTR
+.environment(\.layoutDirection, .rightToLeft)
+
+// ✅ Apply selectively
+VStack {
+    Text(localizedContent)  // Follows RTL
+
+    Text(phoneNumber)
+        .environment(\.layoutDirection, .leftToRight)  // Always LTR
+
+    Text(codeSnippet)
+        .environment(\.layoutDirection, .leftToRight)
 }
 ```
 
-## Localizable.strings Format
+---
 
-### Basic Strings File
+## Essential Patterns
 
-**en.lproj/Localizable.strings:**
-```
-/* General */
-"app.name" = "My App";
-"app.tagline" = "Welcome to the future";
-
-/* Navigation */
-"nav.home" = "Home";
-"nav.profile" = "Profile";
-"nav.settings" = "Settings";
-
-/* Authentication */
-"auth.login.title" = "Log In";
-"auth.login.email" = "Email Address";
-"auth.login.password" = "Password";
-"auth.login.button" = "Sign In";
-"auth.login.forgot_password" = "Forgot Password?";
-"auth.signup.title" = "Create Account";
-"auth.logout.button" = "Log Out";
-
-/* Errors */
-"error.network.title" = "Network Error";
-"error.network.message" = "Please check your connection and try again.";
-"error.validation.email" = "Please enter a valid email address.";
-"error.validation.password_short" = "Password must be at least 8 characters.";
-
-/* Actions */
-"action.save" = "Save";
-"action.cancel" = "Cancel";
-"action.delete" = "Delete";
-"action.edit" = "Edit";
-"action.confirm" = "Confirm";
-
-/* Formatting with parameters */
-"user.greeting" = "Hello, %@!";
-"items.count" = "You have %d item(s)";
-"download.progress" = "Downloading... %d%%";
-"user.age" = "%@ is %d years old";
-```
-
-**es.lproj/Localizable.strings:**
-```
-/* General */
-"app.name" = "Mi App";
-"app.tagline" = "Bienvenido al futuro";
-
-/* Navigation */
-"nav.home" = "Inicio";
-"nav.profile" = "Perfil";
-"nav.settings" = "Configuración";
-
-/* Authentication */
-"auth.login.title" = "Iniciar Sesión";
-"auth.login.email" = "Correo Electrónico";
-"auth.login.password" = "Contraseña";
-"auth.login.button" = "Entrar";
-```
-
-**ar.lproj/Localizable.strings:**
-```
-/* General */
-"app.name" = "تطبيقي";
-"app.tagline" = "مرحباً بك في المستقبل";
-
-/* Navigation */
-"nav.home" = "الرئيسية";
-"nav.profile" = "الملف الشخصي";
-"nav.settings" = "الإعدادات";
-
-/* Authentication */
-"auth.login.title" = "تسجيل الدخول";
-"auth.login.email" = "البريد الإلكتروني";
-"auth.login.password" = "كلمة المرور";
-"auth.login.button" = "دخول";
-```
-
-## NSLocalizedString Usage
-
-### Basic Usage
+### Type-Safe Localization with SwiftGen
 
 ```swift
-// Without SwiftGen (traditional approach)
-let title = NSLocalizedString("auth.login.title", comment: "Login screen title")
-let email = NSLocalizedString("auth.login.email", comment: "Email field label")
+// swiftgen.yml
+// strings:
+//   inputs: Resources/en.lproj/Localizable.strings
+//   outputs:
+//     - templateName: structured-swift5
+//       output: Generated/Strings.swift
 
-// With parameters
-let greeting = String(format: NSLocalizedString("user.greeting", comment: ""), userName)
-let itemCount = String(format: NSLocalizedString("items.count", comment: ""), count)
+// Usage — compile-time safe
+Text(L10n.Auth.Login.title)
+Text(L10n.User.greeting(userName))
+Text(L10n.Items.count(itemCount))
+
+// Benefits:
+// - Compiler catches missing keys
+// - Auto-complete for strings
+// - Refactoring safe
 ```
 
-### Helper Extension
+### Stringsdict for Plurals
 
-```swift
-extension String {
-    var localized: String {
-        NSLocalizedString(self, comment: "")
-    }
-
-    func localized(with arguments: CVarArg...) -> String {
-        String(format: NSLocalizedString(self, comment: ""), arguments: arguments)
-    }
-}
-
-// Usage
-let title = "auth.login.title".localized
-let greeting = "user.greeting".localized(with: userName)
-let age = "user.age".localized(with: userName, userAge)
-```
-
-## SwiftGen L10n Integration
-
-### SwiftGen Configuration
-
-**swiftgen.yml:**
-```yaml
-strings:
-  inputs:
-    - Resources/en.lproj/Localizable.strings
-  outputs:
-    - templateName: structured-swift5
-      output: Generated/Strings.swift
-      params:
-        publicAccess: true
-        lookupFunction: tr
-```
-
-### Generated Code Usage
-
-```swift
-// SwiftGen generated enum structure
-// Before SwiftGen
-let title = NSLocalizedString("auth.login.title", comment: "")
-
-// After SwiftGen
-let title = L10n.Auth.Login.title
-
-// With parameters
-let greeting = L10n.User.greeting("John")
-let itemCount = L10n.Items.count(5)
-let userAge = L10n.User.age("Alice", 25)
-```
-
-### SwiftUI Integration
-
-```swift
-struct LoginView: View {
-    @State private var email = ""
-    @State private var password = ""
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text(L10n.Auth.Login.title)
-                .font(.largeTitle)
-
-            TextField(L10n.Auth.Login.email, text: $email)
-                .textFieldStyle(.roundedBorder)
-                .textContentType(.emailAddress)
-                .keyboardType(.emailAddress)
-
-            SecureField(L10n.Auth.Login.password, text: $password)
-                .textFieldStyle(.roundedBorder)
-                .textContentType(.password)
-
-            Button(L10n.Auth.Login.button) {
-                // Login action
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding()
-    }
-}
-```
-
-## Pluralization Support
-
-### Localizable.stringsdict Format
-
-**en.lproj/Localizable.stringsdict:**
 ```xml
+<!-- en.lproj/Localizable.stringsdict -->
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ...>
 <plist version="1.0">
 <dict>
     <key>items.count</key>
     <dict>
         <key>NSStringLocalizedFormatKey</key>
-        <string>%#@item_count@</string>
-        <key>item_count</key>
+        <string>%#@items@</string>
+        <key>items</key>
         <dict>
             <key>NSStringFormatSpecTypeKey</key>
             <string>NSStringPluralRuleType</string>
@@ -332,440 +295,136 @@ struct LoginView: View {
             <key>zero</key>
             <string>No items</string>
             <key>one</key>
-            <string>1 item</string>
+            <string>%d item</string>
             <key>other</key>
             <string>%d items</string>
         </dict>
     </dict>
-
-    <key>notifications.count</key>
-    <dict>
-        <key>NSStringLocalizedFormatKey</key>
-        <string>%#@notification_count@</string>
-        <key>notification_count</key>
-        <dict>
-            <key>NSStringFormatSpecTypeKey</key>
-            <string>NSStringPluralRuleType</string>
-            <key>NSStringFormatValueTypeKey</key>
-            <string>d</string>
-            <key>zero</key>
-            <string>No notifications</string>
-            <key>one</key>
-            <string>1 new notification</string>
-            <key>other</key>
-            <string>%d new notifications</string>
-        </dict>
-    </dict>
 </dict>
 </plist>
 ```
-
-**ar.lproj/Localizable.stringsdict:**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>items.count</key>
-    <dict>
-        <key>NSStringLocalizedFormatKey</key>
-        <string>%#@item_count@</string>
-        <key>item_count</key>
-        <dict>
-            <key>NSStringFormatSpecTypeKey</key>
-            <string>NSStringPluralRuleType</string>
-            <key>NSStringFormatValueTypeKey</key>
-            <string>d</string>
-            <key>zero</key>
-            <string>لا توجد عناصر</string>
-            <key>one</key>
-            <string>عنصر واحد</string>
-            <key>two</key>
-            <string>عنصران</string>
-            <key>few</key>
-            <string>%d عناصر</string>
-            <key>many</key>
-            <string>%d عنصراً</string>
-            <key>other</key>
-            <string>%d عنصر</string>
-        </dict>
-    </dict>
-</dict>
-</plist>
-```
-
-### Usage in Code
 
 ```swift
-// Pluralization is automatic
-let message = String.localizedStringWithFormat(
+// Usage
+let text = String.localizedStringWithFormat(
     NSLocalizedString("items.count", comment: ""),
-    itemCount
+    count
 )
-
 // 0 → "No items"
 // 1 → "1 item"
 // 5 → "5 items"
-
-// Arabic: 0, 1, 2, 3-10, 11-99, 100+ all have different forms
 ```
 
-## RTL (Right-to-Left) Support
-
-### Layout Mirroring
-
-```swift
-struct RTLAwareView: View {
-    @EnvironmentObject var languageManager: LanguageManager
-
-    var body: some View {
-        HStack {
-            Image(systemName: "chevron.right")
-                .flipsForRightToLeftLayoutDirection(true)
-
-            Text("Next")
-        }
-        .environment(\.layoutDirection, languageManager.isRTL ? .rightToLeft : .leftToRight)
-    }
-}
-```
-
-### Manual RTL Handling
+### RTL-Aware Layout Helpers
 
 ```swift
 extension View {
-    func leadingAlignment() -> some View {
-        self.frame(maxWidth: .infinity, alignment: LanguageManager.shared.isRTL ? .trailing : .leading)
+    /// Applies leading alignment that respects RTL
+    func alignLeading() -> some View {
+        self.frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    func trailingAlignment() -> some View {
-        self.frame(maxWidth: .infinity, alignment: LanguageManager.shared.isRTL ? .leading : .trailing)
-    }
-}
-
-// Usage
-Text("Left-aligned text")
-    .leadingAlignment()
-
-Text("Right-aligned text")
-    .trailingAlignment()
-```
-
-### RTL-Safe Padding
-
-```swift
-extension View {
-    func leadingPadding(_ value: CGFloat) -> some View {
-        self.padding(LanguageManager.shared.isRTL ? .trailing : .leading, value)
-    }
-
-    func trailingPadding(_ value: CGFloat) -> some View {
-        self.padding(LanguageManager.shared.isRTL ? .leading : .trailing, value)
+    /// Force LTR for content that shouldn't flip (code, URLs, phone numbers)
+    func forceLTR() -> some View {
+        self.environment(\.layoutDirection, .leftToRight)
     }
 }
-```
 
-## Runtime Language Switching
-
-### Language Picker View
-
-```swift
-struct LanguagePickerView: View {
-    @EnvironmentObject var languageManager: LanguageManager
-    @State private var showRestartAlert = false
+// ContentView
+struct MessageCell: View {
+    let message: Message
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(LanguageManager.Language.allCases) { language in
-                    Button {
-                        changeLanguage(to: language)
-                    } label: {
-                        HStack {
-                            Text(language.displayName)
-                                .foregroundColor(.primary)
+        VStack(alignment: .leading) {
+            Text(message.content)
+                .alignLeading()  // Respects RTL
 
-                            Spacer()
+            Text(message.codeSnippet)
+                .font(.monospaced(.body)())
+                .forceLTR()  // Code always LTR
 
-                            if languageManager.currentLanguage == language {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                }
-            } header: {
-                Text(L10n.Settings.language)
-            }
-        }
-        .alert("Restart Required", isPresented: $showRestartAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Please restart the app to apply the language change.")
-        }
-    }
-
-    private func changeLanguage(to language: LanguageManager.Language) {
-        languageManager.setLanguage(language)
-        showRestartAlert = true
-    }
-}
-```
-
-### App Restart for Language Change
-
-```swift
-@main
-struct YourApp: App {
-    @StateObject private var languageManager = LanguageManager.shared
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(languageManager)
-                .environment(\.layoutDirection, languageManager.isRTL ? .rightToLeft : .leftToLeft)
-                .onReceive(NotificationCenter.default.publisher(for: .languageDidChange)) { _ in
-                    // Trigger UI refresh
-                }
+            Text(message.url)
+                .forceLTR()  // URLs always LTR
         }
     }
 }
 ```
-
-## Date and Number Formatting
 
 ### Locale-Aware Formatting
 
 ```swift
-struct LocalizedFormattingHelpers {
-    static func formatDate(_ date: Date, style: DateFormatter.Style = .medium) -> String {
+struct LocalizedFormatters {
+    let locale: Locale
+
+    init(languageCode: String) {
+        self.locale = Locale(identifier: languageCode)
+    }
+
+    func formatDate(_ date: Date, style: DateFormatter.Style = .medium) -> String {
         let formatter = DateFormatter()
+        formatter.locale = locale
         formatter.dateStyle = style
-        formatter.locale = LanguageManager.shared.currentLanguage.locale
         return formatter.string(from: date)
     }
 
-    static func formatNumber(_ number: Double, style: NumberFormatter.Style = .decimal) -> String {
+    func formatNumber(_ number: Double) -> String {
         let formatter = NumberFormatter()
-        formatter.numberStyle = style
-        formatter.locale = LanguageManager.shared.currentLanguage.locale
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
         return formatter.string(from: NSNumber(value: number)) ?? "\(number)"
     }
 
-    static func formatCurrency(_ amount: Double, currencyCode: String = "USD") -> String {
+    func formatCurrency(_ amount: Double, code: String) -> String {
         let formatter = NumberFormatter()
+        formatter.locale = locale
         formatter.numberStyle = .currency
-        formatter.currencyCode = currencyCode
-        formatter.locale = LanguageManager.shared.currentLanguage.locale
-        return formatter.string(from: NSNumber(value: amount)) ?? "$\(amount)"
-    }
-}
-
-// Usage
-let dateString = LocalizedFormattingHelpers.formatDate(Date()) // "Jan 11, 2026" (en) or "11 ene 2026" (es)
-let numberString = LocalizedFormattingHelpers.formatNumber(1234.56) // "1,234.56" (en) or "1.234,56" (es)
-let priceString = LocalizedFormattingHelpers.formatCurrency(99.99) // "$99.99" (en) or "99,99 $" (es)
-```
-
-## Testing Localization
-
-### Unit Tests
-
-```swift
-final class LocalizationTests: XCTestCase {
-    func testAllStringKeysExist() {
-        let languages = ["en", "es", "ar", "fr"]
-
-        for language in languages {
-            let bundle = Bundle(for: type(of: self))
-            guard let path = bundle.path(forResource: language, ofType: "lproj"),
-                  let langBundle = Bundle(path: path) else {
-                XCTFail("Missing \(language).lproj")
-                continue
-            }
-
-            // Test key exists
-            let localizedString = NSLocalizedString("auth.login.title", bundle: langBundle, comment: "")
-            XCTAssertFalse(localizedString.isEmpty, "\(language): Missing translation for auth.login.title")
-            XCTAssertNotEqual(localizedString, "auth.login.title", "\(language): Translation not found")
-        }
-    }
-
-    func testPluralizationWorks() {
-        let counts = [0, 1, 2, 5, 100]
-
-        for count in counts {
-            let formatted = String.localizedStringWithFormat(
-                NSLocalizedString("items.count", comment: ""),
-                count
-            )
-            XCTAssertFalse(formatted.isEmpty)
-            print("items.count(\(count)) = \(formatted)")
-        }
-    }
-
-    func testRTLDetection() {
-        let arabicLang = LanguageManager.Language.arabic
-        XCTAssertTrue(arabicLang.isRTL)
-
-        let englishLang = LanguageManager.Language.english
-        XCTAssertFalse(englishLang.isRTL)
+        formatter.currencyCode = code
+        return formatter.string(from: NSNumber(value: amount)) ?? "\(amount)"
     }
 }
 ```
 
-### UI Tests for RTL
+---
 
-```swift
-final class RTLUITests: XCTestCase {
-    func testRTLLayoutMirroring() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(ar)"]
-        app.launch()
+## Quick Reference
 
-        // Verify navigation bar elements are mirrored
-        let backButton = app.buttons["Back"]
-        XCTAssertTrue(backButton.exists)
+### Plural Forms by Language
 
-        // Take screenshots for visual regression
-        let screenshot = app.screenshot()
-        // Compare with baseline
-    }
-}
-```
+| Language | Forms | Example (1, 2, 5) |
+|----------|-------|-------------------|
+| English | one, other | 1 item, 2 items, 5 items |
+| French | one, other | 1 élément, 2 éléments |
+| Russian | one, few, many, other | 1 файл, 2 файла, 5 файлов |
+| Arabic | zero, one, two, few, many, other | 6 forms! |
+| Japanese | other only | No grammatical plural |
 
-## Pseudo-Localization for QA
+### RTL Languages
 
-### Pseudo-Language Generator
+| Language | Script Direction | Numerals |
+|----------|-----------------|----------|
+| Arabic | RTL | Arabic-Indic (٠١٢) or Western |
+| Hebrew | RTL | Western |
+| Persian | RTL | Extended Arabic (۰۱۲) |
+| Urdu | RTL | Extended Arabic |
 
-```swift
-struct PseudoLocalizer {
-    static func pseudolocalize(_ input: String) -> String {
-        // Add brackets and accents to make strings longer and test UI layout
-        let accented = input.map { char -> String in
-            switch char {
-            case "a": return "á"
-            case "e": return "é"
-            case "i": return "í"
-            case "o": return "ó"
-            case "u": return "ú"
-            case "A": return "Á"
-            case "E": return "É"
-            case "I": return "Í"
-            case "O": return "Ó"
-            case "U": return "Ú"
-            default: return String(char)
-            }
-        }.joined()
+### String Expansion Guidelines
 
-        // Add 30% extra characters to test layout with longer strings
-        let padding = String(repeating: "~", count: max(1, input.count / 3))
+| Source (English) | Expansion |
+|------------------|-----------|
+| 1-10 chars | +200-300% |
+| 11-20 chars | +80-100% |
+| 21-50 chars | +60-80% |
+| 51-70 chars | +50-60% |
+| 70+ chars | +30% |
 
-        return "[[\(accented)\(padding)]]"
-    }
-}
+### Red Flags
 
-// Usage in debug builds
-#if DEBUG
-extension String {
-    var pseudolocalized: String {
-        PseudoLocalizer.pseudolocalize(self)
-    }
-}
-#endif
-```
-
-### Enable Pseudo-Localization
-
-**Xcode Scheme → Arguments:**
-```
--AppleLanguages (en-PSEUDO)
--NSDoubleLocalizedStrings YES
-```
-
-## Best Practices
-
-### 1. Use Meaningful Keys
-
-```swift
-// ✅ Good: Descriptive, hierarchical keys
-"auth.login.title"
-"auth.login.email_placeholder"
-"error.network.timeout"
-
-// ❌ Avoid: Generic or unclear keys
-"title"
-"placeholder"
-"error"
-```
-
-### 2. Always Provide Comments
-
-```swift
-// ✅ Good
-NSLocalizedString("auth.login.button", comment: "Primary button to submit login form")
-
-// ❌ Avoid
-NSLocalizedString("auth.login.button", comment: "")
-```
-
-### 3. Avoid String Concatenation
-
-```swift
-// ❌ Bad: Doesn't work for different word orders
-let message = NSLocalizedString("hello", comment: "") + " " + userName
-
-// ✅ Good: Use format strings
-let message = String(format: NSLocalizedString("user.greeting", comment: ""), userName)
-```
-
-### 4. Test All Languages
-
-```swift
-// Test each language thoroughly
-// - Run app in each supported language
-// - Check for truncated text
-// - Verify RTL layouts
-// - Test pluralization rules
-```
-
-### 5. Extract Strings Regularly
-
-```bash
-# Use genstrings to find new strings
-find . -name "*.swift" | xargs genstrings -o en.lproj
-```
-
-## Troubleshooting
-
-### Strings Not Updating
-
-```bash
-# Clean build folder
-rm -rf ~/Library/Developer/Xcode/DerivedData
-
-# Re-build project
-xcodebuild clean build
-```
-
-### Missing Translations
-
-```bash
-# Find missing keys across languages
-# Compare en.lproj with other languages
-diff en.lproj/Localizable.strings es.lproj/Localizable.strings
-```
-
-### RTL Layout Issues
-
-```swift
-// Always use leading/trailing instead of left/right
-.padding(.leading, 16) // ✅ Good
-.padding(.left, 16)    // ❌ Avoid
-```
-
-## References
-
-- [Apple Internationalization Guide](https://developer.apple.com/internationalization/)
-- [SwiftGen Strings Documentation](https://github.com/SwiftGen/SwiftGen)
-- [Unicode CLDR Plural Rules](http://cldr.unicode.org/index/cldr-spec/plural-rules)
+| Smell | Problem | Fix |
+|-------|---------|-----|
+| String concatenation | Word order varies | Format strings |
+| if count == 1 else | Wrong plural rules | stringsdict |
+| .padding(.left) | Breaks RTL | .padding(.leading) |
+| DateFormatter without locale | Wrong language | Set locale explicitly |
+| Runtime language without restart | Inconsistent UI | Require restart |
+| Fixed frame widths for text | Text truncation | Flexible layouts |
+| Hardcoded "1, 2, 3" | Wrong numeral system | NumberFormatter with locale |
