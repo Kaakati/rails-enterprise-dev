@@ -88,6 +88,7 @@ validation_level: blocking  # blocking, warning, advisory
 test_coverage_threshold: 90
 smart_detection_enabled: true
 detection_mode: suggest
+use_claude_analysis: true
 requirements_extraction_enabled: true
 auto_create_beads_tasks: true
 guardian_max_iterations: 3
@@ -224,6 +225,7 @@ test_coverage_threshold: 90
 auto_commit: false
 smart_detection_enabled: true
 detection_mode: suggest
+use_claude_analysis: true
 ---
 ```
 
@@ -463,6 +465,7 @@ In `.claude/reactree-rails-dev.local.md`:
 smart_detection_enabled: true   # Enable/disable auto-detection
 detection_mode: suggest         # suggest | inject | disabled
 annoyance_threshold: medium     # low | medium | high
+use_claude_analysis: true       # Use Claude CLI for intelligent intent analysis
 ```
 
 ## Architecture

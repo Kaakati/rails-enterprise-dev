@@ -93,6 +93,7 @@ Edit `.claude/reactree-rails-dev.local.md`:
 smart_detection_enabled: true  # Enable/disable
 detection_mode: suggest        # suggest | inject | disabled
 annoyance_threshold: medium    # low | medium | high
+use_claude_analysis: true      # Use Claude CLI for intelligent intent analysis
 ---
 ```
 

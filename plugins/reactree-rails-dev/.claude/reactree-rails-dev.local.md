@@ -2,6 +2,7 @@
 initialized: false
 needs_setup: true
 smart_detection_enabled: false
+use_claude_analysis: true
 ---
 
 # ReAcTree Plugin - Needs Initialization
