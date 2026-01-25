@@ -1,82 +1,41 @@
 ---
 name: "Rails Error Prevention"
-description: "Comprehensive checklist and prevention strategies for common Ruby on Rails errors. Use this skill BEFORE writing any Rails code to prevent ViewComponent template errors, ActiveRecord query mistakes, method exposure issues, N+1 queries, and other common Rails pitfalls. Trigger keywords: errors, bugs, security, validation, prevention, pitfalls, debugging, exceptions, error handling"
+description: "Expert checklist for preventing common Rails runtime errors BEFORE writing code. Use when: (1) Creating ViewComponents - template/method exposure errors, (2) Writing GROUP BY queries - PostgreSQL grouping errors, (3) Building views that call component methods, (4) Debugging 'undefined method' errors. Trigger keywords: errors, bugs, NoMethodError, template not found, N+1, GROUP BY, PG::GroupingError, undefined method, nil, debugging, prevention"
+version: 1.1.0
 ---
 
-# Rails Error Prevention Skill
+# Rails Error Prevention
 
-This skill provides preventative checklists and error patterns for common Rails mistakes. **Review relevant sections BEFORE writing code.**
+**Critical Rule**: Review the relevant section BEFORE writing code, not after errors occur.
 
-## When to Use This Skill
-
-- Before creating ViewComponents
-- Before writing ActiveRecord queries with GROUP BY or joins
-- Before writing view code that calls component methods
-- Before creating controller actions
-- When debugging undefined method errors
-- When debugging template not found errors
-- When debugging ActiveRecord grouping errors
-
-## Critical Rule: Method Exposure Verification
-
-**This is the #1 cause of runtime errors in Rails applications.**
+## The #1 Cause of Runtime Errors
 
 ```
-WRONG ASSUMPTION: Service has method → View can call it through component
-CORRECT RULE:     Service has method + Component exposes it = View can call it
+WRONG: Service has method → View can call it through component
+RIGHT: Service has method + Component EXPOSES it = View can call it
 ```
 
-### Verification Process
+Every layer must explicitly expose what the next layer needs. Views cannot reach through components to access service internals.
 
-```bash
-# Step 1: List all methods view will call on component
-grep -oE '@[a-z_]+\.[a-z_]+' app/views/{path}/*.erb | sort -u
+## Error Prevention Decision Tree
 
-# Step 2: List all public methods in component
-grep -E '^\s+def [a-z_]+' app/components/{component}_component.rb
-
-# Step 3: Compare - any view call without component method = BUG
-# Missing methods MUST be added to component BEFORE writing view code
 ```
-
-### Patterns to Fix Missing Methods
-
-```ruby
-# Pattern 1: Delegation
-class Metrics::DashboardComponent < ViewComponent::Base
-  delegate :calculate_lifetime_tasks,
-           :calculate_lifetime_success_rate,
-           to: :@service
-  
-  def initialize(service:)
-    @service = service
-  end
-end
-
-# Pattern 2: Wrapper methods (preferred for transformation)
-class Metrics::DashboardComponent < ViewComponent::Base
-  def initialize(service:)
-    @service = service
-  end
-  
-  def lifetime_tasks
-    @service.calculate_lifetime_tasks
-  end
-  
-  def lifetime_success_rate
-    @service.calculate_lifetime_success_rate
-  end
-end
-
-# Pattern 3: Expose service directly (use sparingly)
-class Metrics::DashboardComponent < ViewComponent::Base
-  attr_reader :service
-  
-  def initialize(service:)
-    @service = service
-  end
-end
-# View then calls: dashboard.service.calculate_lifetime_tasks
+What are you building?
+│
+├─ ViewComponent
+│   └─ Go to: ViewComponent Errors
+│
+├─ ActiveRecord query with GROUP BY
+│   └─ Go to: GROUP BY Errors
+│
+├─ View that calls component methods
+│   └─ Go to: Method Exposure Verification
+│
+├─ Controller action
+│   └─ Go to: Controller Errors
+│
+└─ Code with potential nil values
+    └─ Go to: Nil Errors
 ```
 
 ---
@@ -84,281 +43,154 @@ end
 ## ViewComponent Errors
 
 ### Template Not Found
-
-**Error Pattern:**
 ```
-Couldn't find a template file or inline render method for {Component}
+Error: Couldn't find a template file or inline render method for {Component}
 ```
 
-**Root Causes:**
-- Missing template file (component.html.erb)
-- Template in wrong location
-- Class name doesn't match file path
-- Using render without inline template defined
-
-**Prevention Checklist:**
+**Verification before creating:**
 ```bash
-# Before creating component:
-ls app/components/                              # Check structure
-head -50 app/components/*_component.rb | head -1 # Review existing pattern
-# Verify naming: ComponentName -> component_name/
+# Check existing pattern (inline vs file template)
+head -50 $(find app/components -name '*_component.rb' | head -1)
+grep -l 'def call' app/components/**/*_component.rb | head -3
 ```
 
-**Required Files:**
+**Requirements:**
 ```
-app/components/{namespace}/{component_name}_component.rb
-app/components/{namespace}/{component_name}_component.html.erb
+app/components/namespace/name_component.rb      ← Class file
+app/components/namespace/name_component.html.erb ← Template (unless inline)
 ```
 
-**Correct Patterns:**
-
-```ruby
-# Option A: Separate template file
-# app/components/metrics/kpi_card_component.rb
-class Metrics::KpiCardComponent < ViewComponent::Base
-  def initialize(title:, value:)
-    @title = title
-    @value = value
-  end
-end
-
-# app/components/metrics/kpi_card_component.html.erb
-# <div class="kpi-card">
-#   <h3><%= @title %></h3>
-#   <span><%= @value %></span>
-# </div>
-
-# Option B: Inline template (call method)
-class Metrics::KpiCardComponent < ViewComponent::Base
-  def initialize(title:, value:)
-    @title = title
-    @value = value
-  end
-
-  def call
-    content_tag :div, class: "kpi-card" do
-      safe_join([
-        content_tag(:h3, @title),
-        content_tag(:span, @value)
-      ])
-    end
-  end
-end
-```
+**NEVER** create a component without checking the project's template pattern first.
 
 ### Helper Method Errors
-
-**Error Pattern:**
 ```
-undefined local variable or method '{method}' for an instance of {Component}
-Did you mean `helpers.{method}`?
+Error: undefined local variable or method 'link_to' for #<MyComponent>
+Hint: Did you mean `helpers.link_to`?
 ```
 
-**Root Cause:** Calling view helper directly without `helpers.` prefix
-
-**Prevention Rules:**
-- ViewComponents do NOT have direct access to view helpers
-- Must use `helpers.method_name` for any Rails helper
-
-**Helpers Requiring Prefix:**
+**Rule**: ALL Rails helpers need `helpers.` prefix in ViewComponents:
 ```ruby
-# WRONG                          # CORRECT
-link_to(...)                     helpers.link_to(...)
-image_tag(...)                   helpers.image_tag(...)
-url_for(...)                     helpers.url_for(...)
-form_with(...)                   helpers.form_with(...)
-number_to_currency(...)          helpers.number_to_currency(...)
-time_ago_in_words(...)           helpers.time_ago_in_words(...)
-truncate(...)                    helpers.truncate(...)
-pluralize(...)                   helpers.pluralize(...)
-content_tag(...)                 helpers.content_tag(...)
-tag(...)                         helpers.tag(...)
-content_for(...)                 helpers.content_for(...)
+# WRONG                    # RIGHT
+link_to(...)              helpers.link_to(...)
+image_tag(...)            helpers.image_tag(...)
+number_to_currency(...)   helpers.number_to_currency(...)
+time_ago_in_words(...)    helpers.time_ago_in_words(...)
+content_tag(...)          helpers.content_tag(...)
 ```
 
-**Alternative - Delegate Helpers:**
+**Or delegate explicitly:**
 ```ruby
-class Metrics::KpiCardComponent < ViewComponent::Base
-  delegate :number_to_currency, :link_to, to: :helpers
-
-  def formatted_value
-    number_to_currency(@value)  # Now works without prefix
-  end
+class MyComponent < ViewComponent::Base
+  delegate :link_to, :number_to_currency, to: :helpers
 end
-```
-
-### Content Block Errors
-
-**Error Pattern:**
-```
-content is not defined
-```
-
-**Prevention:** Always check `content?` before using `content`
-
-```erb
-<% if content? %>
-  <%= content %>
-<% end %>
 ```
 
 ---
 
-## ActiveRecord Errors
+## Method Exposure Verification
 
-### Grouping Error (PostgreSQL)
+**MANDATORY before writing view code:**
 
-**Error Pattern:**
+```bash
+# 1. List all methods view will call
+grep -oE '@[a-z_]+\.[a-z_]+' app/views/{path}/*.erb | sort -u
+
+# 2. List all public methods in component
+grep -E '^\s+def [a-z_]+' app/components/{component}_component.rb
+
+# 3. Any view call without matching component method = BUG
 ```
-PG::GroupingError: ERROR: column "{table}.{column}" must appear in the GROUP BY clause
-```
 
-**Root Causes:**
-- SELECT includes columns not in GROUP BY or aggregate functions
-- Using `.select` with `.group` but including non-grouped columns
-- Eager loading (`includes`/`preload`) with GROUP BY
-- Using `.pluck` or `.select` with associations and GROUP BY
-
-**Prevention Rules:**
-1. Every non-aggregated column in SELECT must be in GROUP BY
-2. **NEVER** combine `includes`/`preload`/`eager_load` with GROUP BY
-3. Use `.select` only for grouped columns and aggregates
-4. If you need associated data with grouped results, query separately
-
-**Examples:**
-
+**Fix missing methods:**
 ```ruby
-# WRONG - selecting all columns with group
-Task.includes(:user).group(:task_type).count
-# This tries to select tasks.* which fails
+# Option 1: Delegation (simple pass-through)
+delegate :calculate_total, :success_rate, to: :@service
 
-# WRONG - selecting id with group
-Task.select(:task_type, :id).group(:task_type).count
-# id is not grouped or aggregated
-
-# CORRECT - only select grouped columns and aggregates
-Task.group(:task_type).count
-# => { "type_a" => 5, "type_b" => 3 }
-
-# CORRECT - explicit select with only valid columns
-Task.select(:task_type, 'COUNT(*) as count').group(:task_type)
-
-# CORRECT - if you need associated data, query separately
-type_counts = Task.group(:task_type).count
-tasks_by_type = type_counts.keys.each_with_object({}) do |type, hash|
-  hash[type] = Task.where(task_type: type).includes(:user).limit(5)
+# Option 2: Wrapper (for transformation)
+def formatted_total
+  helpers.number_to_currency(@service.calculate_total)
 end
 
-# CORRECT - using pluck for simple aggregations
-Task.group(:task_type).pluck(:task_type, 'COUNT(*)')
-# => [["type_a", 5], ["type_b", 3]]
+# Option 3: Expose service (use sparingly)
+attr_reader :service
+# View calls: component.service.calculate_total
 ```
 
-**Before Writing GROUP BY Query:**
-```bash
-# Detection command
-grep -r '\.group(' app/ --include='*.rb' -A3 -B3
-grep -r '\.includes.*\.group\|.group.*\.includes' app/ --include='*.rb'
+---
+
+## GROUP BY Errors (PostgreSQL)
+
+```
+Error: PG::GroupingError: column "table.column" must appear in GROUP BY clause
 ```
 
-### N+1 Queries
+**Rule**: Every non-aggregated SELECT column MUST be in GROUP BY.
 
-**Detection:** Multiple queries for same association in logs
+### NEVER Combine These:
+```ruby
+# FATAL: includes/preload + group
+Task.includes(:user).group(:status).count  # ERROR!
 
-**Prevention:**
+# FATAL: select with non-grouped columns
+Task.select(:status, :id).group(:status)   # ERROR! (id not grouped)
+```
+
+### Correct Patterns:
+```ruby
+# Simple aggregation (no associations needed)
+Task.group(:status).count
+# => { "pending" => 10, "completed" => 25 }
+
+# Multiple columns
+Task.group(:status, :task_type).count
+# => { ["pending", "express"] => 5, ... }
+
+# If you need associated data, query separately
+status_counts = Task.group(:status).count
+tasks_by_status = status_counts.keys.each_with_object({}) do |status, hash|
+  hash[status] = Task.where(status: status).includes(:user).limit(5)
+end
+```
+
+**Pre-query checklist:**
+```
+[ ] Is this a GROUP BY query?
+[ ] Are ALL SELECT columns either in GROUP BY or aggregates?
+[ ] Have I removed includes/preload/eager_load?
+[ ] Tested in rails console first?
+```
+
+---
+
+## N+1 Queries
+
+**Detection**: Multiple identical queries in logs.
+
 ```ruby
 # WRONG - N+1
-tasks.each { |t| puts t.user.name }
+tasks.each { |t| puts t.user.name }  # Query per task!
 
-# CORRECT
-tasks.includes(:user).each { |t| puts t.user.name }
+# RIGHT
+tasks.includes(:user).each { |t| puts t.user.name }  # 2 queries total
 ```
 
-### Ambiguous Column
-
-**Error Pattern:**
-```
-PG::AmbiguousColumn: ERROR: column reference "{column}" is ambiguous
-```
-
-**Prevention:** Always qualify columns when joining
-
+**Loading strategy:**
 ```ruby
-# WRONG
-User.joins(:tasks).where(status: 'active')  # Both have status?
-
-# CORRECT
-User.joins(:tasks).where(users: { status: 'active' })
-# OR
-User.joins(:tasks).where('users.status = ?', 'active')
-```
-
-### Missing Attribute
-
-**Error Pattern:**
-```
-ActiveModel::MissingAttributeError: missing attribute: {attribute}
-```
-
-**Prevention:** Include all attributes needed downstream
-
-```ruby
-# WRONG - later code needs 'email'
-users = User.select(:id, :name)
-users.each { |u| puts u.email }  # ERROR!
-
-# CORRECT
-users = User.select(:id, :name, :email)
-```
-
----
-
-## Controller Errors
-
-### Missing Template
-
-**Error Pattern:**
-```
-ActionView::MissingTemplate
-```
-
-**Prevention:**
-- Every non-redirect action needs a view OR explicit render
-- View path must match controller namespace
-
-```bash
-# Before creating controller action:
-ls app/views/{controller}/
-```
-
-### Unknown Action
-
-**Error Pattern:**
-```
-AbstractController::ActionNotFound
-```
-
-**Root Causes:**
-- Route points to non-existent action
-- Action is private/protected (must be public)
-
-```bash
-# Verification
-rails routes | grep {controller}
-grep -n 'def ' app/controllers/{controller}_controller.rb
+includes(:user)      # Smart (preload or eager_load)
+preload(:user)       # Separate queries (can't filter)
+eager_load(:user)    # Single LEFT JOIN (can filter)
+joins(:user)         # INNER JOIN only (no loading)
 ```
 
 ---
 
 ## Nil Errors
 
-**Error Pattern:**
 ```
-undefined method '{method}' for nil:NilClass
+Error: undefined method 'foo' for nil:NilClass
 ```
 
-**Prevention Patterns:**
-
+**Prevention patterns:**
 ```ruby
 # Safe navigation
 user&.profile&.settings&.theme
@@ -367,113 +199,85 @@ user&.profile&.settings&.theme
 return unless user&.profile
 
 # With default
-user&.profile&.settings&.theme || 'default'
+user&.profile&.theme || 'default'
 
 # Early return
-def process_user(user)
+def process(user)
   return if user.nil?
-  # ... rest of method
+  # ...
 end
 ```
 
 ---
 
-## Argument Errors
+## Controller Errors
 
-**Error Pattern:**
+### Missing Template
 ```
-ArgumentError: wrong number of arguments (given X, expected Y)
-```
-
-**Prevention:**
-```bash
-# Before modifying method signature
-grep -r 'method_name' app/ --include='*.rb'
-# Update all call sites
+Error: ActionView::MissingTemplate
 ```
 
-**Rules:**
-- Prefer keyword arguments for methods with 2+ params
-- Use default values for optional params
+**Every non-redirect action needs:**
+- A view file at `app/views/{controller}/{action}.html.erb`, OR
+- Explicit render: `render json:`, `render partial:`, `head :ok`
+
+### Unknown Action
+```
+Error: AbstractController::ActionNotFound
+```
+
+**Causes:**
+- Route points to non-existent action
+- Action is `private` or `protected` (must be `public`)
 
 ---
 
-## Prevention Checklists
-
-### Before Creating ViewComponent
+## Ambiguous Column (Joins)
 
 ```
-[ ] Check app/components/ structure
-[ ] Review existing component for template pattern (inline vs file)
-[ ] Verify naming: Namespace::ComponentNameComponent
-[ ] Create both .rb AND .html.erb files (unless using inline)
-[ ] List ALL methods view will need
-[ ] Implement ALL needed methods in component
-[ ] Prefix ALL Rails helpers with 'helpers.' or delegate them
+Error: PG::AmbiguousColumn: column reference "status" is ambiguous
+```
+
+**Always qualify columns when joining:**
+```ruby
+# WRONG
+User.joins(:tasks).where(status: 'active')
+
+# RIGHT
+User.joins(:tasks).where(users: { status: 'active' })
+# OR
+User.joins(:tasks).where('users.status = ?', 'active')
+```
+
+---
+
+## Quick Prevention Checklists
+
+### Before Creating ViewComponent
+```
+[ ] Checked existing template pattern (inline vs file)
+[ ] Both .rb and .html.erb created (unless inline)
+[ ] ALL methods view needs are PUBLIC in component
+[ ] ALL Rails helpers use `helpers.` prefix
 ```
 
 ### Before Writing View Code
-
 ```
-[ ] List ALL methods view will call on component
-[ ] For EACH method, verify it exists in component class
-[ ] If method missing, ADD to component BEFORE view code
-[ ] Verify underlying service/model has implementation
+[ ] Listed ALL methods view will call on component
+[ ] EACH method exists in component class (verified)
+[ ] Missing methods added to component FIRST
 ```
 
-### Before Writing ActiveRecord Query with GROUP BY
-
+### Before GROUP BY Query
 ```
-[ ] List ALL columns in SELECT
-[ ] Verify each is in GROUP BY or aggregate function
-[ ] Remove includes/preload/eager_load
-[ ] Test query in rails console first
-```
-
-### Before Writing ActiveRecord Query with Joins
-
-```
-[ ] Qualify ambiguous columns with table name
-[ ] Consider if includes is better for the use case
-```
-
-### Before Creating Controller Action
-
-```
-[ ] View exists for non-redirect actions?
-[ ] Routes point to public methods?
-[ ] All @variables view needs are set?
+[ ] ALL SELECT columns are grouped or aggregated
+[ ] NO includes/preload/eager_load used
+[ ] Tested in rails console
 ```
 
 ### Before Any Code
-
 ```
-[ ] Inspect existing similar implementations
-[ ] Check naming conventions in codebase
-[ ] Verify all dependencies exist (gems, files, routes)
-[ ] Verify method exposure across all layers (view→component→service)
-```
-
----
-
-## Quick Debugging Commands
-
-```bash
-# Find where method is called
-grep -r 'method_name' app/ --include='*.rb'
-
-# Find method definition
-grep -rn 'def method_name' app/ --include='*.rb'
-
-# Check method visibility
-grep -B5 'def method_name' app/path/to/file.rb
-
-# List component methods
-grep -E '^\s+def [a-z_]+' app/components/path_component.rb
-
-# List service methods  
-grep -E '^\s+def [a-z_]+' app/services/path.rb
-
-# Compare view calls vs component methods
-grep -oE '@\w+\.\w+' app/views/path/*.erb | sort -u
+[ ] Inspected existing similar code for patterns
+[ ] All dependencies exist (methods, files, routes)
+[ ] Method exposure verified across all layers
 ```

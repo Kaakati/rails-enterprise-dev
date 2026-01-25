@@ -1,550 +1,189 @@
 ---
 name: "Code Quality Gates"
-description: "Comprehensive code quality validation using Solargraph, Sorbet, and Rubocop for A+ Rails code. Trigger keywords: quality gates, validation, solargraph, sorbet, rubocop, type checking, linting, code quality, static analysis"
-version: 1.0.0
+description: "Expert decision trees for Solargraph, Sorbet, and Rubocop validation in Rails. Use when: (1) Choosing which quality tool for a task, (2) Debugging type errors or lint failures, (3) Setting up validation pipelines, (4) Deciding strictness levels. Trigger keywords: quality gates, validation, solargraph, sorbet, rubocop, type checking, linting, code quality, static analysis, type safety, srb tc"
+version: 1.1.0
 ---
 
 # Code Quality Gates
 
-This skill provides patterns for comprehensive code quality validation using three complementary tools: Solargraph (LSP diagnostics), Sorbet (type checking), and Rubocop (style enforcement).
+Expert patterns for coordinating Solargraph, Sorbet, and Rubocop in Rails codebases.
 
-## 1. Tool Stack Overview
+## Tool Selection Decision Tree
 
-### Solargraph (Ruby LSP)
-
-**Purpose**: Language server providing IDE-like features and diagnostics
-
-**Setup**:
-```bash
-gem install solargraph
-solargraph config  # Generates .solargraph.yml
+```
+What do you need?
+│
+├─ "Find undefined methods/constants" → Solargraph
+│   └─ Run: solargraph check app/models/user.rb
+│
+├─ "Type safety and nil protection" → Sorbet
+│   └─ Run: bundle exec srb tc app/services/
+│
+├─ "Style consistency and formatting" → Rubocop
+│   └─ Run: rubocop -a app/controllers/
+│
+└─ "Full validation before commit" → All three in sequence
+    └─ Order: Rubocop (fast) → Solargraph → Sorbet (slowest)
 ```
 
-**Key Features**:
-- Method completion and documentation
-- Go to definition/references
-- Hover information
-- Diagnostics (undefined methods, type errors)
-- Integration with cclsp MCP
+## When to Use Each Tool
 
-**Diagnostics Patterns**:
-- Undefined methods: `NoMethodError` detection
-- Unresolved constants: Missing class/module references
-- Parameter count mismatches: Wrong arity
-- Unused variables: Dead code detection
+| Scenario | Tool | Why |
+|----------|------|-----|
+| Pre-commit quick check | Rubocop `-a` | Fast, auto-fixes most issues |
+| Refactoring safety net | Sorbet | Catches method signature changes |
+| Debugging "undefined method" | Solargraph | Shows what methods exist on type |
+| CI pipeline blocking | All three | Different error classes |
+| New file creation | Sorbet `# typed: true` | Type-safe from start |
 
-**cclsp Integration**:
-```ruby
-# Agents use cclsp MCP tools
-mcp__cclsp__get_diagnostics file_path="app/models/user.rb"
-# Returns: errors, warnings, hints for the file
-```
-
-**Configuration** (`.solargraph.yml`):
-```yaml
-include:
-  - "**/*.rb"
-exclude:
-  - spec/**/*
-  - test/**/*
-  - vendor/**/*
-reporters:
-  - rubocop
-  - require_not_found
-plugins: []
-require_paths: []
-domains: []
-max_files: 5000
-```
-
----
-
-## 2. Sorbet (Type Checking)
-
-**Purpose**: Static type checker for Ruby with gradual typing
-
-**Setup**:
-```bash
-# Add to Gemfile
-gem 'sorbet'
-gem 'sorbet-runtime'
-
-# Initialize
-bundle exec srb init
-
-# Generate RBI files for gems
-bundle exec tapioca init
-bundle exec tapioca gems
-```
-
-### Type Sigils
-
-Gradual adoption through file-level type checking levels:
+## Sorbet Strictness Levels (Critical Decision)
 
 ```ruby
-# typed: ignore   # Skip this file entirely
-# typed: false    # Only check syntax errors
-# typed: true     # Check types, infer missing signatures
-# typed: strict   # Require explicit signatures
-# typed: strong   # No T.untyped allowed
+# typed: ignore   # Skip entirely - use for generated files only
+# typed: false    # Syntax only - legacy code, migrate gradually
+# typed: true     # Type inference - NEW FILES START HERE
+# typed: strict   # Explicit sigs required - core business logic
+# typed: strong   # No T.untyped - API boundaries, critical paths
 ```
 
-### Common Patterns
+**Decision matrix:**
+```
+Is this file...
+├─ Generated code (schema.rb)? → ignore
+├─ Legacy with many issues? → false (upgrade later)
+├─ New production code? → true (minimum standard)
+├─ Core business logic? → strict
+└─ Public API boundary? → strong
+```
 
-**Basic Signature**:
+## NEVER Do This (Common Mistakes)
+
+**NEVER** add `# typed: strict` to a file with dynamic metaprogramming:
 ```ruby
-sig { params(name: String).returns(User) }
-def find_by_name(name)
-  User.where(name: name).first
+# typed: strict  # WRONG - will fail on dynamic methods
+class Report
+  [:daily, :weekly, :monthly].each do |period|
+    define_method("#{period}_summary") { calculate(period) }
+  end
 end
 ```
+→ Use `# typed: false` or add explicit Sorbet shims
 
-**Void Methods**:
+**NEVER** silence Rubocop inline without a reason:
 ```ruby
-sig { params(user: User).void }
-def send_notification(user)
-  Mailer.deliver(user.email)
+# rubocop:disable all  # WRONG - hides real issues
+def method
+  # ...
 end
 ```
+→ Disable specific cops with justification: `# rubocop:disable Layout/LineLength # URL constant`
 
-**Nilable Types**:
+**NEVER** ignore Solargraph "undefined method" on ActiveRecord:
 ```ruby
+user.email  # Solargraph warning: undefined method
+```
+→ This means your `.solargraph.yml` lacks Rails support. Add `require: ['rails']`
+
+**NEVER** skip validation in CI to "save time":
+→ Quality issues compound exponentially. Block merges on failures.
+
+## Sorbet Signature Patterns (Expert)
+
+```ruby
+# Nilable return - forces caller to handle nil
 sig { params(id: Integer).returns(T.nilable(User)) }
 def find_user(id)
-  User.find_by(id: id)  # May return nil
+  User.find_by(id: id)
+end
+
+# Non-nil assertion - use when you KNOW it exists
+sig { params(id: Integer).returns(User) }
+def find_user!(id)
+  T.must(User.find_by(id: id))  # Raises if nil
+end
+
+# Block parameters
+sig { params(block: T.proc.params(item: String).returns(Integer)).returns(T::Array[Integer]) }
+def map_items(&block)
+  items.map(&block)
+end
+
+# Self-returning for chaining
+sig { returns(T.self_type) }
+def configure
+  # ...
+  self
 end
 ```
 
-**Arrays and Hashes**:
-```ruby
-sig { params(items: T::Array[String]).returns(T::Hash[String, Integer]) }
-def count_items(items)
-  items.tally
-end
-```
+## Error Resolution Quick Reference
 
-**Class Methods**:
-```ruby
-class << self
-  sig { returns(T::Array[User]) }
-  def active_users
-    where(active: true).to_a
-  end
-end
-```
+| Error | Tool | Fix |
+|-------|------|-----|
+| "Method does not exist on NilClass" | Sorbet | Add nil check or `T.must()` |
+| "Expected String, got T.untyped" | Sorbet | Add `sig` to source method |
+| "Undefined method 'foo'" | Solargraph | Check method exists, check require |
+| "Layout/LineLength: Line too long" | Rubocop | Break line or increase max |
+| "Method signature is missing" | Sorbet strict | Add `sig { }` block |
 
----
+## Validation Pipeline Order
 
-## 3. Rubocop (Style Enforcement)
-
-**Purpose**: Ruby static code analyzer and formatter
-
-**Setup**:
+**For modified files:**
 ```bash
-gem install rubocop
-rubocop --init  # Generates .rubocop.yml
+# 1. Fast syntax check (catches obvious errors)
+ruby -c "$FILE"
+
+# 2. Style enforcement (auto-fixable)
+rubocop -a "$FILE"
+
+# 3. Diagnostics (undefined methods/constants)
+solargraph check "$FILE" 2>/dev/null || true
+
+# 4. Type safety (if typed file)
+if grep -q "# typed:" "$FILE"; then
+  bundle exec srb tc "$FILE"
+fi
 ```
 
-### Auto-fix Strategy
+## Gradual Adoption Strategy
 
-```bash
-# Fix safe offenses automatically
-rubocop -a
+```
+Week 1: Rubocop only (easiest)
+  └─ Add .rubocop.yml, run on CI
 
-# Fix all offenses (use with caution)
-rubocop -A
+Week 2-3: Add Solargraph
+  └─ Add .solargraph.yml with Rails support
+  └─ Fix "undefined constant" errors
 
-# Fix specific file
-rubocop -a app/models/user.rb
-
-# Check without fixing
-rubocop --fail-level error --format simple app/models/user.rb
+Week 4+: Introduce Sorbet
+  └─ Run: bundle exec srb init
+  └─ Add tapioca: bundle exec tapioca init && tapioca gems
+  └─ Start new files with # typed: true
+  └─ Upgrade old files one at a time
 ```
 
-### Common Violations
+## Configuration Quick Start
 
-**Line Length** (default: 120):
-```ruby
-# Bad
-def very_long_method_name_that_exceeds_the_maximum_allowed_line_length_for_ruby_code_according_to_rubocop_standards
-
-# Good
-def descriptive_method_name
-  # Implementation
-end
-```
-
-**Frozen String Literal**:
-```ruby
-# Add to top of file
-# frozen_string_literal: true
-```
-
-**Inconsistent Indentation**:
-```ruby
-# Bad
-def method
- puts "inconsistent"
-  puts "indentation"
-end
-
-# Good
-def method
-  puts "consistent"
-  puts "indentation"
-end
-```
-
-**Trailing Whitespace**:
-```ruby
-# Bad
-def method
-  puts "hello"
-end
-
-# Good
-def method
-  puts "hello"
-end
-```
-
-### Configuration (`.rubocop.yml`):
+**.rubocop.yml** (minimal):
 ```yaml
 AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
-  Exclude:
-    - 'db/schema.rb'
-    - 'vendor/**/*'
-    - 'node_modules/**/*'
+  Exclude: ['db/schema.rb', 'vendor/**/*']
 
 Layout/LineLength:
   Max: 120
-
-Style/Documentation:
-  Enabled: false  # Allow missing class docs
-
-Metrics/MethodLength:
-  Max: 20
-
-Metrics/AbcSize:
-  Max: 20
 ```
 
----
-
-## 4. Validation Strategy
-
-### Phase 4 Quality Gate
-
-Runs after each implementation layer (models, services, components):
-
-**validate-implementation.sh Workflow**:
-
-1. **Check Tool Availability**
-   ```bash
-   check_tool_available solargraph  # → true/false
-   check_tool_available sorbet       # → true/false
-   check_tool_available rubocop      # → true/false
-   ```
-
-2. **Solargraph Diagnostics**
-   ```bash
-   for file in $FILES; do
-     solargraph check "$file"  # Get diagnostics
-     # Check for errors
-   done
-   ```
-
-3. **Sorbet Type Check** (typed files only)
-   ```bash
-   # Filter to typed files
-   typed_files=$(grep -l "# typed:" $FILES)
-
-   # Run type check
-   bundle exec srb tc $typed_files
-   ```
-
-4. **Rubocop Style Check**
-   ```bash
-   # Fail on warnings (blocking mode)
-   rubocop --fail-level warning --format simple $FILES
-   ```
-
-5. **Exit Based on Validation Level**
-   - **blocking**: Exit 1 if any fail (prevents progress)
-   - **warning**: Exit 2 if any fail (alerts but allows)
-   - **advisory**: Exit 0 always (informational)
-
----
-
-## 5. Guardian Cycle
-
-Runs after Phase 4 for comprehensive type safety:
-
-**guardian-validation.sh Workflow**:
-
-1. **Collect Modified Files**
-   ```bash
-   FILES=$(bd show $FEATURE_ID | grep -oE "app/[a-z_/]+\.rb")
-   ```
-
-2. **Run Sorbet Type Check**
-   ```bash
-   bundle exec srb tc $FILES
-   ```
-
-3. **Analyze Errors** (if any)
-   - Missing signatures
-   - Type mismatches
-   - Undefined methods
-   - T.untyped violations
-
-4. **Attempt Auto-Fix** (simple cases)
-   ```ruby
-   # Add default signature
-   sig { returns(T.untyped) }
-   def method_name
-     # ...
-   end
-   ```
-
-5. **Re-validate** (max 3 iterations)
-   - Run srb tc again
-   - Check if errors resolved
-   - Log remaining issues
-
-6. **Block or Pass**
-   - Exit 0 if all pass
-   - Exit 1 if errors remain after max iterations
-
----
-
-## 6. Tool Integration Patterns
-
-### Pre-Edit Validation
-
-**Hook**: PreToolUse (before Edit tool)
-
-```bash
-# Check syntax before applying edit
-echo "$NEW_CONTENT" | ruby -c
-
-# If typed file, warn about Sorbet validation
-if grep -q "# typed:" "$FILE_PATH"; then
-  echo "ℹ️  Sorbet validation will run post-edit"
-fi
-```
-
-### Post-Write Validation
-
-**Hook**: PostToolUse (after Write tool)
-
-```bash
-# Syntax check (always)
-ruby -c "$FILE_PATH"
-
-# Rubocop (if available)
-rubocop --fail-level error "$FILE_PATH"
-
-# Sorbet (if typed)
-if grep -q "# typed:" "$FILE_PATH"; then
-  bundle exec srb tc "$FILE_PATH"
-fi
-```
-
----
-
-## 7. Error Messages and Fixes
-
-### Solargraph Errors
-
-**Undefined Method**:
-```
-Error: Method 'email' is not defined on User
-
-Fix: Define the method or add to class
-def email
-  # ...
-end
-```
-
-**Unresolved Constant**:
-```
-Error: Constant 'PaymentService' not found
-
-Fix: Require the file or fix namespace
-require_relative 'payment_service'
-```
-
-### Sorbet Errors
-
-**Missing Signature**:
-```
-Error: Method does not have a `sig`
-
-Fix:
-sig { params(name: String).returns(User) }
-def find_by_name(name)
-  # ...
-end
-```
-
-**Type Mismatch**:
-```
-Error: Expected String but found Integer
-
-Fix: Convert type or update signature
-name.to_s  # Convert Integer to String
-```
-
-**Undefined Method on Typed Value**:
-```
-Error: Method `email` does not exist on `T.untyped`
-
-Fix: Add type annotation
-sig { params(user: User).void }  # Now user has type
-def send_email(user)
-  user.email  # Safe - user is typed as User
-end
-```
-
-### Rubocop Violations
-
-**Style/FrozenStringLiteralComment**:
-```
-Fix: Add to top of file
-# frozen_string_literal: true
-```
-
-**Layout/LineLength**:
-```
-Fix: Break long lines
-# Bad
-very_long_method_call_with_many_parameters(param1, param2, param3, param4)
-
-# Good
-very_long_method_call_with_many_parameters(
-  param1,
-  param2,
-  param3,
-  param4
-)
-```
-
----
-
-## 8. Best Practices
-
-### Gradual Adoption
-
-**Phase 1**: Start with Rubocop
+**.solargraph.yml** (with Rails):
 ```yaml
-# .rubocop.yml - relaxed rules
-Metrics/MethodLength:
-  Max: 30  # Increase limits initially
+include: ["**/*.rb"]
+exclude: ["spec/**/*", "vendor/**/*"]
+require: ["rails"]
+reporters: ["rubocop"]
 ```
 
-**Phase 2**: Add Solargraph for diagnostics
-```bash
-solargraph check app/models/*.rb  # Check specific directories
-```
-
-**Phase 3**: Introduce Sorbet with `# typed: false`
-```ruby
-# typed: false  # Minimal checking
-class User
-  # No signatures required yet
-end
-```
-
-**Phase 4**: Gradually upgrade to `# typed: true`
-```ruby
-# typed: true  # Type inference enabled
-class User
-  sig { params(name: String).returns(User) }  # Add signatures
-  def self.find_by_name(name)
-    # ...
-  end
-end
-```
-
-### File-by-File Strategy
-
-Focus on new files first:
-```
-New files → # typed: true (type-safe from start)
-Old files → # typed: false (legacy, upgrade gradually)
-Core files → # typed: strict (critical paths)
-```
-
-### Continuous Integration
-
-Run quality gates in CI:
-```yaml
-# .github/workflows/quality.yml
-- name: Rubocop
-  run: bundle exec rubocop
-
-- name: Sorbet
-  run: bundle exec srb tc
-
-- name: Solargraph
-  run: solargraph check app/**/*.rb
-```
-
----
-
-## 9. Configuration Templates
-
-### .claude/reactree-rails-dev.local.md
-
-```yaml
----
-enabled: true
-quality_gates_enabled: true
-guardian_enabled: true
-validation_level: blocking  # blocking, warning, advisory
-guardian_max_iterations: 3
----
-```
-
-### .solargraph.yml
-
-```yaml
-include:
-  - "**/*.rb"
-exclude:
-  - spec/**/*
-  - test/**/*
-  - vendor/**/*
-  - db/schema.rb
-reporters:
-  - rubocop
-  - require_not_found
-max_files: 5000
-```
-
-### .rubocop.yml
-
-```yaml
-AllCops:
-  TargetRubyVersion: 3.2
-  NewCops: enable
-  Exclude:
-    - 'db/schema.rb'
-    - 'vendor/**/*'
-
-Layout/LineLength:
-  Max: 120
-
-Style/FrozenStringLiteralComment:
-  Enabled: true
-  EnforcedStyle: always
-```
-
-### sorbet/config
-
+**sorbet/config** (project root):
 ```
 --dir
 .
@@ -552,65 +191,12 @@ Style/FrozenStringLiteralComment:
 --ignore=/tmp/
 ```
 
----
+## Pre-Implementation Checklist
 
-## 10. Troubleshooting
-
-### Solargraph Not Working
-
-```bash
-# Rebuild index
-solargraph clear
-solargraph download-core
-
-# Check configuration
-solargraph config
+Before writing code, verify:
 ```
-
-### Sorbet Type Errors
-
-```bash
-# Regenerate RBI files
-bundle exec tapioca gems
-
-# Check Sorbet version
-bundle exec srb --version
-
-# Run with verbose output
-bundle exec srb tc --verbose
+[ ] Do I know which tools are installed? (bundle exec srb --version)
+[ ] Is the file typed? If so, what level?
+[ ] Are there existing type signatures I need to match?
+[ ] Will Rubocop auto-fix formatting on save? (check IDE settings)
 ```
-
-### Rubocop False Positives
-
-```ruby
-# Disable specific cop for line
-# rubocop:disable Style/FrozenStringLiteralComment
-code_here
-# rubocop:enable Style/FrozenStringLiteralComment
-
-# Disable for file
-# rubocop:disable all
-```
-
----
-
-## Summary
-
-Code Quality Gates provide three layers of validation:
-
-1. **Solargraph**: IDE-like diagnostics (undefined methods, constants)
-2. **Sorbet**: Static type checking (type safety, signatures)
-3. **Rubocop**: Style enforcement (conventions, best practices)
-
-**Integration Points**:
-- Phase 4 Quality Gates (after each layer)
-- Guardian Validation Cycle (after full implementation)
-- PreToolUse/PostToolUse Hooks (real-time validation)
-
-**Gradual Adoption**:
-- Start with Rubocop (easiest)
-- Add Solargraph (diagnostics)
-- Introduce Sorbet (type safety)
-- Tighten rules over time
-
-**Result**: A+ type-safe, well-styled Rails code with comprehensive quality validation.
