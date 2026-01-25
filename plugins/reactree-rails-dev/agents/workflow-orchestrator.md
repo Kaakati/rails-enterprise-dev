@@ -811,6 +811,114 @@ fi
 sed -i 's/workflow_phase: planning/workflow_phase: implementation/' .claude/rails-enterprise-dev.local.md
 ```
 
+### MANDATORY: Proceed to Implementation After Planning
+
+**CRITICAL**: After planning completes, you MUST immediately proceed to spawn implementation agents. DO NOT stop at planning. DO NOT wait for user confirmation unless explicitly requested.
+
+**Automatic Handoff Protocol**:
+
+1. **Read implementation plan from working memory**:
+   ```bash
+   IMPL_PLAN=$(read_memory "rails-planner.implementation_plan")
+   PHASES_NEEDED=$(read_memory "rails-planner.phases_needed")
+   ```
+
+2. **Extract execution groups from plan** (use `phases_needed` metadata to determine which layers are required)
+
+3. **Spawn implementation agents in parallel groups** using the patterns from "Option B: Direct Parallel Specialist Spawning" below
+
+4. **For each group**, wait for completion before starting dependent groups:
+   - **Group 0**: Database Layer (migrations, models) - No dependencies
+   - **Group 1**: Service Layer - Depends on Group 0
+   - **Group 2**: UI Layer (components, controllers) - Depends on Group 1
+   - **Group 3**: Integration & Tests - Depends on all previous
+
+5. **After all implementation groups complete**, proceed to Phase 5 (Verification)
+
+**Example Automatic Handoff**:
+
+After rails-planner returns with an implementation plan, immediately spawn specialists using parallel Task invocations:
+
+```markdown
+# MANDATORY: Spawn implementation agents after planning
+# Group 0: Database Layer (spawn in parallel)
+
+Use the Task tool with these parameters:
+- subagent_type: "reactree-rails-dev:data-lead"
+- description: "Create database layer from plan"
+- prompt: |
+    Execute database layer from implementation plan.
+
+    **Working Memory Context**:
+    - Read plan: rails-planner.implementation_plan
+    - Read phases: rails-planner.phases_needed
+    - Read patterns: codebase-inspector.discovered_patterns
+
+    **Your Tasks**:
+    1. Create migrations for new tables/columns
+    2. Create/update ActiveRecord models with associations, validations, scopes
+    3. Create FactoryBot factories with appropriate traits
+    4. Create model specs using shoulda-matchers
+
+    **Quality Gates**:
+    - Migrations run successfully (rails db:migrate)
+    - Migrations rollback cleanly (rails db:rollback)
+    - Models load without errors
+    - All model specs pass
+
+    Write results to working memory: data-lead.implementation_result
+```
+
+**After Group 0 completes, spawn Group 1 (Service Layer)**:
+
+```markdown
+Use the Task tool with these parameters:
+- subagent_type: "reactree-rails-dev:backend-lead"
+- description: "Create service layer from plan"
+- prompt: |
+    Execute service layer from implementation plan.
+
+    **Working Memory Context**:
+    - Read plan: rails-planner.implementation_plan
+    - Read models: data-lead.implementation_result
+
+    **Your Tasks**:
+    1. Create service objects following discovered patterns
+    2. Implement business logic
+    3. Create service specs
+
+    Write results to working memory: backend-lead.implementation_result
+```
+
+**Spawn Group 2 (UI Layer) - Can run in parallel with RSpec specialist**:
+
+```markdown
+# These two can be spawned in the SAME message (parallel execution):
+
+Task 1:
+- subagent_type: "reactree-rails-dev:ui-specialist"
+- description: "Create UI components from plan"
+- prompt: Execute UI layer...
+
+Task 2:
+- subagent_type: "reactree-rails-dev:rspec-specialist"
+- description: "Create service specs"
+- prompt: Create comprehensive specs for services...
+```
+
+**Never Do**:
+- ❌ Never stop after planning without spawning implementation agents
+- ❌ Never wait for user confirmation to proceed to implementation (unless explicitly requested)
+- ❌ Never skip implementation phases defined in the plan
+- ❌ Never spawn dependent agents before their dependencies complete
+
+**Always Do**:
+- ✅ Immediately spawn Group 0 (data-lead) after planning completes
+- ✅ Wait for Group 0 before spawning Group 1 (backend-lead)
+- ✅ Spawn independent agents in the SAME message for parallel execution
+- ✅ Track progress via beads subtasks
+- ✅ Proceed to Phase 5 (Verification) after all implementation completes
+
 ### Phase 3.5: CONTEXT COMPILATION (Conditional - cclsp + Sorbet)
 
 **LSP-powered context extraction phase** that runs ONLY when cclsp MCP tools are available.
