@@ -5,7 +5,7 @@
 # Features:
 # - Uses Claude CLI -p flag for non-interactive analysis
 # - JSON output format for programmatic parsing
-# - 3-second timeout protection
+# - 120-second timeout protection
 # - Graceful fallback on errors
 
 # Get script directory for sourcing dependencies
@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # CONFIGURATION
 #==============================================================================
 
-CLAUDE_TIMEOUT=10  # seconds
+CLAUDE_TIMEOUT=120  # seconds (generous timeout for slower connections/cold starts)
 CLAUDE_MODEL="haiku"  # Fast model for intent detection
 
 #==============================================================================
@@ -143,25 +143,44 @@ analyze_with_claude() {
     return 1
   fi
 
-  # Extract JSON from result (Claude may wrap it in additional structure)
-  # Look for the JSON object with primary_intent
+  # Extract JSON from result (Claude CLI wraps response in JSON with 'result' field)
+  # The result field contains markdown code blocks that need to be stripped
   local json_result
-  json_result=$(echo "$result" | grep -o '{[^}]*"primary_intent"[^}]*}' | head -1)
+  local inner_result
 
+  # Step 1: Extract the 'result' field from Claude CLI's JSON wrapper
+  inner_result=$(echo "$result" | jq -r '.result // .' 2>/dev/null)
+
+  if [ -n "$inner_result" ] && [ "$inner_result" != "null" ]; then
+    # Step 2: Strip markdown code block markers (```json and ```)
+    json_result=$(echo "$inner_result" | sed 's/^```json//; s/^```//; s/```$//' | tr -d '\n' | sed 's/^ *//')
+  fi
+
+  # Step 3: Fallback - try direct grep for primary_intent pattern
+  if [ -z "$json_result" ] || ! echo "$json_result" | jq -e '.' &>/dev/null; then
+    json_result=$(echo "$result" | grep -oE '\{[^}]*"primary_intent"[^}]*\}' | head -1)
+  fi
+
+  # Step 4: Another fallback - look inside result field with grep
   if [ -z "$json_result" ]; then
-    # Try to extract from result field if Claude wrapped it
-    json_result=$(echo "$result" | jq -r '.result // .' 2>/dev/null | grep -o '{[^}]*"primary_intent"[^}]*}' | head -1)
+    json_result=$(echo "$inner_result" | grep -oE '\{[^}]*"primary_intent"[^}]*\}' | head -1)
   fi
 
   if [ -z "$json_result" ]; then
-    echo '{"error": "invalid_response", "raw": "'"$(echo "$result" | head -c 200)"'"}'
+    echo '{"error": "invalid_response", "raw": "'"$(echo "$result" | head -c 200 | tr -d '\n')"'"}'
     return 1
   fi
 
   # Validate JSON structure
   if ! echo "$json_result" | jq -e '.primary_intent' &>/dev/null; then
-    echo '{"error": "missing_fields"}'
-    return 1
+    # Try parsing with more flexible field names (intent vs primary_intent)
+    if echo "$json_result" | jq -e '.intent' &>/dev/null; then
+      # Normalize: rename 'intent' to 'primary_intent'
+      json_result=$(echo "$json_result" | jq '{primary_intent: .intent, confidence: (.confidence // 0.8), recommended_agents: [{name: .agent, reason: "detected", priority: 1}], tdd_mode: false}')
+    else
+      echo '{"error": "missing_fields", "raw": "'"$(echo "$json_result" | head -c 100)"'"}'
+      return 1
+    fi
   fi
 
   echo "$json_result"
