@@ -2,6 +2,11 @@
 # Smart Intent Detection for ReAcTree Rails Development
 # Analyzes user prompts and suggests appropriate workflows or utility agents
 #
+# v2.12.0: Enhanced with Claude CLI for intelligent intent analysis
+# - Uses Claude CLI for nuanced understanding when available
+# - Falls back to pattern matching when Claude unavailable or times out
+# - Hybrid fast path for obvious intents (skip Claude for clear patterns)
+#
 # NOTE: We intentionally DO NOT use set -e here because:
 # 1. Hooks should fail gracefully, not crash
 # 2. Missing config files are expected on first run
@@ -32,15 +37,18 @@ CONFIG_FILE=".claude/reactree-rails-dev.local.md"
 SMART_DETECTION_ENABLED="true"
 DETECTION_MODE="suggest"
 ANNOYANCE_THRESHOLD="medium"
+USE_CLAUDE_ANALYSIS="true"  # New: Enable Claude CLI analysis
 
 if [ -f "$CONFIG_FILE" ]; then
   SMART_DETECTION_ENABLED=$(sed -n '/^---$/,/^---$/{ /^smart_detection_enabled:/p }' "$CONFIG_FILE" 2>/dev/null | sed 's/smart_detection_enabled: *//' | tr -d ' ')
   DETECTION_MODE=$(sed -n '/^---$/,/^---$/{ /^detection_mode:/p }' "$CONFIG_FILE" 2>/dev/null | sed 's/detection_mode: *//' | tr -d ' ')
   ANNOYANCE_THRESHOLD=$(sed -n '/^---$/,/^---$/{ /^annoyance_threshold:/p }' "$CONFIG_FILE" 2>/dev/null | sed 's/annoyance_threshold: *//' | tr -d ' ')
+  USE_CLAUDE_ANALYSIS=$(sed -n '/^---$/,/^---$/{ /^use_claude_analysis:/p }' "$CONFIG_FILE" 2>/dev/null | sed 's/use_claude_analysis: *//' | tr -d ' ')
 
   SMART_DETECTION_ENABLED=${SMART_DETECTION_ENABLED:-true}
   DETECTION_MODE=${DETECTION_MODE:-suggest}
   ANNOYANCE_THRESHOLD=${ANNOYANCE_THRESHOLD:-medium}
+  USE_CLAUDE_ANALYSIS=${USE_CLAUDE_ANALYSIS:-true}
 fi
 
 if [ "$SMART_DETECTION_ENABLED" = "false" ] || [ "$DETECTION_MODE" = "disabled" ]; then
@@ -48,12 +56,18 @@ if [ "$SMART_DETECTION_ENABLED" = "false" ] || [ "$DETECTION_MODE" = "disabled" 
 fi
 
 #==============================================================================
-# 2. SOURCE INTENT PATTERNS
+# 2. SOURCE DEPENDENCIES
 #==============================================================================
 
+# Source intent patterns if available
 if [ -f "$SCRIPT_DIR/shared/intent-patterns.sh" ]; then
-  # Source with error suppression - patterns are optional enhancements
   source "$SCRIPT_DIR/shared/intent-patterns.sh" 2>/dev/null || true
+fi
+
+# Source Claude analyzer library
+CLAUDE_ANALYZER_AVAILABLE=false
+if [ -f "$SCRIPT_DIR/lib/claude-analyzer.sh" ] && [ "$USE_CLAUDE_ANALYSIS" = "true" ]; then
+  source "$SCRIPT_DIR/lib/claude-analyzer.sh" 2>/dev/null && CLAUDE_ANALYZER_AVAILABLE=true
 fi
 
 #==============================================================================
@@ -125,7 +139,139 @@ case "$ANNOYANCE_THRESHOLD" in
 esac
 
 #==============================================================================
-# 6. DETECT UTILITY AGENT INTENT (check first - more specific)
+# 6. HYBRID FAST PATH - Skip Claude for obvious intents
+#==============================================================================
+
+# Check for very clear utility agent patterns that don't need Claude
+detect_obvious_utility() {
+  # FILE FINDER - very obvious patterns
+  if echo "$prompt_lower" | grep -qiE '^find (all )?.*files?$|^where is .* file$|^list .* directory$'; then
+    echo "file-finder"
+    return 0
+  fi
+
+  # CODE LINE FINDER - definition/usage patterns
+  if echo "$prompt_lower" | grep -qiE '^where is .* (defined|method|class)$|^find (definition|usages|references)'; then
+    echo "code-line-finder"
+    return 0
+  fi
+
+  # GIT DIFF - change patterns
+  if echo "$prompt_lower" | grep -qiE '^(show|what) (are the )?changes|^git diff|^git blame|^show diff'; then
+    echo "git-diff-analyzer"
+    return 0
+  fi
+
+  # LOG ANALYZER - log patterns
+  if echo "$prompt_lower" | grep -qiE '^show .* log$|^check .* log$|development\.log|production\.log|^show errors'; then
+    echo "log-analyzer"
+    return 0
+  fi
+
+  echo ""
+  return 1
+}
+
+# Check for very clear workflow patterns
+detect_obvious_workflow() {
+  # User stories are always features
+  if echo "$prompt_lower" | grep -qiE '^as a .*,? i want|^user story:|acceptance criteria:'; then
+    echo "feature|5|false"
+    return 0
+  fi
+
+  # Stack traces are always debug
+  if echo "$prompt_lower" | grep -qE '\.rb:[0-9]+|backtrace|NoMethodError|ArgumentError|TypeError|ActiveRecord.*Error'; then
+    echo "debug|6|false"
+    return 0
+  fi
+
+  # Explicit refactor requests
+  if echo "$prompt_lower" | grep -qiE '^refactor |^extract |^rename .* to |^move .* to '; then
+    echo "refactor|5|false"
+    return 0
+  fi
+
+  echo ""
+  return 1
+}
+
+#==============================================================================
+# 7. CLAUDE CLI ANALYSIS
+#==============================================================================
+
+analyze_with_claude_cli() {
+  # Check if Claude analyzer is available
+  if [ "$CLAUDE_ANALYZER_AVAILABLE" != "true" ]; then
+    return 1
+  fi
+
+  # Check if Claude CLI is available
+  if ! command -v claude &>/dev/null; then
+    return 1
+  fi
+
+  # Perform analysis
+  local result
+  result=$(perform_intent_analysis "$user_prompt" 2>/dev/null)
+
+  # Check for errors
+  if echo "$result" | jq -e '.error' &>/dev/null; then
+    return 1
+  fi
+
+  # Extract intent and confidence
+  local intent
+  local confidence
+  intent=$(echo "$result" | jq -r '.primary_intent // "general"' 2>/dev/null)
+  confidence=$(echo "$result" | jq -r '.confidence // 0' 2>/dev/null)
+
+  # Skip if low confidence or question intent
+  if [ "$intent" = "question" ] || [ "$intent" = "general" ]; then
+    return 1
+  fi
+
+  # Convert confidence to integer for comparison
+  local conf_int
+  conf_int=$(echo "$confidence * 100" | bc 2>/dev/null | cut -d'.' -f1 || echo "0")
+
+  if [ "${conf_int:-0}" -lt 60 ]; then
+    return 1
+  fi
+
+  # Process based on intent type
+  local agents
+  local tdd_mode
+
+  agents=$(echo "$result" | jq -r '.recommended_agents[0].name // ""' 2>/dev/null)
+  tdd_mode=$(echo "$result" | jq -r '.tdd_mode // false' 2>/dev/null)
+
+  case "$intent" in
+    "utility")
+      if [ -n "$agents" ]; then
+        generate_agent_suggestion "$agents"
+        return 0
+      fi
+      ;;
+    "feature")
+      generate_workflow_suggestion "feature" "$tdd_mode"
+      return 0
+      ;;
+    "debug")
+      generate_workflow_suggestion "debug" "false"
+      return 0
+      ;;
+    "refactor")
+      generate_workflow_suggestion "refactor" "false"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+#==============================================================================
+# 8. PATTERN-BASED DETECTION (Fallback)
 #==============================================================================
 
 detect_utility_agent() {
@@ -185,10 +331,6 @@ detect_utility_agent() {
 
   echo "${agent}|${score}"
 }
-
-#==============================================================================
-# 7. DETECT WORKFLOW INTENT
-#==============================================================================
 
 detect_workflow_intent() {
   local feature_score=0
@@ -268,13 +410,11 @@ detect_workflow_intent() {
 }
 
 #==============================================================================
-# 8. GENERATE OUTPUT
+# 9. GENERATE OUTPUT
 #==============================================================================
 
 generate_agent_suggestion() {
   local agent="$1"
-  # Escape user prompt for JSON (double quotes and backslashes)
-  local escaped_prompt=$(echo "$user_prompt" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
 
   case "$agent" in
     "file-finder")
@@ -354,10 +494,33 @@ JSONEOF
 }
 
 #==============================================================================
-# 9. MAIN DETECTION FLOW
+# 10. MAIN DETECTION FLOW
 #==============================================================================
 
-# First check for utility agent intent (more specific)
+# STEP 1: Try hybrid fast path for obvious intents
+obvious_agent=$(detect_obvious_utility)
+if [ -n "$obvious_agent" ]; then
+  generate_agent_suggestion "$obvious_agent"
+  exit 0
+fi
+
+obvious_workflow=$(detect_obvious_workflow)
+if [ -n "$obvious_workflow" ]; then
+  intent=$(echo "$obvious_workflow" | cut -d'|' -f1)
+  tdd=$(echo "$obvious_workflow" | cut -d'|' -f3)
+  generate_workflow_suggestion "$intent" "$tdd"
+  exit 0
+fi
+
+# STEP 2: Try Claude CLI analysis (if enabled and available)
+if [ "$USE_CLAUDE_ANALYSIS" = "true" ] && [ "$CLAUDE_ANALYZER_AVAILABLE" = "true" ]; then
+  if analyze_with_claude_cli; then
+    exit 0
+  fi
+  # Claude analysis failed or returned low confidence, fall through to pattern matching
+fi
+
+# STEP 3: Fall back to pattern-based utility agent detection
 agent_result=$(detect_utility_agent)
 agent=$(echo "$agent_result" | cut -d'|' -f1)
 agent_score=$(echo "$agent_result" | cut -d'|' -f2)
@@ -367,12 +530,12 @@ if [ -n "$agent" ] && [ "$agent_score" -ge 4 ]; then
   exit 0
 fi
 
-# Then check if Rails-related for workflow suggestions
+# STEP 4: Check if Rails-related for workflow suggestions
 if ! is_rails_related; then
   exit 0
 fi
 
-# Detect workflow intent
+# STEP 5: Pattern-based workflow intent detection
 workflow_result=$(detect_workflow_intent)
 intent=$(echo "$workflow_result" | cut -d'|' -f1)
 score=$(echo "$workflow_result" | cut -d'|' -f2)
