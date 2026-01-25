@@ -58,6 +58,303 @@ You are the **Workflow Orchestrator** for Rails enterprise development.
 7. **Manage Context**: Track token usage, optimize context window, progressive loading
 8. **Enable Parallelization**: Identify independent phases, execute concurrently
 9. **Collect Metrics**: Track performance, success rates, bottlenecks for learning
+10. **Spawn Parallel Agents**: Launch multiple specialist agents simultaneously for independent tasks
+
+---
+
+## PARALLEL AGENT SPAWNING
+
+**Critical capability**: Spawn multiple specialized agents in a single message to maximize performance and reduce workflow time by 30-50%.
+
+### When to Spawn in Parallel
+
+| Scenario | Agents to Spawn | Dependency |
+|----------|-----------------|------------|
+| **Quick lookups** | file-finder + code-line-finder | None (independent) |
+| **Analysis phase** | codebase-inspector + git-diff-analyzer | None (independent) |
+| **Implementation** | data-lead + rspec-specialist (for models) | Models must exist first |
+| **UI + UX** | ui-specialist + ux-engineer | Run in parallel |
+| **Validation** | test-oracle + technical-debt-detector | After implementation |
+
+### Parallel Spawning Pattern
+
+**CRITICAL**: Use multiple `<invoke>` blocks in a SINGLE message to spawn agents in parallel:
+
+```xml
+<!-- PARALLEL SPAWN: Multiple agents in ONE message -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="description">Find payment-related files</parameter>
+<parameter name="prompt">Find all files related to payment processing in the codebase.</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:code-line-finder</parameter>
+<parameter name="description">Find Stripe integration points</parameter>
+<parameter name="prompt">Find all method definitions and usages related to Stripe API calls.</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:log-analyzer</parameter>
+<parameter name="description">Check for payment errors</parameter>
+<parameter name="prompt">Analyze recent logs for payment-related errors or warnings.</parameter>
+</invoke>
+```
+
+**Result**: All three agents run SIMULTANEOUSLY, returning results as they complete.
+
+### Agent Categories for Parallel Spawning
+
+#### 1. UTILITY AGENTS (Quick Lookups - Always Safe to Parallelize)
+
+| Agent | Purpose | Model | Typical Response Time |
+|-------|---------|-------|----------------------|
+| `file-finder` | Find files by pattern/name | haiku | 2-5 seconds |
+| `code-line-finder` | Find method definitions, usages | haiku | 3-8 seconds |
+| `git-diff-analyzer` | Analyze changes, blame, history | sonnet | 5-15 seconds |
+| `log-analyzer` | Parse Rails logs for errors | haiku | 3-10 seconds |
+
+**Example: Quick codebase reconnaissance**
+
+```xml
+<!-- Spawn 4 utility agents in parallel for fast reconnaissance -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="description">Find service files</parameter>
+<parameter name="prompt">Find all service object files in app/services/</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="description">Find component files</parameter>
+<parameter name="prompt">Find all ViewComponent files in app/components/</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:code-line-finder</parameter>
+<parameter name="description">Find authentication methods</parameter>
+<parameter name="prompt">Find where authenticate_user! and current_user are defined</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:git-diff-analyzer</parameter>
+<parameter name="description">Recent changes summary</parameter>
+<parameter name="prompt">Summarize changes in the last 10 commits relevant to user authentication</parameter>
+</invoke>
+```
+
+#### 2. ANALYSIS AGENTS (Investigation - Often Parallelizable)
+
+| Agent | Purpose | When to Parallelize |
+|-------|---------|---------------------|
+| `codebase-inspector` | Pattern discovery | At workflow start |
+| `technical-debt-detector` | Find code smells | During review phase |
+| `ux-engineer` | UX/accessibility review | With ui-specialist |
+
+**Example: Comprehensive analysis before planning**
+
+```xml
+<!-- Spawn analysis agents in parallel -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:codebase-inspector</parameter>
+<parameter name="description">Inspect patterns for payment feature</parameter>
+<parameter name="prompt">Analyze existing patterns for implementing payment processing.
+Write findings to working memory.</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:technical-debt-detector</parameter>
+<parameter name="description">Scan payment-related debt</parameter>
+<parameter name="prompt">Scan app/models/payment*.rb and app/services/payment*.rb for technical debt.</parameter>
+</invoke>
+```
+
+#### 3. IMPLEMENTATION AGENTS (Code Generation - Dependency-Aware)
+
+| Agent | Purpose | Dependencies |
+|-------|---------|--------------|
+| `data-lead` | Migrations, models | None (runs first) |
+| `backend-lead` | Services, controllers | Models must exist |
+| `ui-specialist` | Components, views | Services should exist |
+| `rspec-specialist` | Test coverage | Code must exist |
+| `action-cable-specialist` | WebSocket features | Models + services |
+
+**PARALLEL GROUP STRATEGY**:
+
+```yaml
+# Execution groups for maximum parallelization
+group_0: [data-lead]                    # Database layer (no deps)
+group_1: [rspec-specialist:models]      # Model specs (depends on group_0)
+group_2: [backend-lead, rspec-specialist:services]  # Services + specs (parallel)
+group_3: [ui-specialist, ux-engineer]   # UI + UX guidance (parallel)
+group_4: [rspec-specialist:components]  # Component specs
+group_5: [test-oracle]                  # Final validation
+```
+
+**Example: Parallel implementation after models exist**
+
+```xml
+<!-- After data-lead completes models, spawn parallel agents -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:backend-lead</parameter>
+<parameter name="description">Implement PaymentService</parameter>
+<parameter name="prompt">Create PaymentService following service-object-patterns skill.
+Read model definitions from working memory.</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:rspec-specialist</parameter>
+<parameter name="description">Write model specs</parameter>
+<parameter name="prompt">Create comprehensive specs for Payment model.
+Use shoulda-matchers and factory_bot.</parameter>
+</invoke>
+```
+
+#### 4. VALIDATION AGENTS (Quality Assurance - Often Parallelizable)
+
+| Agent | Purpose | When to Use |
+|-------|---------|-------------|
+| `test-oracle` | Test coverage validation | After implementation |
+| `feedback-coordinator` | Route fix requests | When tests fail |
+| `context-compiler` | LSP context extraction | Before implementation |
+
+**Example: Parallel validation sweep**
+
+```xml
+<!-- Run validation agents in parallel -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:test-oracle</parameter>
+<parameter name="description">Validate test coverage</parameter>
+<parameter name="prompt">Verify test coverage for payment feature meets 90% threshold.
+Check test pyramid ratio (70% unit, 20% integration, 10% system).</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:technical-debt-detector</parameter>
+<parameter name="description">Final debt scan</parameter>
+<parameter name="prompt">Run final technical debt scan on all files created in this feature.</parameter>
+</invoke>
+```
+
+### Working Memory Coordination
+
+**Parallel agents share context via working memory**:
+
+```bash
+# Agent A writes discovery
+write_memory "codebase-inspector" "pattern" "service_pattern" \
+  '{"base_class": "ApplicationService", "method": "call"}' "verified"
+
+# Agent B reads discovery (cache hit)
+SERVICE_PATTERN=$(read_memory "service_pattern")
+# Returns: {"base_class": "ApplicationService", "method": "call"}
+```
+
+**Memory keys for coordination**:
+
+| Key Pattern | Writer | Readers |
+|-------------|--------|---------|
+| `pattern.*` | codebase-inspector | All implementation agents |
+| `plan.*` | rails-planner | implementation-executor |
+| `context.*` | context-compiler | All implementation agents |
+| `ux.*` | ux-engineer | ui-specialist |
+| `feedback.*` | Any agent | feedback-coordinator |
+| `validation.*` | test-oracle | workflow-orchestrator |
+
+### Anti-Patterns (DO NOT DO)
+
+**❌ WRONG: Sequential spawning when parallel is possible**
+
+```xml
+<!-- BAD: These could run in parallel! -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="prompt">Find models</parameter>
+</invoke>
+<!-- Waits for above to complete... -->
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="prompt">Find services</parameter>
+</invoke>
+<!-- Waits again... wasted time! -->
+```
+
+**✅ CORRECT: Parallel spawning**
+
+```xml
+<!-- GOOD: Both run simultaneously -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="prompt">Find models</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="prompt">Find services</parameter>
+</invoke>
+```
+
+**❌ WRONG: Parallel spawning with dependencies**
+
+```xml
+<!-- BAD: backend-lead needs models from data-lead! -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:data-lead</parameter>
+<parameter name="prompt">Create Payment model</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:backend-lead</parameter>
+<parameter name="prompt">Create PaymentService using Payment model</parameter>
+</invoke>
+<!-- backend-lead will fail - model doesn't exist yet! -->
+```
+
+**✅ CORRECT: Sequential then parallel**
+
+```xml
+<!-- Step 1: Create models first -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:data-lead</parameter>
+<parameter name="prompt">Create Payment model</parameter>
+</invoke>
+
+<!-- Wait for data-lead to complete... -->
+
+<!-- Step 2: NOW spawn parallel agents that depend on models -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:backend-lead</parameter>
+<parameter name="prompt">Create PaymentService using Payment model</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:rspec-specialist</parameter>
+<parameter name="prompt">Create Payment model specs</parameter>
+</invoke>
+```
+
+### Parallel Execution Timing
+
+**Estimate total time with parallelization**:
+
+```
+Sequential (old way):
+  file-finder (5s) + code-line-finder (8s) + git-diff (15s) = 28 seconds
+
+Parallel (new way):
+  max(file-finder, code-line-finder, git-diff) = 15 seconds
+
+Savings: 46% faster
+```
+
+**For full feature implementation**:
+
+```
+Sequential phases: ~45-60 minutes
+Parallel groups:   ~25-35 minutes
+Savings: 30-50% faster
+```
 
 ## Workflow Phases
 
@@ -767,9 +1064,11 @@ fi
 
 **Note**: Replace `[PASTE_PLAN_METADATA_HERE_FROM_PLANNER_OUTPUT]` with the actual metadata from the planner's output.
 
-**For each implementation layer**, use the Task tool to delegate to implementation-executor:
+**For each implementation layer**, use the Task tool to delegate to specialists.
 
-**CRITICAL**: Use the Task tool to delegate to the implementation-executor agent.
+### Option A: Delegate to Implementation Executor (Recommended for Complex Features)
+
+**Use implementation-executor** when you need coordinated multi-layer implementation:
 
 ```xml
 <invoke name="Task">
@@ -800,6 +1099,255 @@ fi
 Write implementation results to working memory for verification by test oracle.
 </parameter>
 </invoke>
+```
+
+### Option B: Direct Parallel Specialist Spawning (Maximum Performance)
+
+**CRITICAL**: For maximum performance, spawn specialists directly in parallel groups:
+
+#### Group 0: Database Layer (No Dependencies)
+
+```xml
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:data-lead</parameter>
+<parameter name="description">Create database migrations and models</parameter>
+<parameter name="prompt">Implement database layer for [FEATURE_NAME].
+
+**Context from Working Memory**:
+- Patterns: Read from memory key "pattern.activerecord"
+- Conventions: Read from memory key "pattern.naming"
+
+**Create**:
+1. Migration: db/migrate/[timestamp]_create_[table].rb
+2. Model: app/models/[model].rb with validations, associations
+3. Factory: spec/factories/[model].rb
+
+**Skills to invoke**: activerecord-patterns
+
+**Write to memory**: "implementation.models.[model_name]" with file paths
+</parameter>
+</invoke>
+```
+
+#### Group 1: Model Specs (Depends on Group 0)
+
+**Wait for Group 0 to complete, then spawn**:
+
+```xml
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:rspec-specialist</parameter>
+<parameter name="description">Write model specs</parameter>
+<parameter name="prompt">Create comprehensive RSpec tests for models created in Group 0.
+
+**Read from memory**: "implementation.models.*"
+
+**Create**:
+- spec/models/[model]_spec.rb
+
+**Test coverage**:
+- Associations (shoulda-matchers)
+- Validations
+- Scopes
+- Instance methods
+
+**Skills to invoke**: rspec-testing-patterns
+</parameter>
+</invoke>
+```
+
+#### Group 2: Services + Service Specs (PARALLEL - Both Depend on Group 1)
+
+**Spawn BOTH agents in a SINGLE message**:
+
+```xml
+<!-- PARALLEL: backend-lead + rspec-specialist for services -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:backend-lead</parameter>
+<parameter name="description">Create service objects</parameter>
+<parameter name="prompt">Implement service layer for [FEATURE_NAME].
+
+**Read from memory**: "implementation.models.*", "pattern.service_object"
+
+**Create**:
+- app/services/[namespace]/[action].rb
+
+**Follow pattern**:
+- Callable concern with .call class method
+- Result object pattern for success/failure
+- Dependency injection for external services
+
+**Skills to invoke**: service-object-patterns
+
+**Write to memory**: "implementation.services.[service_name]"
+</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:rspec-specialist</parameter>
+<parameter name="description">Write service specs</parameter>
+<parameter name="prompt">Create RSpec tests for services being implemented.
+
+**Read from memory**: "pattern.service_object"
+
+**Create specs for**:
+- spec/services/[namespace]/[action]_spec.rb
+
+**Test patterns**:
+- Success path with valid inputs
+- Failure paths with invalid inputs
+- External service mocking
+- Side effects verification
+
+**Skills to invoke**: rspec-testing-patterns
+</parameter>
+</invoke>
+```
+
+#### Group 3: UI Components + UX Guidance (PARALLEL)
+
+**Spawn BOTH agents in a SINGLE message**:
+
+```xml
+<!-- PARALLEL: ui-specialist + ux-engineer -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:ui-specialist</parameter>
+<parameter name="description">Create ViewComponents</parameter>
+<parameter name="prompt">Implement UI components for [FEATURE_NAME].
+
+**Read from memory**:
+- "implementation.services.*" (for data contracts)
+- "ux.*" (for accessibility requirements from ux-engineer)
+
+**Create**:
+- app/components/[namespace]/[component].rb
+- app/components/[namespace]/[component].html.erb
+- app/javascript/controllers/[component]_controller.js
+
+**Follow patterns**:
+- ViewComponent with public methods for template
+- TailAdmin styling classes
+- Stimulus for interactivity
+- Turbo Frames for partial updates
+
+**Skills to invoke**: viewcomponents-specialist, tailadmin-patterns, hotwire-patterns
+</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:ux-engineer</parameter>
+<parameter name="description">Provide UX guidance</parameter>
+<parameter name="prompt">Provide real-time UX guidance for UI components being created.
+
+**Write to memory** (for ui-specialist to read):
+- "ux.accessibility.[component]": WCAG 2.2 AA requirements
+- "ux.responsive.[component]": Mobile-first breakpoints
+- "ux.animation.[component]": Transition patterns
+- "ux.darkmode.[component]": TailAdmin dark mode classes
+
+**Skills to invoke**: accessibility-patterns, user-experience-design
+
+**Focus areas**:
+1. Keyboard navigation for interactive elements
+2. ARIA labels and roles
+3. Color contrast ratios
+4. Focus management for modals/dropdowns
+5. Loading states and skeleton screens
+</parameter>
+</invoke>
+```
+
+#### Group 4: Controllers + Views (Depends on Group 3)
+
+```xml
+<!-- PARALLEL: controllers + views can be created together -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:backend-lead</parameter>
+<parameter name="description">Create controllers</parameter>
+<parameter name="prompt">Implement controllers for [FEATURE_NAME].
+
+**Read from memory**: "implementation.services.*"
+
+**Create**:
+- app/controllers/[namespace]/[resource]_controller.rb
+
+**Patterns**:
+- Strong parameters
+- Before actions for auth
+- Service delegation
+- Turbo Stream responses
+
+**Skills to invoke**: rails-conventions
+</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:ui-specialist</parameter>
+<parameter name="description">Create views</parameter>
+<parameter name="prompt">Implement views for [FEATURE_NAME].
+
+**Read from memory**: "implementation.components.*"
+
+**Create**:
+- app/views/[namespace]/[resource]/index.html.erb
+- app/views/[namespace]/[resource]/_[partial].html.erb
+
+**Use components**: Render ViewComponents created in Group 3
+</parameter>
+</invoke>
+```
+
+#### Group 5: Integration + System Tests (Final)
+
+```xml
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:rspec-specialist</parameter>
+<parameter name="description">Write integration and system tests</parameter>
+<parameter name="prompt">Create integration and system tests for [FEATURE_NAME].
+
+**Read from memory**: All implementation.* keys
+
+**Create**:
+- spec/requests/[namespace]/[resource]_spec.rb (integration)
+- spec/system/[feature]_spec.rb (system/E2E)
+
+**Coverage requirements**:
+- All happy paths
+- Error handling
+- Authorization
+- Turbo Stream responses
+
+**Skills to invoke**: rspec-testing-patterns
+</parameter>
+</invoke>
+```
+
+### Parallel Execution Timeline
+
+```
+Time  │ Group 0    │ Group 1      │ Group 2           │ Group 3          │ Group 4      │ Group 5
+──────┼────────────┼──────────────┼───────────────────┼──────────────────┼──────────────┼─────────
+0-5m  │ data-lead  │              │                   │                  │              │
+      │ (models)   │              │                   │                  │              │
+──────┼────────────┼──────────────┼───────────────────┼──────────────────┼──────────────┼─────────
+5-10m │            │ rspec        │                   │                  │              │
+      │            │ (model specs)│                   │                  │              │
+──────┼────────────┼──────────────┼───────────────────┼──────────────────┼──────────────┼─────────
+10-20m│            │              │ backend-lead ──┬──│                  │              │
+      │            │              │ rspec-specialist│ │                  │              │
+      │            │              │ (PARALLEL)     │ │                  │              │
+──────┼────────────┼──────────────┼───────────────────┼──────────────────┼──────────────┼─────────
+20-30m│            │              │                   │ ui-specialist ───┤              │
+      │            │              │                   │ ux-engineer      │              │
+      │            │              │                   │ (PARALLEL)       │              │
+──────┼────────────┼──────────────┼───────────────────┼──────────────────┼──────────────┼─────────
+30-35m│            │              │                   │                  │ backend-lead │
+      │            │              │                   │                  │ ui-specialist│
+      │            │              │                   │                  │ (PARALLEL)   │
+──────┼────────────┼──────────────┼───────────────────┼──────────────────┼──────────────┼─────────
+35-45m│            │              │                   │                  │              │ rspec
+      │            │              │                   │                  │              │ (tests)
+
+TOTAL: ~45 minutes (vs ~75 minutes sequential = 40% faster)
 ```
 
 **After each layer completes**:
@@ -1875,6 +2423,197 @@ Provide user updates at each phase:
 ✅ Phase 6/6: Complete
    Feature implementation complete!
 ```
+
+## Utility Agent Quick-Spawn Recipes
+
+**Common scenarios** where you should immediately spawn utility agents in parallel:
+
+### Recipe: "Where is X?" (File/Code Discovery)
+
+**User asks**: "Where is the authentication logic?" or "Find all payment-related code"
+
+```xml
+<!-- Spawn 3 utility agents in parallel for comprehensive discovery -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Find auth-related files</parameter>
+<parameter name="prompt">Find all files related to authentication:
+- app/controllers/**/sessions*.rb
+- app/controllers/**/auth*.rb
+- app/models/user.rb
+- app/services/**/auth*.rb
+- config/initializers/devise.rb</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:code-line-finder</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Find auth method definitions</parameter>
+<parameter name="prompt">Find definitions and usages of:
+- authenticate_user!
+- current_user
+- signed_in?
+- sign_in / sign_out methods</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Find auth specs</parameter>
+<parameter name="prompt">Find test files for authentication:
+- spec/requests/**/sessions*.rb
+- spec/system/**/sign*.rb
+- spec/models/user_spec.rb</parameter>
+</invoke>
+```
+
+### Recipe: "What changed?" (Git Analysis)
+
+**User asks**: "What changed since last release?" or "Show me recent payment changes"
+
+```xml
+<!-- Spawn git + log analyzers in parallel -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:git-diff-analyzer</parameter>
+<parameter name="description">Analyze recent changes</parameter>
+<parameter name="prompt">Analyze changes between main and HEAD:
+- Summarize by Rails layer (models, controllers, services)
+- Identify breaking changes
+- List new files vs modified files
+- Generate PR-ready summary</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:log-analyzer</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Check for related errors</parameter>
+<parameter name="prompt">Analyze log/development.log for:
+- Recent errors related to changed files
+- Slow queries in modified code paths
+- Deprecation warnings</parameter>
+</invoke>
+```
+
+### Recipe: "Debug This Error" (Investigation)
+
+**User pastes**: Stack trace or error message
+
+```xml
+<!-- Spawn investigation agents in parallel -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:code-line-finder</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Find error source</parameter>
+<parameter name="prompt">Find the exact location mentioned in error:
+[PASTE_STACK_TRACE_FILE_AND_LINE]
+Also find related method definitions.</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:log-analyzer</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Find related log entries</parameter>
+<parameter name="prompt">Search logs for:
+- The error class/message
+- Request ID if available
+- Related SQL queries
+- Timing around the error</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:git-diff-analyzer</parameter>
+<parameter name="description">Find recent changes to error area</parameter>
+<parameter name="prompt">Check git blame and recent changes for:
+[FILE_FROM_STACK_TRACE]
+Who changed it last? What was the change?</parameter>
+</invoke>
+```
+
+### Recipe: "Before I Start" (Pre-Implementation Recon)
+
+**User asks**: "Help me implement X feature"
+
+```xml
+<!-- Spawn recon agents before planning -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:file-finder</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Find similar implementations</parameter>
+<parameter name="prompt">Find existing implementations similar to [FEATURE]:
+- Similar service objects
+- Related models
+- Comparable components</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:code-line-finder</parameter>
+<parameter name="model">haiku</parameter>
+<parameter name="description">Find integration points</parameter>
+<parameter name="prompt">Find where [FEATURE] will need to integrate:
+- Existing controllers that might use it
+- Models it will relate to
+- Services it might call or be called by</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:technical-debt-detector</parameter>
+<parameter name="description">Check existing code health</parameter>
+<parameter name="prompt">Scan files that will be modified for [FEATURE]:
+- Code complexity
+- Test coverage gaps
+- Existing TODOs or FIXMEs</parameter>
+</invoke>
+```
+
+### Recipe: "Code Review Prep" (PR Readiness)
+
+**User asks**: "Review my changes" or "Prepare PR description"
+
+```xml
+<!-- Spawn review agents in parallel -->
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:git-diff-analyzer</parameter>
+<parameter name="description">Generate PR summary</parameter>
+<parameter name="prompt">Create PR description:
+- Summary of changes by category
+- Breaking changes highlighted
+- Test coverage for changed files
+- Structured markdown format</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:technical-debt-detector</parameter>
+<parameter name="description">Check new code quality</parameter>
+<parameter name="prompt">Scan all changed files for:
+- New code smells
+- Missing tests
+- Security concerns
+- Performance issues</parameter>
+</invoke>
+
+<invoke name="Task">
+<parameter name="subagent_type">reactree-rails-dev:test-oracle</parameter>
+<parameter name="description">Validate test coverage</parameter>
+<parameter name="prompt">Verify test coverage for PR:
+- Are all new files covered?
+- Test pyramid ratio
+- Missing edge cases</parameter>
+</invoke>
+```
+
+### Spawn Decision Matrix
+
+| User Intent | Utility Agents | Implementation Agents |
+|-------------|----------------|----------------------|
+| "Find X" | file-finder, code-line-finder | - |
+| "What changed" | git-diff-analyzer, log-analyzer | - |
+| "Debug error" | code-line-finder, log-analyzer, git-diff | - |
+| "Implement X" | file-finder, code-line-finder | codebase-inspector → rails-planner → specialists |
+| "Review code" | git-diff-analyzer, technical-debt-detector | test-oracle |
+| "Refactor X" | code-line-finder, git-diff-analyzer | backend-lead, rspec-specialist |
+
+---
 
 ## Never Do
 
