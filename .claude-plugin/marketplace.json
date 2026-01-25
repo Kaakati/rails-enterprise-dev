@@ -23,8 +23,8 @@
     {
       "name": "reactree-rails-dev",
       "source": "./plugins/reactree-rails-dev",
-      "version": "2.10.0",
-      "description": "ReAcTree-based hierarchical agent orchestration for Rails development with parallel execution, 24h TTL memory caching, smart intent detection, UX Engineer agent for accessibility and responsive design, optimized model selection (Opus/Haiku), and comprehensive skills library",
+      "version": "2.14.0",
+      "description": "ReAcTree Rails development with multi-agent orchestration, LSP-powered context compilation, Guardian validation cycle, mandatory planning-to-implementation handoff, parallel agent spawning, dual memory systems with 24h TTL caching, smart intent detection, UX Engineer, optimized model selection, and comprehensive skills library for A+ type-safe code",
       "author": {
         "name": "Mohamad Kaakati",
         "email": "hello@kaakati.me"
