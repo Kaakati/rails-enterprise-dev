@@ -2,8 +2,9 @@
 name: reactree-init
 description: |
   Initialize ReAcTree plugin in the current Rails project. Creates configuration,
-  validates prerequisites, sets up working memory, and optionally copies bundled
-  skills. Run this first when using the plugin in a new project.
+  validates prerequisites, sets up working memory, and copies bundled skills,
+  agents, hooks, and rules to the project. Run this first when using the plugin
+  in a new project.
 allowed-tools: ["Bash", "Read", "Write", "Glob", "AskUserQuestion"]
 ---
 
@@ -298,6 +299,290 @@ echo "  ✅ Works alongside existing skills system"
 echo ""
 ```
 
+## Phase 2.7: Agents Setup
+
+Copy specialist agents to the project for local customization:
+
+```bash
+# Check agents directory
+ls -la .claude/agents/ 2>/dev/null
+
+# Count agent files
+agent_count=$(find .claude/agents -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l)
+echo "Found $agent_count existing agent files"
+```
+
+### Case A: Agents Directory Exists WITH Agents
+
+If `.claude/agents/` exists and has agents, use AskUserQuestion to ask:
+
+```
+Found X existing agent files in .claude/agents/
+
+The plugin includes 19 specialist agents (may be newer versions).
+Would you like to update/replace them?
+
+Options:
+  [1] Replace all with bundled agents (Recommended)
+      - workflow-orchestrator, codebase-inspector, rails-planner
+      - implementation-executor, test-oracle, data-lead, backend-lead
+      - ui-specialist, rspec-specialist, file-finder, and 9 more
+
+  [2] Keep existing agents
+      - Don't modify .claude/agents/
+      - Continue with current agents
+
+  [3] Merge (add missing only)
+      - Keep existing agents
+      - Add any new agents not already present
+```
+
+### Case B: Agents Directory Empty or Missing
+
+If `.claude/agents/` is empty or missing, use AskUserQuestion to offer:
+
+```
+No agents found in .claude/agents/
+
+The plugin includes 19 specialist agents for Rails development.
+Would you like to copy them to your project?
+
+Options:
+  [1] Copy all bundled agents (Recommended)
+      - Workflow: workflow-orchestrator, codebase-inspector, rails-planner
+      - Implementation: implementation-executor, data-lead, backend-lead, ui-specialist
+      - Testing: test-oracle, rspec-specialist
+      - Utilities: file-finder, code-line-finder, git-diff-analyzer, log-analyzer
+      - Specialists: ux-engineer, action-cable-specialist, technical-debt-detector
+
+  [2] Copy only utility agents (4 agents)
+      - file-finder, code-line-finder, git-diff-analyzer, log-analyzer
+
+  [3] Skip - I'll use plugin agents directly
+```
+
+### Copy/Replace Agents Based on User Choice
+
+**Important**: Use `$PLUGIN_ROOT` variable from Phase 1 (set via `${CLAUDE_PLUGIN_ROOT}`).
+
+**Replace all / Copy all bundled agents**:
+```bash
+echo "=== Copying All Bundled Agents ==="
+mkdir -p .claude/agents
+# Remove existing to ensure clean state
+rm -rf .claude/agents/*
+cp -r "$PLUGIN_ROOT/agents/"* .claude/agents/
+
+# Count copied agents
+agent_count=$(find .claude/agents -name '*.md' -type f | wc -l)
+echo "Copied $agent_count agent files to .claude/agents/"
+```
+
+**Copy only utility agents**:
+```bash
+echo "=== Copying Utility Agents ==="
+mkdir -p .claude/agents
+
+cp "$PLUGIN_ROOT/agents/file-finder.md" .claude/agents/
+cp "$PLUGIN_ROOT/agents/code-line-finder.md" .claude/agents/
+cp "$PLUGIN_ROOT/agents/git-diff-analyzer.md" .claude/agents/
+cp "$PLUGIN_ROOT/agents/log-analyzer.md" .claude/agents/
+
+echo "Copied 4 utility agents to .claude/agents/"
+```
+
+**Merge (add missing only)**:
+```bash
+echo "=== Merging Agents ==="
+mkdir -p .claude/agents
+
+for agent_file in "$PLUGIN_ROOT/agents/"*.md; do
+  agent_name=$(basename "$agent_file")
+  dest_file=".claude/agents/$agent_name"
+
+  if [ ! -f "$dest_file" ]; then
+    cp "$agent_file" "$dest_file"
+    echo "Added missing agent: $agent_name"
+  fi
+done
+
+agent_count=$(find .claude/agents -name '*.md' -type f | wc -l)
+echo "Total agents after merge: $agent_count"
+```
+
+**Display Agents Documentation**:
+
+```bash
+echo ""
+echo "Agents System:"
+echo "  - Specialist agents can be invoked via Task tool"
+echo "  - subagent_type: reactree-rails-dev:<agent-name>"
+echo ""
+echo "  Workflow Agents:"
+echo "    • workflow-orchestrator - 6-phase workflow coordination"
+echo "    • codebase-inspector - Pattern discovery and analysis"
+echo "    • rails-planner - Implementation planning"
+echo "    • implementation-executor - Parallel code generation"
+echo ""
+echo "  Utility Agents (fast, focused tasks):"
+echo "    • file-finder - Fast file discovery by pattern"
+echo "    • code-line-finder - LSP-powered symbol lookup"
+echo "    • git-diff-analyzer - Git change analysis"
+echo "    • log-analyzer - Rails log parsing"
+echo ""
+echo "  Specialist Agents:"
+echo "    • data-lead - Database/model layer"
+echo "    • backend-lead - Services/controllers"
+echo "    • ui-specialist - ViewComponents/Hotwire"
+echo "    • rspec-specialist - Test coverage"
+echo "    • test-oracle - TDD validation"
+echo "    • ux-engineer - Accessibility/UX"
+echo ""
+```
+
+## Phase 2.8: Hooks Setup
+
+Copy hooks scripts to the project for local customization:
+
+```bash
+# Check hooks directory
+ls -la .claude/hooks/ 2>/dev/null
+
+# Check if hooks.json exists
+if [ -f ".claude/hooks/hooks.json" ]; then
+  echo "Found existing hooks configuration"
+else
+  echo "No hooks configuration found"
+fi
+```
+
+### Case A: Hooks Directory Exists
+
+If `.claude/hooks/` exists, use AskUserQuestion to ask:
+
+```
+Found existing hooks in .claude/hooks/
+
+The plugin includes updated hook scripts with Claude CLI intent detection.
+Would you like to update them?
+
+Options:
+  [1] Replace all with bundled hooks (Recommended)
+      - Updated detect-intent.sh with Claude CLI analysis
+      - New manifest-generator.sh and claude-analyzer.sh libraries
+      - All validation and discovery scripts
+
+  [2] Keep existing hooks
+      - Don't modify .claude/hooks/
+      - Continue with current hooks
+
+  [3] Merge (add missing only)
+      - Keep existing hooks
+      - Add any new scripts not already present
+```
+
+### Case B: Hooks Directory Missing
+
+If `.claude/hooks/` is missing, copy automatically:
+
+```
+No hooks found in .claude/hooks/
+
+Copying bundled hooks for smart intent detection and validation.
+```
+
+### Copy/Replace Hooks Based on User Choice
+
+**Important**: Use `$PLUGIN_ROOT` variable from Phase 1 (set via `${CLAUDE_PLUGIN_ROOT}`).
+
+**Replace all / Copy all bundled hooks**:
+```bash
+echo "=== Copying All Bundled Hooks ==="
+mkdir -p .claude/hooks/scripts/lib
+mkdir -p .claude/hooks/scripts/shared
+
+# Remove existing to ensure clean state
+rm -rf .claude/hooks/*
+
+# Copy hooks.json
+cp "$PLUGIN_ROOT/hooks/hooks.json" .claude/hooks/
+
+# Copy all scripts
+cp -r "$PLUGIN_ROOT/hooks/scripts/"* .claude/hooks/scripts/
+
+# Make scripts executable
+chmod +x .claude/hooks/scripts/*.sh 2>/dev/null || true
+chmod +x .claude/hooks/scripts/lib/*.sh 2>/dev/null || true
+
+# Count copied scripts
+script_count=$(find .claude/hooks/scripts -name '*.sh' -type f | wc -l)
+echo "Copied hooks.json and $script_count scripts to .claude/hooks/"
+```
+
+**Merge (add missing only)**:
+```bash
+echo "=== Merging Hooks ==="
+mkdir -p .claude/hooks/scripts/lib
+mkdir -p .claude/hooks/scripts/shared
+
+# Copy hooks.json if missing
+if [ ! -f ".claude/hooks/hooks.json" ]; then
+  cp "$PLUGIN_ROOT/hooks/hooks.json" .claude/hooks/
+  echo "Added hooks.json"
+fi
+
+# Copy missing scripts
+for script_file in "$PLUGIN_ROOT/hooks/scripts/"*.sh; do
+  script_name=$(basename "$script_file")
+  dest_file=".claude/hooks/scripts/$script_name"
+
+  if [ ! -f "$dest_file" ]; then
+    cp "$script_file" "$dest_file"
+    chmod +x "$dest_file"
+    echo "Added missing script: $script_name"
+  fi
+done
+
+# Copy missing lib scripts
+for lib_file in "$PLUGIN_ROOT/hooks/scripts/lib/"*.sh; do
+  lib_name=$(basename "$lib_file")
+  dest_file=".claude/hooks/scripts/lib/$lib_name"
+
+  if [ ! -f "$dest_file" ]; then
+    cp "$lib_file" "$dest_file"
+    chmod +x "$dest_file"
+    echo "Added missing lib: $lib_name"
+  fi
+done
+
+script_count=$(find .claude/hooks/scripts -name '*.sh' -type f | wc -l)
+echo "Total scripts after merge: $script_count"
+```
+
+**Display Hooks Documentation**:
+
+```bash
+echo ""
+echo "Hooks System:"
+echo "  - Hooks trigger automatically on Claude Code events"
+echo "  - Configured in .claude/hooks/hooks.json"
+echo ""
+echo "  Available Hooks:"
+echo "    • SessionStart - Runs when session begins"
+echo "    • UserPromptSubmit - Runs before processing user input"
+echo "    • PreToolUse / PostToolUse - Runs around tool execution"
+echo ""
+echo "  Key Scripts:"
+echo "    • detect-intent.sh - Smart intent detection with Claude CLI"
+echo "    • discover-skills.sh - Skill discovery and categorization"
+echo "    • validate-implementation.sh - Quality gate validation"
+echo ""
+echo "  New in v2.12.0:"
+echo "    • lib/claude-analyzer.sh - Claude CLI wrapper for intent analysis"
+echo "    • lib/manifest-generator.sh - Agent/skill manifest generation"
+echo ""
+```
+
 ## Phase 2.5: Ruby Analysis Tools Setup
 
 Automatically install missing Ruby analysis tools for enhanced context compilation and Guardian validation:
@@ -546,6 +831,22 @@ Rules System:
   📁 Rule categories: rails, frontend, testing, database, quality-gates
   📄 Total rules: [count from Phase 2.6]
   💡 Path-specific rules automatically load based on file type
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Agents Installed:
+  ✅ Agents directory: .claude/agents/
+  🤖 Total agents: [count from Phase 2.7]
+  📋 Categories: workflow, implementation, testing, utilities, specialists
+  💡 Invoke via Task tool with subagent_type: reactree-rails-dev:<name>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hooks Installed:
+  ✅ Hooks directory: .claude/hooks/
+  📜 Scripts: [count from Phase 2.8]
+  🧠 Claude CLI intent detection: ENABLED (use_claude_analysis: true)
+  ⚡ Smart routing to agents and workflows
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
